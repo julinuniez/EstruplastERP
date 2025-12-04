@@ -41,6 +41,10 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("MateriaPrimaId");
+
+                    b.HasIndex("ProductoTerminadoId");
+
                     b.ToTable("Formulas");
                 });
 
@@ -93,6 +97,25 @@ namespace EstruplastERP.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Productos");
+                });
+
+            modelBuilder.Entity("EstruplastERP.Core.Formula", b =>
+                {
+                    b.HasOne("EstruplastERP.Core.Producto", "MateriaPrima")
+                        .WithMany()
+                        .HasForeignKey("MateriaPrimaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EstruplastERP.Core.Producto", "ProductoTerminado")
+                        .WithMany()
+                        .HasForeignKey("ProductoTerminadoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MateriaPrima");
+
+                    b.Navigation("ProductoTerminado");
                 });
 #pragma warning restore 612, 618
         }

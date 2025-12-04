@@ -36,10 +36,32 @@ namespace EstruplastERP.Api.Controllers
         [HttpPost]
         public async Task<ActionResult<Producto>> PostProducto(Producto producto)
         {
+            if (!producto.EsMateriaPrima && !producto.EsProductoTerminado)
+            {
+                return BadRequest("El producto debe ser marcado como Materia Prima, Producto Terminado o ambos.");
+            }
+
             _context.Productos.Add(producto);
             await _context.SaveChangesAsync();
 
             return CreatedAtAction("GetProductos", new { id = producto.Id }, producto);
         }
+
+        // 4. DELETE: api/productos/{id} (Elimina un producto por id)
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteProducto(int id)
+        {
+            var producto = await _context.Productos.FindAsync(id);
+            if (producto == null)
+            {
+                return NotFound();
+            }
+
+            _context.Productos.Remove(producto);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
     }
-}
+}   

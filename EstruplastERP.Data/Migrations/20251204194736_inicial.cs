@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace EstruplastERP.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class Inicial : Migration
+    public partial class inicial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -33,11 +33,51 @@ namespace EstruplastERP.Data.Migrations
                 {
                     table.PrimaryKey("PK_Productos", x => x.Id);
                 });
+
+            migrationBuilder.CreateTable(
+                name: "Formulas",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    ProductoTerminadoId = table.Column<int>(type: "int", nullable: false),
+                    MateriaPrimaId = table.Column<int>(type: "int", nullable: false),
+                    Cantidad = table.Column<decimal>(type: "decimal(18,4)", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Formulas", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Formulas_Productos_MateriaPrimaId",
+                        column: x => x.MateriaPrimaId,
+                        principalTable: "Productos",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Formulas_Productos_ProductoTerminadoId",
+                        column: x => x.ProductoTerminadoId,
+                        principalTable: "Productos",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Formulas_MateriaPrimaId",
+                table: "Formulas",
+                column: "MateriaPrimaId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Formulas_ProductoTerminadoId",
+                table: "Formulas",
+                column: "ProductoTerminadoId");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "Formulas");
+
             migrationBuilder.DropTable(
                 name: "Productos");
         }

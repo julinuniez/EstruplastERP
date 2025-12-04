@@ -13,5 +13,22 @@ namespace EstruplastERP.Data
         // Aquí registramos las tablas
         public DbSet<Producto> Productos { get; set; }
         public DbSet<Formula> Formulas { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<Formula>()
+                .HasOne(f => f.ProductoTerminado)
+                .WithMany()
+                .HasForeignKey(f => f.ProductoTerminadoId)
+                .OnDelete(DeleteBehavior.Restrict); 
+
+            modelBuilder.Entity<Formula>()
+                .HasOne(f => f.MateriaPrima)
+                .WithMany()
+                .HasForeignKey(f => f.MateriaPrimaId)
+                .OnDelete(DeleteBehavior.Restrict); 
+        }
     }
 }

@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EstruplastERP.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20251204174727_Inicial")]
-    partial class Inicial
+    [Migration("20251204194736_inicial")]
+    partial class inicial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,6 +24,32 @@ namespace EstruplastERP.Data.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+
+            modelBuilder.Entity("EstruplastERP.Core.Formula", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Cantidad")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("MateriaPrimaId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductoTerminadoId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MateriaPrimaId");
+
+                    b.HasIndex("ProductoTerminadoId");
+
+                    b.ToTable("Formulas");
+                });
 
             modelBuilder.Entity("EstruplastERP.Core.Producto", b =>
                 {
@@ -74,6 +100,25 @@ namespace EstruplastERP.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Productos");
+                });
+
+            modelBuilder.Entity("EstruplastERP.Core.Formula", b =>
+                {
+                    b.HasOne("EstruplastERP.Core.Producto", "MateriaPrima")
+                        .WithMany()
+                        .HasForeignKey("MateriaPrimaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EstruplastERP.Core.Producto", "ProductoTerminado")
+                        .WithMany()
+                        .HasForeignKey("ProductoTerminadoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MateriaPrima");
+
+                    b.Navigation("ProductoTerminado");
                 });
 #pragma warning restore 612, 618
         }
