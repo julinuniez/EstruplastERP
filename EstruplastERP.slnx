@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="EstruplastERP.Api/EstruplastERP.Api.csproj" />
+  <Project Path="EstruplastERP.Core/EstruplastERP.Core.csproj" />
+  <Project Path="EstruplastERP.Data/EstruplastERP.Data.csproj" />
+</Solution>
