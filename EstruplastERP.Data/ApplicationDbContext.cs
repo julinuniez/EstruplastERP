@@ -14,7 +14,8 @@ namespace EstruplastERP.Data
         public DbSet<Producto> Productos { get; set; }
         public DbSet<Formula> Formulas { get; set; }
         public DbSet<Movimiento> Movimientos { get; set; }
-
+        public DbSet<Empleado> Empleados { get; set; }
+        public DbSet<Cliente> Clientes { get; set; } 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
