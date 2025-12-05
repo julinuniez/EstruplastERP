@@ -13,6 +13,7 @@ namespace EstruplastERP.Data
         // Aquí registramos las tablas
         public DbSet<Producto> Productos { get; set; }
         public DbSet<Formula> Formulas { get; set; }
+        public DbSet<Movimiento> Movimientos { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
