@@ -13,6 +13,8 @@ namespace EstruplastERP.Core
         [MaxLength(50)]
         public string? DNI { get; set; } 
 
+        public string Turno { get; set; }
+
         // Puesto: "Extrusor", "Confección", "Depósito"
         [MaxLength(50)]
         public string? Puesto { get; set; }

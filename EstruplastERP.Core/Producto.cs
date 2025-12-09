@@ -49,7 +49,8 @@ namespace EstruplastERP.Core
 
         // Lógica de Negocio
         public bool EsMateriaPrima { get; set; }      
-        public bool EsProductoTerminado { get; set; } 
+        public bool EsProductoTerminado { get; set; }
+        public bool Activo { get; set; } = true;
 
         public DateTime FechaCreacion { get; set; } = DateTime.Now;
     }

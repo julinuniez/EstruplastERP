@@ -6,12 +6,13 @@ import html2pdf from 'html2pdf.js'
 // --- ESTADO ---
 const productos = ref([])
 const empleados = ref([])
-const clientes = ref([]) // <--- NUEVA LISTA
+const clientes = ref([]) 
 const recetaActual = ref([])
+const emit = defineEmits(['guardado'])
 
 const form = ref({
   productoTerminadoId: '',
-  clienteId: '', // <--- NUEVO CAMPO
+  clienteId: '', 
   cantidad: 1,
   empleadoId: '',
   observacion: '',
@@ -124,8 +125,8 @@ async function registrarProduccion() {
   mensaje.value = ''
   error.value = ''
   
-  // Concatenamos datos técnicos en la observación para trazabilidad
-  const detalles = ` | Cli: ${clienteSeleccionado.value?.razonSocial || '-'} | Brillo: ${form.value.conBrillo ? 'SI' : 'NO'} | Corona: ${form.value.conCorona ? 'SI' : 'NO'} | Peso: ${form.value.kilosTotales}kg`
+  // Concatenamos datos técnicos
+  const detalles = ` | Cli: ${clienteSeleccionado.value?.razonSocial || '-'} | Brillo: ${form.value.conBrillo ? 'SI' : 'NO'} | Corona: ${form.value.conCorona ? 'SI' : 'NO'}`
   const obsFinal = (form.value.observacion || '') + detalles
 
   const payload = {
@@ -134,7 +135,11 @@ async function registrarProduccion() {
     cantidad: form.value.cantidad,
     empleadoId: form.value.empleadoId,
     turno: form.value.turno,
-    observacion: obsFinal
+    observacion: obsFinal,
+    
+    // --- CAMBIO IMPORTANTE 1: Enviamos los kilos calculados ---
+    // (Asegurate que tu backend espere la propiedad "kilos" o "Kilos")
+    kilos: form.value.kilosTotales 
   }
   
   try {
@@ -145,13 +150,29 @@ async function registrarProduccion() {
     })
 
     if (!respuesta.ok) {
-        const dataError = await respuesta.json()
-        throw new Error(dataError.mensaje || 'Error del servidor')
+        // Intentamos leer el error como JSON
+        const dataError = await respuesta.json().catch(() => null)
+        
+        // Si viene mensaje, lo usamos. Si no, probamos leer errores de validación
+        let mensajeError = dataError?.mensaje || 'Error desconocido'
+        
+        // Truco: Si es error de validación de .NET (el problema de los signos ?), viene en 'errors'
+        if (dataError?.errors) {
+             // Agarramos el primer error que encontremos
+             mensajeError = Object.values(dataError.errors).flat()[0]
+        }
+        
+        throw new Error(mensajeError)
     }
     
     const datos = await respuesta.json()
     mensaje.value = `✅ Producción Guardada. Stock descontado.`
-    idProduccionGenerada.value = true // Habilita PDF
+    idProduccionGenerada.value = true 
+
+    console.log("1. Formulario: Enviando aviso 'guardado'...")
+    // --- CAMBIO IMPORTANTE 2: Avisamos al padre (App.vue) ---
+    emit('guardado') 
+
   } catch (e: any) {
     error.value = '❌ ' + e.message
   }
@@ -264,7 +285,7 @@ function generarOrdenProduccionPDF() {
         <h3>⚙️ Configurar Orden</h3>
         
         <label>Turno:</label>
-        <select v-model="form.turno"><option>Mañana</option><option>Tarde</option><option>Noche</option></select>
+        <select v-model="form.turno"><option>Mañana</option><option>Noche</option></select>
 
         <label>Responsable:</label>
         <select v-model="form.empleadoId">
@@ -320,8 +341,19 @@ function generarOrdenProduccionPDF() {
 .contenedor-doble { display: flex; flex-direction: row; gap: 30px; justify-content: center; align-items: flex-start; padding: 20px; background-color: #f4f4f4; min-height: 100vh; }
 
 /* Hoja A4 */
-.hoja-papel { background: white; width: 210mm; min-height: 297mm; padding: 15mm; border: 1px solid #ccc; box-shadow: 5px 5px 15px rgba(0,0,0,0.2); color: black; font-family: Arial, sans-serif; box-sizing: border-box; margin: 0 auto; }
-
+.hoja-papel { 
+    background: white; 
+    width: 210mm; 
+    height: 210mm;
+    min-height: auto; /* Ahora la altura es automática */
+    padding: 10mm;    /* Reducimos un poco el relleno */
+    border: 1px solid #ccc; 
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.2); 
+    color: black; 
+    font-family: Arial, sans-serif; 
+    box-sizing: border-box; 
+    margin: 0 auto; 
+}
 /* Elementos PDF */
 .cabecera { border-bottom: 2px solid black; padding-bottom: 15px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .logo-img { max-height: 70px; max-width: 200px; object-fit: contain; } /* Controla tamaño logo */

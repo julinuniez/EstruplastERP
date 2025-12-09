@@ -1,75 +1,141 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
-const productos = ref([])
+const listaInsumos = ref([])
 const form = ref({
   productoId: '',
   cantidad: 0,
-  observacion: ''
+  proveedor: '',
+  costoTotalFactura: 0 // <--- CAMBIO: Ahora pedimos el total
 })
 const mensaje = ref('')
+const error = ref('')
 
-const apiUrl = 'https://localhost:7244/api' // ⚠️ REVISA TU PUERTO
+const apiUrl = 'https://localhost:7244/api' 
 
-onMounted(async () => {
-  // Traemos solo Materias Primas
-  const res = await fetch(`${apiUrl}/Productos`)
-  const data = await res.json()
-  productos.value = data.filter((p: any) => p.esMateriaPrima)
+// Calculamos el unitario automáticamente para mostrarlo en pantalla
+// Esto es solo visual para que el usuario verifique
+const precioUnitarioCalculado = computed(() => {
+    if (form.value.cantidad > 0 && form.value.costoTotalFactura > 0) {
+        return (form.value.costoTotalFactura / form.value.cantidad).toFixed(2)
+    }
+    return "0.00"
 })
 
-async function guardarIngreso() {
-  if(form.value.cantidad <= 0) return alert("La cantidad debe ser mayor a 0")
+onMounted(async () => {
+  try {
+    const res = await fetch(`${apiUrl}/Stock/materias-primas`)
+    if (res.ok) listaInsumos.value = await res.json()
+  } catch (e) { console.error("Error cargando insumos") }
+})
 
-  const res = await fetch(`${apiUrl}/Movimientos/ajuste`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(form.value)
-  })
+async function registrarIngreso() {
+  mensaje.value = ''
+  error.value = ''
 
-  if (res.ok) {
-    mensaje.value = "✅ Stock ingresado correctamente!"
+  if (!form.value.productoId || form.value.cantidad <= 0) {
+    error.value = "Seleccione un producto y una cantidad válida."
+    return
+  }
+
+  // LÓGICA DE NEGOCIO:
+  // Si puso un total, calculamos el unitario. Si no, mandamos 0 (mantiene precio viejo)
+  let precioUnitarioParaEnviar = 0
+  if (form.value.costoTotalFactura > 0) {
+      precioUnitarioParaEnviar = form.value.costoTotalFactura / form.value.cantidad
+  }
+
+  try {
+    const res = await fetch(`${apiUrl}/Stock/ingresar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            productoId: form.value.productoId,
+            cantidad: form.value.cantidad,
+            proveedor: form.value.proveedor,
+            
+            // 👇 AQUÍ ESTÁ LA MAGIA: Enviamos el resultado de la división
+            nuevoPrecio: precioUnitarioParaEnviar 
+        })
+    })
+
+    if (!res.ok) throw new Error('Error al guardar ingreso')
+
+    mensaje.value = `✅ Ingreso guardado. Costo unitario actualizado a $${precioUnitarioCalculado.value}`
+    
+    // Limpiamos
     form.value.cantidad = 0
-    form.value.observacion = ''
-  } else {
-    alert("Error al guardar")
+    form.value.costoTotalFactura = 0 // Reseteamos el total
+    form.value.proveedor = ''
+    
+    const resLista = await fetch(`${apiUrl}/Stock/materias-primas`)
+    listaInsumos.value = await resLista.json()
+
+  } catch (e) {
+    error.value = "❌ Error al conectar con el servidor"
   }
 }
 </script>
 
 <template>
-  <div class="panel">
+  <div class="hoja-stock">
     <h3>🚚 Ingreso de Mercadería (Compras)</h3>
     
     <div class="campo">
       <label>Materia Prima:</label>
       <select v-model="form.productoId">
-        <option disabled value="">Seleccionar...</option>
-        <option v-for="p in productos" :key="p.id" :value="p.id">
-          {{ p.nombre }} (Stock: {{ p.stockActual }})
+        <option value="" disabled>Seleccione Insumo...</option>
+        <option v-for="p in listaInsumos" :key="p.id" :value="p.id">
+            {{ p.nombre }} (Stock: {{ p.stockActual }})
         </option>
       </select>
     </div>
 
     <div class="campo">
-      <label>Cantidad a Ingresar:</label>
-      <input type="number" v-model="form.cantidad" placeholder="0.00" />
+      <label>Cantidad (Kg/Uni):</label>
+      <input type="number" v-model="form.cantidad" placeholder="0" />
+    </div>
+
+    <div class="campo">
+      <label>Total de la Factura ($):</label>
+      <div style="display: flex; gap: 5px; align-items: center;">
+          <input type="number" v-model="form.costoTotalFactura" placeholder="Monto total pagado" />
+      </div>
+      
+      <small v-if="form.costoTotalFactura > 0" style="color: #27ae60; font-weight: bold;">
+          ℹ️ Costo Unitario resultante: ${{ precioUnitarioCalculado }} / kg
+      </small>
+      <small v-else style="color: #666;">
+          Dejar en 0 para mantener precio anterior.
+      </small>
     </div>
 
     <div class="campo">
       <label>Remito / Proveedor:</label>
-      <input type="text" v-model="form.observacion" placeholder="Ej: Dow Chemical - Remito 999" />
+      <input type="text" v-model="form.proveedor" placeholder="Ej: Dow Chemical - Remito 999" />
     </div>
 
-    <button @click="guardarIngreso" class="btn-verde">📥 INGRESAR AL DEPÓSITO</button>
-    <p class="success">{{ mensaje }}</p>
+    <button class="btn-ingreso" @click="registrarIngreso">📥 INGRESAR AL DEPÓSITO</button>
+
+    <p v-if="mensaje" class="exito">{{ mensaje }}</p>
+    <p v-if="error" class="error">{{ error }}</p>
   </div>
 </template>
 
 <style scoped>
-.panel { background: #e8f5e9; padding: 20px; border: 1px solid #4caf50; border-radius: 8px; max-width: 500px; margin: 0 auto; }
-.campo { margin-bottom: 10px; display: flex; flex-direction: column; }
-.btn-verde { background: #4caf50; color: white; padding: 10px; border: none; cursor: pointer; font-weight: bold; }
-.success { color: green; text-align: center; font-weight: bold; }
-input, select { padding: 8px; }
+.hoja-stock { 
+    background: #f0fdf4; /* Verde muy clarito */
+    padding: 20px; 
+    border: 1px solid #4ade80; 
+    border-radius: 8px; 
+    max-width: 600px; 
+    margin: 0 auto;
+}
+.campo { margin-bottom: 15px; text-align: left; }
+.campo label { display: block; font-weight: bold; margin-bottom: 5px; }
+.campo select, .campo input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+.btn-ingreso { background: #16a34a; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; }
+.btn-ingreso:hover { background: #15803d; }
+.exito { color: green; font-weight: bold; margin-top: 10px; }
+.error { color: red; font-weight: bold; margin-top: 10px; }
 </style>
