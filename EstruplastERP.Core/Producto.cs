@@ -53,5 +53,6 @@ namespace EstruplastERP.Core
         public bool Activo { get; set; } = true;
 
         public DateTime FechaCreacion { get; set; } = DateTime.Now;
+        public ICollection<Formula> Formulas { get; set; } = new List<Formula>();
     }
 }

@@ -185,6 +185,34 @@ namespace EstruplastERP.Api.Controllers
 
             return Ok(lista);
         }
+
+        // GET: api/Produccion/rango?desde=2023-01-01&hasta=2023-01-31
+        [HttpGet("rango")]
+        public async Task<ActionResult<IEnumerable<object>>> GetProduccionPorRango(DateTime desde, DateTime hasta)
+        {
+            // Ajustamos la fecha 'hasta' para que incluya todo el día (hasta las 23:59:59)
+            var finDia = new DateTime(hasta.Year, hasta.Month, hasta.Day, 23, 59, 59);
+
+            var lista = await _context.Producciones
+                .Include(p => p.Producto)
+                .Include(p => p.Empleado)
+                .Where(p => p.FechaRegistro >= desde && p.FechaRegistro <= finDia)
+                .OrderByDescending(p => p.FechaRegistro)
+                .Select(p => new
+                {
+                    p.Id,
+                    Fecha = p.FechaRegistro,
+                    Producto = p.Producto.Nombre,
+                    Cantidad = p.Cantidad,
+                    Kilos = p.Kilos,
+                    Lote = p.Lote ?? "SIN LOTE",
+                    Operario = p.Empleado.NombreCompleto,
+                    Turno = p.Turno
+                })
+                .ToListAsync();
+
+            return Ok(lista);
+        }
     }
 
     public class NuevaOrdenDto

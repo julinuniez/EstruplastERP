@@ -403,8 +403,25 @@ function generarOrdenProduccionPDF() {
 .check-container { display: flex; align-items: center; cursor: pointer; color: white; font-weight: bold; font-size: 13px; margin-top: 0 !important; }
 .check-container input { width: auto; margin-right: 5px; }
 
-.btn-guardar { width: 100%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 20px; font-size: 14px; transition: 0.3s; }
-.btn-guardar:hover { background: #219150; }
+.btn-guardar {
+    /* Usamos el color de marca para la acción principal */
+    background: #E67E22; 
+    color: white;
+    margin-top: 20px;
+    border: none;
+    padding: 15px 30px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.1em;
+    font-weight: bold;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: background 0.3s;
+}
+
+.btn-guardar:hover {
+    /* Un tono más oscuro al pasar el mouse */
+    background: #d46914; 
+}
 .btn-guardar:disabled { background: #555; cursor: not-allowed; }
 .btn-imprimir { width: 100%; padding: 12px; background: #e67e22; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 10px; font-size: 14px; transition: 0.3s; }
 .btn-imprimir:hover { background: #d35400; }

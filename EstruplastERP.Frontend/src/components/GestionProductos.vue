@@ -16,6 +16,7 @@ const form = ref({
 
 // Listas para los desplegables
 const listaMateriasPrimas = ref([])
+const modoCreacion = ref('PT')
 
 // Variables temporales para agregar ingredientes
 const ingredienteTemp = ref({
@@ -66,11 +67,29 @@ function quitarIngrediente(index: number) {
 async function guardarProducto() {
     mensaje.value = ''
     error.value = ''
+    
+    // 1. Limpieza de campos según el modo (Se mantiene igual)
+    if (modoCreacion.value === 'MP') {
+        form.value.receta = []
+        form.value.largo = 0
+        form.value.ancho = 0
+        form.value.espesor = 0
+        form.value.pesoEspecifico = 0
+    }
 
-    if (form.value.receta.length === 0) {
-        error.value = "⚠️ La receta es obligatoria. Agrega al menos un insumo."
+    // 2. VALIDACIÓN CORREGIDA (Se mantiene igual)
+    if (modoCreacion.value === 'PT' && form.value.receta.length === 0) {
+        error.value = "⚠️ La receta es obligatoria para Productos Terminados. Agrega al menos un insumo."
         return
     }
+
+    // 3. Verificación de campos obligatorios (Se mantiene igual)
+    if (!form.value.nombre || !form.value.codigoSku) {
+        error.value = "⚠️ El Nombre y el Código SKU son obligatorios."
+        return
+    }
+    
+    // Si llegaste aquí, o es MP (sin receta) o es PT (con receta). Procedemos.
 
     try {
         const res = await fetch('https://localhost:7244/api/Productos/crear', {
@@ -80,84 +99,129 @@ async function guardarProducto() {
         })
 
         if (!res.ok) {
-            const data = await res.json()
-            throw new Error(data.mensaje || data || "Error al guardar")
+            // 🚨 PUNTO DE MODIFICACIÓN CLAVE 🚨
+            let errorMensaje = "Error desconocido al guardar el ítem.";
+            
+            try {
+                // Intenta leer la respuesta como JSON
+                const data = await res.json();
+                
+                // Si la data.mensaje existe, la usamos. Si no, usamos el estado.
+                errorMensaje = data.mensaje || `El servidor devolvió un error: ${res.status}`;
+                
+            } catch (jsonError) {
+                // ❌ CAPTURA EL ERROR "Unexpected token 'E', 'Error al g'..."
+                errorMensaje = "❌ No se pudo crear el producto. El servidor devolvió una respuesta no válida o inesperada. Revisa los logs del backend.";
+                console.error("Error al parsear JSON del servidor:", jsonError);
+                // Si quieres leer el texto plano que causó el error:
+                // console.log("Respuesta de texto crudo:", await res.text()); 
+            }
+            
+            error.value = "❌ " + errorMensaje;
+            return; // Detiene la ejecución en caso de error
         }
 
-        mensaje.value = "✅ Producto creado correctamente!"
+        // Si la respuesta fue OK (res.ok es true)
+        // Opcional: leer el JSON de éxito si lo hay, aunque no es estrictamente necesario aquí.
+        // const resultado = await res.json(); 
         
-        // Limpiar todo el formulario para cargar otro
+        mensaje.value = "✅ Ítem creado correctamente! Puedes registrar compras ahora."
+        
+        // Limpiar formulario (Se mantiene igual)
         form.value = {
             nombre: '', codigoSku: '', largo: 0, ancho: 0, espesor: 0, 
-            stockMinimo: 1000, precioCosto: 0, receta: []
+            stockMinimo: 1000, pesoEspecifico: 0.92, precioCosto: 0, receta: []
         }
 
     } catch (e: any) {
-        error.value = "❌ " + e.message
+        // Esto captura errores de red (servidor completamente inaccesible o caído)
+        error.value = "❌ Error de conexión con el servidor: " + e.message;
+        console.error("Error de red:", e);
     }
 }
 </script>
 
 <template>
-  <div class="panel-creacion">
-    <h2>📦 Nuevo Producto + Receta</h2>
+    <div class="panel-creacion">
+        <h2>📦 Nuevo Ítem</h2>
 
-    <div class="grid-form">
-        <div class="columna">
-            <h3>1. Datos Técnicos</h3>
-           <label>Nombre del Producto:</label>
-            <input v-model="form.nombre" type="text" placeholder="Ej: Lámina PAI Blanco 1220CMx720CMx0,5CM" />
-
-            <label>Código SKU:</label>
-            <input v-model="form.codigoSku" type="text" placeholder="Ej: LAM-CRISTAL-50" />
-
-        <div class="fila-tres">
-          <div><label>Largo (mm)</label><input v-model.number="form.largo" type="number" placeholder="0 si es bobina"></div>
-          <div><label>Ancho (mm)</label><input v-model.number="form.ancho" type="number"></div>
-          <div><label>Espesor (mic)</label><input v-model.number="form.espesor" type="number"></div>
+        <div class="selector-tipo">
+            <button 
+                @click="modoCreacion = 'PT'" 
+                :class="{ 'activo': modoCreacion === 'PT' }"
+            >
+                Lámina / Producto Terminado
+            </button>
+            <button 
+                @click="modoCreacion = 'MP'" 
+                :class="{ 'activo': modoCreacion === 'MP' }"
+            >
+                Materia Prima / Insumo
+            </button>
         </div>
+        
+        <div class="grid-form">
+            <div class="columna">
+                <h3>1. Datos Básicos</h3>
+                <label>Nombre:</label>
+                <input v-model="form.nombre" type="text" placeholder="Ej: Polietileno de Baja Densidad" />
 
-            <label>Densidad (Peso Específico):</label>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <input v-model.number="form.pesoEspecifico" type="number" step="0.01" placeholder="Ej: 0.92" />
-                <small style="color: #666; font-size: 0.8em;">(0.92 Baja / 1.05 Alta)</small>
+                <label>Código SKU:</label>
+                <input v-model="form.codigoSku" type="text" placeholder="Ej: PEBD-CRISTAL" />
+
+                <div v-if="modoCreacion === 'PT'">
+                    <div class="fila-tres">
+                        <div><label>Largo (mm)</label><input v-model.number="form.largo" type="number"></div>
+                        <div><label>Ancho (mm)</label><input v-model.number="form.ancho" type="number"></div>
+                        <div><label>Espesor (mic)</label><input v-model.number="form.espesor" type="number"></div>
+                    </div>
+
+                    <label>Densidad / Peso Esp.:</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input v-model.number="form.pesoEspecifico" type="number" step="0.01" placeholder="0.92" />
+                        <small style="color: #666; white-space: nowrap;">(0.92 Baja / 1.05 Alta)</small>
+                    </div>
+                </div>
+                <label>Stock Mínimo Alerta:</label>
+                <input v-model.number="form.stockMinimo" type="number" />
             </div>
-            <label>Stock Mínimo Alerta:</label>
-            <input v-model.number="form.stockMinimo" type="number" />
-        </div>
 
-        <div class="columna receta-box">
-            <h3>2. Fórmula / Receta 🧪</h3>
-            <p class="hint">Agrega los insumos necesarios para 1 unidad o %.</p>
+            <div class="columna receta-box" v-if="modoCreacion === 'PT'">
+                <h3>2. Fórmula / Receta 🧪</h3>
+                <p class="hint">Agrega los insumos necesarios para 1 unidad o %.</p>
+                
+                <div class="agregar-box">
+                    <select v-model="ingredienteTemp.id">
+                        <option value="">Seleccionar Insumo...</option>
+                        <option v-for="mp in listaMateriasPrimas" :key="mp.id" :value="mp.id">
+                            {{ mp.nombre }}
+                        </option>
+                    </select>
+                    <input v-model.number="ingredienteTemp.cantidad" type="number" placeholder="Cant." style="width: 80px;" />
+                    <button @click="agregarIngrediente" class="btn-add">+</button>
+                </div>
+                <ul class="lista-ingredientes">
+                    <li v-for="(item, index) in form.receta" :key="index">
+                        <span>{{ item.nombreMP }} ({{ item.cantidad }})</span>
+                        <button @click="quitarIngrediente(index)" class="btn-del">🗑️</button>
+                    </li>
+                    <li v-if="form.receta.length === 0" class="vacio">Sin ingredientes aún...</li>
+                </ul>
+                </div>
             
-            <div class="agregar-box">
-                <select v-model="ingredienteTemp.id">
-                    <option value="">Seleccionar Insumo...</option>
-                    <option v-for="mp in listaMateriasPrimas" :key="mp.id" :value="mp.id">
-                        {{ mp.nombre }}
-                    </option>
-                </select>
-                <input v-model.number="ingredienteTemp.cantidad" type="number" placeholder="Cant." style="width: 80px;" />
-                <button @click="agregarIngrediente" class="btn-add">+</button>
+            <div class="columna info-mp" v-else>
+                <h3>2. Tipo de Ítem</h3>
+                <p>Este ítem se registrará como **Materia Prima/Insumo**. No requiere dimensiones ni fórmula.</p>
             </div>
-
-            <ul class="lista-ingredientes">
-                <li v-for="(item, index) in form.receta" :key="index">
-                    <span>{{ item.nombreMP }} ({{ item.cantidad }})</span>
-                    <button @click="quitarIngrediente(index)" class="btn-del">🗑️</button>
-                </li>
-                <li v-if="form.receta.length === 0" class="vacio">Sin ingredientes aún...</li>
-            </ul>
         </div>
-    </div>
+        
+        <div class="acciones">
+            <button @click="guardarProducto" class="btn-guardar">💾 GUARDAR ÍTEM</button>
+        </div>
 
-    <div class="acciones">
-        <button @click="guardarProducto" class="btn-guardar">💾 GUARDAR PRODUCTO TERMINADO</button>
+        <p v-if="mensaje" class="msg-exito">{{ mensaje }}</p>
+        <p v-if="error" class="msg-error">{{ error }}</p>
     </div>
-
-    <p v-if="mensaje" class="msg-exito">{{ mensaje }}</p>
-    <p v-if="error" class="msg-error">{{ error }}</p>
-  </div>
 </template>
 
 <style scoped>
@@ -184,4 +248,36 @@ input, select { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #c
 
 .msg-exito { color: green; text-align: center; margin-top: 15px; font-weight: bold; }
 .msg-error { color: red; text-align: center; margin-top: 15px; font-weight: bold; }
+
+.selector-tipo {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 25px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #eee;
+}
+
+.selector-tipo button {
+    padding: 10px 15px;
+    border: 1px solid #ccc;
+    background: #f9f9f9;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.selector-tipo button.activo {
+    background: #3498db; /* Azul para resaltar la elección */
+    color: white;
+    font-weight: bold;
+    border-color: #3498db;
+}
+
+.info-mp {
+    background-color: #e8f5e9; /* Verde muy claro */
+    padding: 20px;
+    border-radius: 8px;
+    height: fit-content;
+    border: 1px dashed #4caf50;
+}
 </style>
