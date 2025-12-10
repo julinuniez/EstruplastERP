@@ -16,23 +16,9 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
-        // DTOs
-        public class IngresoDto
-        {
-            public int ProductoId { get; set; }
-            public decimal Cantidad { get; set; }
-            public decimal NuevoPrecio { get; set; } // <--- AGREGADO: Precio de compra
-            public string? Proveedor { get; set; }
-        }
-
-        public class AjusteDto
-        {
-            public int ProductoId { get; set; }
-            public decimal CantidadReal { get; set; } // Lo que contaste en el galpón
-            public string Motivo { get; set; }
-        }
-
-        // 1. INGRESO DE MERCADERÍA (Compra) + ACTUALIZACIÓN DE PRECIO
+        // ==========================================
+        // 1. INGRESO DE MERCADERÍA (Compra)
+        // ==========================================
         [HttpPost("ingresar")]
         public async Task<IActionResult> IngresarStock([FromBody] IngresoDto ingreso)
         {
@@ -67,7 +53,9 @@ namespace EstruplastERP.Api.Controllers
             return Ok(new { mensaje = "Stock y Precio actualizados", nuevoStock = producto.StockActual });
         }
 
+        // ==========================================
         // 2. AJUSTE DE STOCK (Corrección Manual)
+        // ==========================================
         [HttpPost("ajuste")]
         public async Task<IActionResult> AjustarStock([FromBody] AjusteDto ajuste)
         {
@@ -99,7 +87,62 @@ namespace EstruplastERP.Api.Controllers
             return Ok(new { mensaje = "Inventario corregido correctamente." });
         }
 
-        // 3. GET INVENTARIO (Igual que antes)
+        // ==========================================
+        // 3. NUEVO: REGISTRAR REMITO (Salida Masiva) 🚚
+        // ==========================================
+        [HttpPost("registrar-remito")]
+        public async Task<IActionResult> RegistrarRemito([FromBody] NuevoRemitoDto data)
+        {
+            if (data.Items == null || data.Items.Count == 0)
+                return BadRequest("El remito no tiene ítems.");
+
+            // Usamos transacción para asegurar que o se descuentan TODOS o NINGUNO
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                foreach (var item in data.Items)
+                {
+                    var producto = await _context.Productos.FindAsync(item.ProductoId);
+
+                    if (producto == null)
+                        throw new Exception($"El producto ID {item.ProductoId} no existe.");
+
+                    // Validación de Stock (Opcional: quitar si quieres permitir negativo)
+                    if (producto.StockActual < item.Cantidad)
+                        throw new Exception($"Stock insuficiente para '{producto.Nombre}'. Hay {producto.StockActual}, intentas sacar {item.Cantidad}.");
+
+                    // 1. Descuento de Stock
+                    producto.StockActual -= item.Cantidad;
+
+                    // 2. Registro de Movimiento
+                    var movimiento = new Movimiento
+                    {
+                        Fecha = DateTime.Now,
+                        ProductoId = item.ProductoId,
+                        Cantidad = -item.Cantidad, // Negativo porque sale
+                        TipoMovimiento = "VENTA_REMITO",
+                        Observacion = $"Cliente: {data.Cliente} | Remito: {data.NumeroRemito}",
+                        Turno = "Despacho"
+                    };
+                    _context.Movimientos.Add(movimiento);
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { mensaje = "✅ Remito registrado y stock actualizado correctamente." });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                // Devolvemos BadRequest con el mensaje del error (ej: Stock insuficiente)
+                return BadRequest(new { mensaje = ex.Message });
+            }
+        }
+
+        // ==========================================
+        // MÉTODOS DE LECTURA (GET)
+        // ==========================================
         [HttpGet("inventario")]
         public async Task<ActionResult<IEnumerable<object>>> GetInventarioCompleto()
         {
@@ -111,10 +154,11 @@ namespace EstruplastERP.Api.Controllers
                     p.Id,
                     p.Nombre,
                     p.CodigoSku,
+                    p.EsProductoTerminado, // Necesario para el filtro en Despacho
                     Categoria = p.EsMateriaPrima ? "Materia Prima" : "Producto Terminado",
                     p.StockActual,
                     p.StockMinimo,
-                    p.PrecioCosto, // <--- Agregamos esto para verlo en la tabla
+                    p.PrecioCosto,
                     Estado = p.StockActual <= p.StockMinimo ? "CRITICO" : "NORMAL",
                     ValorTotal = p.StockActual * p.PrecioCosto
                 })
@@ -123,7 +167,6 @@ namespace EstruplastERP.Api.Controllers
             return Ok(inventario);
         }
 
-        // 4. GET MATERIAS PRIMAS (Igual que antes)
         [HttpGet("materias-primas")]
         public async Task<ActionResult<IEnumerable<object>>> GetMateriasPrimas()
         {
@@ -131,6 +174,38 @@ namespace EstruplastERP.Api.Controllers
                 .Where(p => p.EsMateriaPrima == true)
                 .Select(p => new { p.Id, p.Nombre, p.StockActual, p.CodigoSku })
                 .ToListAsync();
+        }
+
+        // ==========================================
+        // CLASES DTO (Data Transfer Objects)
+        // ==========================================
+        public class IngresoDto
+        {
+            public int ProductoId { get; set; }
+            public decimal Cantidad { get; set; }
+            public decimal NuevoPrecio { get; set; }
+            public string? Proveedor { get; set; }
+        }
+
+        public class AjusteDto
+        {
+            public int ProductoId { get; set; }
+            public decimal CantidadReal { get; set; }
+            public string Motivo { get; set; }
+        }
+
+        // Nuevos DTOs para Remitos
+        public class NuevoRemitoDto
+        {
+            public string Cliente { get; set; }
+            public string NumeroRemito { get; set; }
+            public List<ItemRemitoDto> Items { get; set; }
+        }
+
+        public class ItemRemitoDto
+        {
+            public int ProductoId { get; set; }
+            public decimal Cantidad { get; set; }
         }
     }
 }

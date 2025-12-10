@@ -17,20 +17,21 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
-        // 1. GET: api/movimientos (Ver el historial)
+        // ==========================================
+        // 1. GET: Historial (Lectura)
+        // ==========================================
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetHistorial()
         {
-            // Traemos los últimos 100 movimientos
             var historial = await _context.Movimientos
                 .Include(m => m.Producto)
-                .OrderByDescending(m => m.Fecha) // Los más nuevos primero
+                .OrderByDescending(m => m.Fecha)
                 .Take(100)
                 .Select(m => new
                 {
                     m.Id,
                     Fecha = m.Fecha.ToString("dd/MM/yyyy HH:mm"),
-                    Producto = m.Producto != null ? m.Producto.Nombre : "El producto no existe",
+                    Producto = m.Producto != null ? m.Producto.Nombre : "Producto eliminado",
                     m.Cantidad,
                     m.TipoMovimiento,
                     m.Observacion
@@ -40,14 +41,16 @@ namespace EstruplastERP.Api.Controllers
             return Ok(historial);
         }
 
-        // 2. POST: api/movimientos/ajuste (Ingreso manual o compra)
+        // ==========================================
+        // 2. POST: Crear Ajuste (Escritura)
+        // ==========================================
         [HttpPost("ajuste")]
         public async Task<IActionResult> RegistrarAjuste([FromBody] MovimientoStockRequest request)
         {
             var producto = await _context.Productos.FindAsync(request.ProductoId);
             if (producto == null) return NotFound("Producto no encontrado");
 
-            // Actualizamos el Stock real
+            // Actualizamos el Stock real (Suma o Resta según el signo de la cantidad)
             producto.StockActual += request.Cantidad;
 
             // Creamos el registro en el historial
@@ -64,6 +67,40 @@ namespace EstruplastERP.Api.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { mensaje = "Stock actualizado", nuevoStock = producto.StockActual });
+        }
+
+        // ==========================================
+        // 3. DELETE: Eliminar Ajuste (Reversión) - ¡NUEVO!
+        // ==========================================
+        [HttpDelete("eliminar/{id}")]
+        public async Task<IActionResult> EliminarMovimiento(int id)
+        {
+            // A. Buscamos el movimiento a eliminar
+            var movimiento = await _context.Movimientos.FindAsync(id);
+            if (movimiento == null) return NotFound(new { mensaje = "El movimiento no existe." });
+
+            // B. Buscamos el producto asociado para devolverle el stock
+            var producto = await _context.Productos.FindAsync(movimiento.ProductoId);
+
+            if (producto != null)
+            {
+                // C. LÓGICA INVERSA MATEMÁTICA
+                // Si el movimiento SUMÓ cantidad, ahora la RESTAMOS.
+                // Si el movimiento RESTÓ cantidad (era negativo), ahora RESTAMOS el negativo (sumamos).
+                producto.StockActual -= movimiento.Cantidad;
+            }
+
+            // D. Borramos el registro del historial
+            _context.Movimientos.Remove(movimiento);
+
+            // E. Guardamos ambos cambios (Stock y Historial) en una transacción
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                mensaje = "✅ Movimiento eliminado y stock revertido correctamente.",
+                stockRestaurado = producto?.StockActual
+            });
         }
     }
 }

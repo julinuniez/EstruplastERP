@@ -1,55 +1,47 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router'; // 🚨 Importar useRouter
+import { useRouter } from 'vue-router'; 
 
 // --- Estado Reactivo (Datos) ---
-const listaInventario = ref([]); // Lista completa de productos
-const busqueda = ref(''); // Valor del input de búsqueda
-const mostrandoModal = ref(false); // Estado para mostrar/ocultar el modal
-const itemAjustar = ref({}); // Producto actualmente seleccionado para ajustar
-const router = useRouter(); // 🚨 Inicializar el router
+const listaInventario = ref([]); 
+const busqueda = ref(''); 
+const mostrandoModal = ref(false); 
+const itemAjustar = ref({}); 
+const router = useRouter(); 
 
 // --- Lógica (Carga desde la API real) ---
 
 const cargarInventario = async () => {
     console.log('🔄 Cargando inventario real...');
-    
-    // 🚨 URL CORREGIDA: Apunta al nuevo endpoint
     const API_URL = 'https://localhost:7244/api/Productos/inventario-completo'; 
     
     try {
         const res = await fetch(API_URL);
 
         if (!res.ok) {
-            // Si hay un error, el mensaje será más claro (no 404)
             throw new Error(`Fallo la carga de inventario: ${res.statusText}`);
         }
 
         const datosReales = await res.json();
         
-        // Asigna los datos reales y recalcula el estado
         listaInventario.value = datosReales.map(item => ({
             ...item,
-            // Asegúrate de que el backend te envía stockMinimo
             stockMinimo: item.stockMinimo || 0, 
             estado: item.stockActual < item.stockMinimo ? 'CRITICO' : 'OK'
         }));
 
     } catch (e) {
         console.error("❌ Error al cargar el inventario desde la API:", e);
-        listaInventario.value = []; // Mostrar tabla vacía si hay fallo
+        listaInventario.value = []; 
     }
 };
 
-// Carga inicial al montar el componente
 onMounted(() => {
     cargarInventario();
 });
 
 
 // --- Propiedades Computadas (KPIs y Filtrado) ---
-
-// ... (el resto de tus computed properties: listaFiltrada, totalItems, itemsCriticos, valorTotalInventario) ...
 const listaFiltrada = computed(() => {
     const busquedaTexto = busqueda.value.toLowerCase().trim();
     if (!busquedaTexto) {
@@ -62,6 +54,8 @@ const listaFiltrada = computed(() => {
 });
 const totalItems = computed(() => listaInventario.value.length);
 const itemsCriticos = computed(() => listaInventario.value.filter(item => item.estado === 'CRITICO').length);
+
+// ❌ VALORIZACIÓN: Mantenemos la computed property pero no se usará en el template.
 const valorTotalInventario = computed(() => {
     return listaInventario.value.reduce((total, item) => {
         const stock = Number(item.stockActual) || 0;
@@ -83,23 +77,92 @@ const abrirAjuste = (item) => {
     mostrandoModal.value = true;
 };
 
-// 2. Guarda el ajuste de stock
-const guardarAjuste = () => {
-    // ... (Tu lógica de validación y guardado de ajuste) ...
-    mostrandoModal.value = false;
+const guardarAjuste = async () => {
+    // A. Validaciones básicas en el frontend
+    if (itemAjustar.value.stockRealNuevo < 0 || itemAjustar.value.stockRealNuevo === '') {
+        alert('❌ El stock real no puede ser negativo ni estar vacío.');
+        return;
+    }
+    if (!itemAjustar.value.motivo) {
+        alert('⚠️ Por favor, indica un motivo para el ajuste (Ej: Rotura, Conteo).');
+        return;
+    }
+
+    try {
+        // B. Preparamos los datos para el DTO "AjusteDto" de C#
+        const payload = {
+            productoId: itemAjustar.value.id,
+            cantidadReal: Number(itemAjustar.value.stockRealNuevo), // Aseguramos que sea número
+            motivo: itemAjustar.value.motivo
+        };
+
+        // C. Enviamos al endpoint correcto (StockController)
+        const res = await fetch('https://localhost:7244/api/Stock/ajuste', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        // D. Manejo de respuesta
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({ mensaje: 'Error del servidor' }));
+            throw new Error(data.mensaje || 'No se pudo guardar el ajuste.');
+        }
+
+        const respuestaExito = await res.json();
+        alert(`✅ ${respuestaExito.mensaje}`);
+
+        // E. Cerramos modal y recargamos la tabla para ver el cambio
+        mostrandoModal.value = false;
+        await cargarInventario(); 
+
+    } catch (e) {
+        console.error(e);
+        alert("❌ Error al ajustar stock: " + e.message);
+    }
+};
+// 3. 🚨 IMPLEMENTACIÓN REAL DE LA ELIMINACIÓN
+const eliminarProducto = async (id, nombre) => {
+    if (confirm(`¿Estás seguro de que quieres ELIMINAR DEFINITIVAMENTE el producto ${nombre} (ID: ${id})? Esta acción no se puede deshacer.`)) {
+        
+        try {
+            const API_DELETE_URL = `https://localhost:7244/api/Productos/eliminar/${id}`;
+            
+            const res = await fetch(API_DELETE_URL, {
+                method: 'DELETE'
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ mensaje: 'Error desconocido del servidor.' }));
+                alert(`❌ No se pudo eliminar el producto: ${errorData.mensaje}`);
+                return;
+            }
+
+            // Éxito: Eliminar de la lista local
+            listaInventario.value = listaInventario.value.filter(item => item.id !== id);
+            alert(`✅ Producto ${nombre} eliminado con éxito.`);
+            mostrandoModal.value = false;
+
+        } catch (error) {
+            alert("🚨 Error de red o conexión al intentar eliminar el producto.");
+            console.error("Error de eliminación:", error);
+        }
+    }
 };
 
-// 3. Simulación de la función de eliminación
-const eliminarProducto = (id, nombre) => {
-    // ... (Tu lógica de eliminación) ...
-    mostrandoModal.value = false;
-};
-
-// 4. Implementación real del botón Nuevo Producto
+// 4. Implementación del botón Nuevo Producto (Creación)
 const abrirCreacion = () => {
-    // 🚨 NAVEGACIÓN: Asumiendo que la ruta a GestionProductos.vue se llama 'crear-producto'
-    router.push({ name: 'crear-producto' }); 
-    // O si usas el path: router.push('/productos/nuevo');
+    console.log("🟢 CLICK DETECTADO: Intentando navegar a crear-producto"); // <--- AGREGA ESTO
+    console.log("Router instance:", router); // <--- Y ESTO
+    router.push({ name: 'crear-producto' })
+        .then(() => console.log("Navegación exitosa"))
+        .catch((err) => console.error("Error de navegación:", err));
+};
+
+// 5. 🚨 IMPLEMENTACIÓN DEL BOTÓN EDITAR DATOS (Precio, Nombre, etc.)
+const editarDatos = (id) => {
+    // Navega a la ruta de edición, pasando el ID como parámetro
+    router.push({ name: 'editar-producto', params: { id: id } }); 
 };
 </script>
 
@@ -110,10 +173,6 @@ const abrirCreacion = () => {
     <div class="kpi-container">
       <div class="card-kpi"><span>Items</span><strong>{{ totalItems }}</strong></div>
       <div class="card-kpi danger"><span>⚠️ Críticos</span><strong>{{ itemsCriticos }}</strong></div>
-      <div class="card-kpi money">
-        <span>💰 Valorizado</span>
-        <strong>{{ valorTotalInventario.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) }}</strong>
-      </div>
     </div>
 
     <div class="buscador">
@@ -128,7 +187,6 @@ const abrirCreacion = () => {
           <th>SKU</th>
           <th>Nombre</th>
           <th>Stock</th>
-          <th>Costo Unit.</th>
           <th>Estado</th>
           <th>Acción</th>
         </tr>
@@ -138,20 +196,20 @@ const abrirCreacion = () => {
           <td>{{ item.codigoSku }}</td>
           <td>{{ item.nombre }}</td>
           <td class="numero">{{ item.stockActual }}</td>
-          <td>{{ item.precioCosto.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) }}</td>
           <td>
-            <span v-if="item.estado === 'CRITICO'" class="alerta">⚠️ BAJO</span>
-            <span v-else class="ok">✅ OK</span>
+            <span v-if="item.estado === 'CRITICO'" class="alerta">⚠️ BAJO</span><span v-else class="ok">✅ OK</span>
           </td>
           <td>
             <button class="btn-editar" @click="abrirAjuste(item)">✏️ Ajustar</button>
+            <button class="btn-editar-datos" @click="editarDatos(item.id)">⚙️ Editar</button>
           </td>
         </tr>
+        
         <tr v-if="listaInventario.length === 0">
-            <td colspan="6" style="text-align: center;">Cargando inventario...</td>
+            <td colspan="5" style="text-align: center;">Cargando inventario...</td>
         </tr>
         <tr v-else-if="listaFiltrada.length === 0">
-            <td colspan="6" style="text-align: center;">No se encontraron productos para la búsqueda "{{ busqueda }}".</td>
+            <td colspan="5" style="text-align: center;">No se encontraron productos.</td>
         </tr>
       </tbody>
     </table>
@@ -173,12 +231,12 @@ const abrirCreacion = () => {
 
         <div class="campo">
           <label>Motivo del cambio:</label>
-          <input type="text" v-model="itemAjustar.motivo" placeholder="Ej: Rotura, Error de carga, Recuento semestral">
+          <input type="text" v-model="itemAjustar.motivo" placeholder="Ej: Rotura, Error de carga">
         </div>
 
         <div class="botones-modal">
           <button @click="mostrandoModal = false" class="btn-cancelar">Cancelar</button>
-          <button @click="guardarAjuste" class="btn-guardar" :disabled="!itemAjustar.motivo">💾 Confirmar Cambio</button>
+          <button @click="guardarAjuste" class="btn-guardar" :disabled="!itemAjustar.motivo">💾 Confirmar</button>
           <button class="btn-del" @click="eliminarProducto(itemAjustar.id, itemAjustar.nombre)">🗑️</button>
         </div>
       </div>
@@ -193,6 +251,17 @@ const abrirCreacion = () => {
   background-color: #f4f7f9;
   border-radius: 8px;
   font-family: Arial, sans-serif;
+}
+
+.btn-editar-datos {
+    background-color: #3498db; /* Azul para edición de datos */
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-left: 5px;
 }
 
 h2 {
