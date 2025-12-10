@@ -1,4 +1,4 @@
-﻿namespace EstruplastERP.Api.DTO_s
+﻿namespace EstruplastERP.Api.DTOs
 {
     public class OrdenProduccion
     {

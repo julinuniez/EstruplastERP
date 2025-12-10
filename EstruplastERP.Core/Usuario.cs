@@ -8,7 +8,7 @@ namespace EstruplastERP.Core
         public int Id { get; set; }
 
         [Required]
-        public string NombreUsuario { get; set; } // Ej: "juanp"
+        public string NombreUsuario { get; set; } 
 
         [Required]
         public string Password { get; set; }
@@ -17,7 +17,6 @@ namespace EstruplastERP.Core
 
         public bool Activo { get; set; } = true;
 
-        // 👇 CONEXIÓN CON EMPLEADO (En vez de NombreCompleto)
         public int? EmpleadoId { get; set; }
 
         [ForeignKey("EmpleadoId")]

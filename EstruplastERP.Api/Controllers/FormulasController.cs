@@ -20,7 +20,6 @@ namespace EstruplastERP.Api.Controllers
         [HttpGet("{productoId}")]
         public async Task<ActionResult<IEnumerable<object>>> GetReceta(int productoId)
         {
-            // Buscamos todas las filas donde el producto terminado sea el ID que pedimos
             var receta = await _context.Formulas
                 .Where(f => f.ProductoTerminadoId == productoId)
                 .Include(f => f.MateriaPrima) 

@@ -22,7 +22,7 @@ namespace EstruplastERP.Api.Controllers
         {
             return await _context.Clientes
                 .Where(c => c.Activo)
-                .OrderBy(c => c.RazonSocial) // 🚨 IMPORTANTE: Ordenar alfabéticamente para el selector
+                .OrderBy(c => c.RazonSocial) 
                 .ToListAsync();
         }
 
@@ -30,13 +30,12 @@ namespace EstruplastERP.Api.Controllers
         [HttpPost]
         public async Task<ActionResult<Cliente>> PostCliente(Cliente cliente)
         {
-            // 🚨 Validación básica para evitar clientes vacíos
+            
             if (string.IsNullOrWhiteSpace(cliente.RazonSocial))
             {
                 return BadRequest("La Razón Social es obligatoria.");
             }
 
-            // Aseguramos que se guarde como activo por defecto
             cliente.Activo = true;
 
             _context.Clientes.Add(cliente);

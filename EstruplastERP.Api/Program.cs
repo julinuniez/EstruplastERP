@@ -1,6 +1,10 @@
 using EstruplastERP.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
+using EstruplastERP.Api.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,25 +17,33 @@ builder.Services.AddCors(options =>
               .AllowAnyOrigin();
     });
 });
-// Leemos la cadena de conexión del appsettings.json
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// Registramos el Contexto de Datos
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
-// --- FIN DE CONFIGURACIÓN DB ---
 
-// Add services to the container.
+builder.Services.AddScoped<ProduccionService>();
 
-builder.Services.AddControllers().AddJsonOptions(x =>
-   x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)),
+            ValidateIssuer = false,
+            ValidateAudience = false
+        };
+    });
+
+builder.Services.AddControllers();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -42,6 +54,7 @@ app.UseHttpsRedirection();
 
 app.UseCors("PermitirVue");
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

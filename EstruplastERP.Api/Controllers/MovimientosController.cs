@@ -41,19 +41,13 @@ namespace EstruplastERP.Api.Controllers
             return Ok(historial);
         }
 
-        // ==========================================
-        // 2. POST: Crear Ajuste (Escritura)
-        // ==========================================
         [HttpPost("ajuste")]
         public async Task<IActionResult> RegistrarAjuste([FromBody] MovimientoStockRequest request)
         {
             var producto = await _context.Productos.FindAsync(request.ProductoId);
-            if (producto == null) return NotFound("Producto no encontrado");
-
-            // Actualizamos el Stock real (Suma o Resta según el signo de la cantidad)
+            if (producto == null) return NotFound("Producto no encontrado");            
             producto.StockActual += request.Cantidad;
 
-            // Creamos el registro en el historial
             var movimiento = new Movimiento
             {
                 Fecha = DateTime.Now,
@@ -68,10 +62,7 @@ namespace EstruplastERP.Api.Controllers
 
             return Ok(new { mensaje = "Stock actualizado", nuevoStock = producto.StockActual });
         }
-
-        // ==========================================
-        // 3. DELETE: Eliminar Ajuste (Reversión) - ¡NUEVO!
-        // ==========================================
+        
         [HttpDelete("eliminar/{id}")]
         public async Task<IActionResult> EliminarMovimiento(int id)
         {
@@ -84,16 +75,9 @@ namespace EstruplastERP.Api.Controllers
 
             if (producto != null)
             {
-                // C. LÓGICA INVERSA MATEMÁTICA
-                // Si el movimiento SUMÓ cantidad, ahora la RESTAMOS.
-                // Si el movimiento RESTÓ cantidad (era negativo), ahora RESTAMOS el negativo (sumamos).
                 producto.StockActual -= movimiento.Cantidad;
             }
-
-            // D. Borramos el registro del historial
             _context.Movimientos.Remove(movimiento);
-
-            // E. Guardamos ambos cambios (Stock y Historial) en una transacción
             await _context.SaveChangesAsync();
 
             return Ok(new
