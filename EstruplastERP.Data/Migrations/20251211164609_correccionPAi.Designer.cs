@@ -4,6 +4,7 @@ using EstruplastERP.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EstruplastERP.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251211164609_correccionPAi")]
+    partial class correccionPAi
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -114,43 +117,6 @@ namespace EstruplastERP.Data.Migrations
                     b.HasIndex("ProductoTerminadoId");
 
                     b.ToTable("Formulas");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 200,
-                            Cantidad = 96m,
-                            MateriaPrimaId = 1,
-                            ProductoTerminadoId = 50
-                        },
-                        new
-                        {
-                            Id = 201,
-                            Cantidad = 4m,
-                            MateriaPrimaId = 8,
-                            ProductoTerminadoId = 50
-                        },
-                        new
-                        {
-                            Id = 202,
-                            Cantidad = 98m,
-                            MateriaPrimaId = 1,
-                            ProductoTerminadoId = 51
-                        },
-                        new
-                        {
-                            Id = 203,
-                            Cantidad = 2m,
-                            MateriaPrimaId = 9,
-                            ProductoTerminadoId = 51
-                        },
-                        new
-                        {
-                            Id = 204,
-                            Cantidad = 100m,
-                            MateriaPrimaId = 3,
-                            ProductoTerminadoId = 70
-                        });
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.Movimiento", b =>
@@ -325,7 +291,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5029),
+                            FechaCreacion = new DateTime(2025, 12, 11, 13, 46, 8, 470, DateTimeKind.Local).AddTicks(2954),
                             Largo = 0m,
                             Nombre = "Poliestireno Alto Impacto (AI/PAI)",
                             PesoEspecifico = 1.1m,
@@ -342,7 +308,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5033),
+                            FechaCreacion = new DateTime(2025, 12, 11, 13, 46, 8, 470, DateTimeKind.Local).AddTicks(2958),
                             Largo = 0m,
                             Nombre = "ABS (Acrilonitrilo Butadieno Estireno)",
                             PesoEspecifico = 1.1m,
@@ -359,7 +325,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5036),
+                            FechaCreacion = new DateTime(2025, 12, 11, 13, 46, 8, 470, DateTimeKind.Local).AddTicks(2962),
                             Largo = 0m,
                             Nombre = "Polipropileno (PP)",
                             PesoEspecifico = 0.91m,
@@ -376,7 +342,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5040),
+                            FechaCreacion = new DateTime(2025, 12, 11, 13, 46, 8, 470, DateTimeKind.Local).AddTicks(2965),
                             Largo = 0m,
                             Nombre = "Polietileno Alta Densidad (PEAD)",
                             PesoEspecifico = 0.95m,
@@ -393,7 +359,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5044),
+                            FechaCreacion = new DateTime(2025, 12, 11, 13, 46, 8, 470, DateTimeKind.Local).AddTicks(2968),
                             Largo = 0m,
                             Nombre = "Polietileno Baja Densidad (PEBD)",
                             PesoEspecifico = 0.92m,
@@ -410,7 +376,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5142),
+                            FechaCreacion = new DateTime(2025, 12, 11, 13, 46, 8, 470, DateTimeKind.Local).AddTicks(2971),
                             Largo = 0m,
                             Nombre = "Bioplástico Compostable (Biolam)",
                             PesoEspecifico = 1.25m,
@@ -427,7 +393,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5145),
+                            FechaCreacion = new DateTime(2025, 12, 11, 13, 46, 8, 470, DateTimeKind.Local).AddTicks(2974),
                             Largo = 0m,
                             Nombre = "Masterbatch Blanco (Titanio)",
                             PesoEspecifico = 1.80m,
@@ -444,7 +410,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5148),
+                            FechaCreacion = new DateTime(2025, 12, 11, 13, 46, 8, 470, DateTimeKind.Local).AddTicks(2978),
                             Largo = 0m,
                             Nombre = "Masterbatch Negro",
                             PesoEspecifico = 1.20m,
@@ -461,200 +427,13 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5151),
+                            FechaCreacion = new DateTime(2025, 12, 11, 13, 46, 8, 470, DateTimeKind.Local).AddTicks(2982),
                             Largo = 0m,
                             Nombre = "Aditivo UV / Caucho",
                             PesoEspecifico = 0.95m,
                             PrecioCosto = 0m,
                             StockActual = 0m,
                             StockMinimo = 50m
-                        },
-                        new
-                        {
-                            Id = 50,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-PAI-B",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5226),
-                            Largo = 0m,
-                            Nombre = "Material PAI Blanco",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 500m
-                        },
-                        new
-                        {
-                            Id = 51,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-PAI-N",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5229),
-                            Largo = 0m,
-                            Nombre = "Material PAI Negro",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 500m
-                        },
-                        new
-                        {
-                            Id = 52,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-PAI-C",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5233),
-                            Largo = 0m,
-                            Nombre = "Material PAI Color",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 200m
-                        },
-                        new
-                        {
-                            Id = 53,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-PAI-BIC",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5236),
-                            Largo = 0m,
-                            Nombre = "Material PAI Bicapa",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 500m
-                        },
-                        new
-                        {
-                            Id = 60,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-ABS-B",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5239),
-                            Largo = 0m,
-                            Nombre = "Material ABS Blanco",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 300m
-                        },
-                        new
-                        {
-                            Id = 61,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-ABS-C",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5242),
-                            Largo = 0m,
-                            Nombre = "Material ABS Negro/Color",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 300m
-                        },
-                        new
-                        {
-                            Id = 70,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-PP",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5245),
-                            Largo = 0m,
-                            Nombre = "Material PP (Polipropileno)",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 1000m
-                        },
-                        new
-                        {
-                            Id = 80,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-PEAD",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5247),
-                            Largo = 0m,
-                            Nombre = "Material PEAD (Alta Densidad)",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 1000m
-                        },
-                        new
-                        {
-                            Id = 81,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-PEBD",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5251),
-                            Largo = 0m,
-                            Nombre = "Material PEBD (Baja Densidad)",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 1000m
-                        },
-                        new
-                        {
-                            Id = 90,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MAT-BIO",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5254),
-                            Largo = 0m,
-                            Nombre = "Material Biolam (Compostable)",
-                            PesoEspecifico = 0m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 200m
-                        },
-                        new
-                        {
-                            Id = 99,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "REV-PET",
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 11, 15, 8, 8, 21, DateTimeKind.Local).AddTicks(5257),
-                            Largo = 0m,
-                            Nombre = "Lámina PET (Reventa)",
-                            PesoEspecifico = 1.38m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 500m
                         });
                 });
 

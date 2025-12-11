@@ -28,7 +28,8 @@ namespace EstruplastERP.Api.Controllers
                     f.Id,
                     Ingrediente = f.MateriaPrima != null ?  f.MateriaPrima.Nombre:"Producto eliminado", 
                     f.MateriaPrimaId,
-                    f.Cantidad
+                    f.Cantidad,
+                    Densidad = f.MateriaPrima != null ? f.MateriaPrima.PesoEspecifico : 0
                 })
                 .ToListAsync();
 

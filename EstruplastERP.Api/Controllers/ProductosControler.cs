@@ -30,26 +30,27 @@ namespace EstruplastERP.Api.Controllers
                     p.StockMinimo,
                     p.PrecioCosto,
                     p.EsProductoTerminado,
-                    p.Color // <--- NUEVO
+                    p.Color 
                 })
                 .ToListAsync();
 
             return Ok(productos);
         }
 
-        // GET: api/productos/materias-primas
+        // GET: api/Productos/materias-primas
         [HttpGet("materias-primas")]
-        public async Task<ActionResult<IEnumerable<ProductoListaDto>>> GetMateriasPrimas()
+        public async Task<ActionResult<IEnumerable<object>>> GetMateriasPrimas()
         {
+            // Verifica que estás usando _context y no otra variable
             return await _context.Productos
                 .Where(p => p.EsMateriaPrima && p.Activo)
                 .OrderBy(p => p.Nombre)
-                .Select(p => new ProductoListaDto
+                .Select(p => new
                 {
-                    Id = p.Id,
-                    Nombre = p.Nombre,
-                    StockActual = p.StockActual,
-                    CodigoSku = p.CodigoSku
+                    p.Id,
+                    p.Nombre,
+                    p.CodigoSku,
+                    p.PesoEspecifico
                 })
                 .ToListAsync();
         }
@@ -86,7 +87,7 @@ namespace EstruplastERP.Api.Controllers
                 Ancho = producto.Ancho,
                 Espesor = producto.Espesor,
                 PesoEspecifico = producto.PesoEspecifico,
-                Color = producto.Color, // <--- NUEVO (Asegúrate de agregarlo en ProductoDetalleDto)
+                Color = producto.Color, 
                 EsProductoTerminado = producto.EsProductoTerminado,
                 EsMateriaPrima = producto.EsMateriaPrima,
 
@@ -112,11 +113,6 @@ namespace EstruplastERP.Api.Controllers
 
             bool esProductoTerminado = data.Receta != null && data.Receta.Count > 0;
 
-            if (esProductoTerminado)
-            {
-                if (data.PesoEspecifico <= 0) return BadRequest("❌ Falta la Densidad (Peso Específico).");
-            }
-
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
@@ -132,7 +128,7 @@ namespace EstruplastERP.Api.Controllers
                     PesoEspecifico = data.PesoEspecifico,
                     StockMinimo = data.StockMinimo,
                     PrecioCosto = data.PrecioCosto,
-                    Color = data.Color, // <--- NUEVO: Guardamos el color
+                    Color = data.Color, 
                     StockActual = 0,
                     Activo = true,
                     FechaCreacion = DateTime.Now
@@ -185,7 +181,7 @@ namespace EstruplastERP.Api.Controllers
             producto.Ancho = data.Ancho;
             producto.Espesor = data.Espesor;
             producto.PesoEspecifico = data.PesoEspecifico;
-            producto.Color = data.Color; // <--- NUEVO: Actualizamos el color
+            producto.Color = data.Color;
 
             bool esPT = data.Receta != null && data.Receta.Count > 0;
             producto.EsProductoTerminado = esPT;
