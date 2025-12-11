@@ -9,7 +9,6 @@ interface Producto { id: number; nombre: string; codigoSku: string; stockActual:
 interface Cliente { id: number; razonSocial: string; }
 interface ItemCarrito { productoId: number; nombre: string; sku: string; cantidad: number; }
 
-// Interface para el historial
 interface RemitoHistorial {
     id: number;
     numeroRemito: string;
@@ -23,11 +22,10 @@ interface RemitoHistorial {
 const pestana = ref<'nuevo' | 'historial'>('nuevo');
 const listaProductosTerminados = ref<Producto[]>([]);
 const listaClientes = ref<Cliente[]>([]);
-const listaHistorial = ref<RemitoHistorial[]>([]); // <--- LISTA HISTORIAL
+const listaHistorial = ref<RemitoHistorial[]>([]);
 const carrito = ref<ItemCarrito[]>([]);
 const cargando = ref(false);
 
-// Datos para el PDF (remito seleccionado para imprimir)
 const remitoParaImprimir = ref<RemitoHistorial | null>(null);
 
 const datosRemito = ref({
@@ -48,7 +46,7 @@ const getAuthConfig = () => {
 onMounted(async () => {
     await cargarProductos();
     await cargarClientes();
-    await cargarHistorial(); // <--- Cargar historial al inicio
+    await cargarHistorial();
 });
 
 // --- FUNCIONES DE CARGA ---
@@ -73,15 +71,12 @@ async function cargarHistorial() {
     } catch (e) { console.error("Error historial", e); }
 }
 
-// ... (Las funciones crearClienteRapido, agregarAlCarrito y quitarDelCarrito SIGUEN IGUAL que antes) ...
-// Para ahorrar espacio no las repito aquí, pero NO las borres.
-// Solo copiaremos la parte nueva del historial y PDF.
-
-// --- LÓGICA CARRITO (Resumida para contexto) ---
+// --- LÓGICA CARRITO ---
 const agregarAlCarrito = () => {
     const pid = Number(lineaTemp.value.productoId);
     const cant = Number(lineaTemp.value.cantidad);
     if (!pid || cant <= 0) return alert("Datos inválidos");
+    
     const prod = listaProductosTerminados.value.find(p => p.id === pid);
     if (!prod) return;
     
@@ -91,14 +86,23 @@ const agregarAlCarrito = () => {
     
     lineaTemp.value.productoId = ''; lineaTemp.value.cantidad = 1;
 };
+
 const quitarDelCarrito = (i: number) => carrito.value.splice(i, 1);
-async function crearClienteRapido() { /* Tu lógica anterior va aquí */ }
 
+async function crearClienteRapido() {
+    const razonSocial = prompt("Nombre del Nuevo Cliente:");
+    if (!razonSocial) return;
+    try {
+        await axios.post(`${apiUrl}/Clientes`, { razonSocial, activo: true }, getAuthConfig());
+        await cargarClientes();
+        datosRemito.value.clienteNombre = razonSocial;
+    } catch (e) { alert("Error al crear cliente"); }
+}
 
-// --- PROCESAR REMITO (Guardar) ---
+// --- PROCESAR REMITO ---
 const procesarRemito = async () => {
     if (carrito.value.length === 0 || !datosRemito.value.clienteNombre || !datosRemito.value.numero) {
-        return alert("Faltan datos.");
+        return alert("Faltan datos (Cliente, Número o Items).");
     }
 
     cargando.value = true;
@@ -117,8 +121,8 @@ const procesarRemito = async () => {
         datosRemito.value.clienteNombre = '';
         
         await cargarProductos();
-        await cargarHistorial(); // Actualizamos la lista del historial
-        pestana.value = 'historial'; // Vamos a la pestaña historial
+        await cargarHistorial();
+        pestana.value = 'historial';
 
     } catch (e: any) {
         alert("❌ Error: " + (e.response?.data?.mensaje || e.message));
@@ -127,35 +131,25 @@ const procesarRemito = async () => {
     }
 };
 
-// --- IMPRIMIR PDF ---
+// --- IMPRIMIR PDF (AJUSTADO PARA QUE ENTRE EN LA HOJA) ---
 const prepararImpresion = (remito: RemitoHistorial) => {
-    // 1. Cargamos los datos para que el v-if muestre el HTML
     remitoParaImprimir.value = remito;
 
-    // 2. Esperamos un poco a que Vue dibuje el HTML oculto
     setTimeout(() => {
         const elemento = document.getElementById('remito-pdf');
-
-        // VALIDACIÓN DE SEGURIDAD:
-        // Si por alguna razón el elemento no apareció, evitamos el error
-        if (!elemento) {
-            alert("Error: No se pudo generar la vista previa del PDF.");
-            return;
-        }
+        if (!elemento) return alert("Error al generar vista previa.");
 
         const opt = {
-            margin: 10, // Un poco de margen ayuda
+            margin: 0, // MARGEN CERO: Dejamos que el CSS controle el espacio interno
             filename: `Remito_${remito.numeroRemito}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 }, // Mejor calidad
+            html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        // 3. Ignoramos el error de tipo de TypeScript y generamos
         // @ts-ignore
         html2pdf().set(opt).from(elemento).save();
-
-    }, 300); // Aumentamos un poco el tiempo (300ms) para asegurar que se renderice
+    }, 300);
 };
 </script>
 
@@ -249,36 +243,61 @@ const prepararImpresion = (remito: RemitoHistorial) => {
     <div class="pdf-container">
         <div id="remito-pdf" class="hoja-a4" v-if="remitoParaImprimir">
             
-            <div class="header-pdf">
-                <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..." alt="LOGO" class="logo-pdf">
-                <div class="info-empresa">
-                    <h1>ESTRUPLAST S.A.</h1>
-                    <p>REMITO "R"</p>
-                    <p>DOCUMENTO NO VÁLIDO COMO FACTURA</p>
-                </div>
-                <div class="info-remito">
-                    <p><strong>N°:</strong> {{ remitoParaImprimir.numeroRemito }}</p>
-                    <p><strong>Fecha:</strong> {{ remitoParaImprimir.fecha }}</p>
-                </div>
-            </div>
+            <table class="header-table">
+                <tr>
+                    <td style="width: 20%; vertical-align: top;">
+                        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..." alt="LOGO" class="logo-pdf">
+                    </td>
+                    
+                    <td style="width: 50%; text-align: center; vertical-align: middle;">
+                        <h1 class="titulo-empresa">ESTRUPLAST S.A.</h1>
+                        <p class="subtitulo">REMITO "R"</p>
+                        <p class="legales">DOCUMENTO NO VÁLIDO COMO FACTURA</p>
+                    </td>
 
-            <div class="datos-cliente-pdf">
+                    <td style="width: 30%; vertical-align: top;">
+                        <div class="cuadro-datos">
+                            <table style="width: 100%;">
+                                <tr><td><strong>N°:</strong></td><td style="text-align: right;">{{ remitoParaImprimir.numeroRemito }}</td></tr>
+                                <tr><td><strong>Fecha:</strong></td><td style="text-align: right;">{{ remitoParaImprimir.fecha }}</td></tr>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="box-cliente">
                 <p><strong>Señor(es):</strong> {{ remitoParaImprimir.clienteNombre }}</p>
             </div>
 
-            <table class="tabla-pdf">
-                <thead><tr><th>CÓDIGO</th><th>DESCRIPCIÓN</th><th>CANTIDAD</th></tr></thead>
-                <tbody>
-                    <tr v-for="(item, i) in remitoParaImprimir.items" :key="i">
-                        <td>{{ item.sku }}</td>
-                        <td>{{ item.producto }}</td>
-                        <td style="text-align: right;">{{ item.cantidad }}</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="contenedor-tabla-items">
+                <table class="tabla-items">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">CÓDIGO</th>
+                            <th style="width: 55%;">DESCRIPCIÓN</th>
+                            <th style="width: 20%; text-align: right;">CANTIDAD</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(item, i) in remitoParaImprimir.items" :key="i">
+                            <td>{{ item.sku }}</td>
+                            <td>{{ item.producto }}</td>
+                            <td style="text-align: right;">{{ item.cantidad }}</td>
+                        </tr>
+                        <tr v-if="remitoParaImprimir.items.length < 5">
+                            <td colspan="3" style="height: 50px;"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
             <div class="pie-pdf">
-                <div class="firma">Recibí Conforme (Firma y Aclaración)</div>
+                <div class="firma-box">
+                    <div class="linea-firma"></div>
+                    <p>Recibí Conforme</p>
+                    <p class="aclaracion">(Firma y Aclaración)</p>
+                </div>
             </div>
         </div>
     </div>
@@ -287,36 +306,16 @@ const prepararImpresion = (remito: RemitoHistorial) => {
 </template>
 
 <style scoped>
-/* Estilos generales */
+/* --- ESTILOS GENERALES PANTALLA --- */
 .panel-remitos { max-width: 900px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-
-/* Tabs */
 .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #eee; }
 .tabs button { background: none; border: none; padding: 10px 20px; font-size: 16px; cursor: pointer; color: #777; }
 .tabs button.active { color: #e67e22; border-bottom: 3px solid #e67e22; font-weight: bold; }
-
-/* Tablas */
 .tabla-remito { width: 100%; border-collapse: collapse; margin-top: 10px; }
 .tabla-remito th { background: #2c3e50; color: white; padding: 10px; text-align: left; }
 .tabla-remito td { padding: 10px; border-bottom: 1px solid #eee; }
-
-/* Botones */
 .btn-print { background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
 .btn-confirmar { background: #e67e22; color: white; border: none; padding: 10px 30px; font-size: 1.1em; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 20px; }
-
-/* PDF Oculto (Fuera de pantalla) */
-.pdf-container { position: absolute; left: -9999px; top: 0; }
-.hoja-a4 { width: 210mm; min-height: 297mm; background: white; padding: 20mm; font-family: Arial, sans-serif; color: black; border: 1px solid #000; }
-.header-pdf { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; }
-.logo-pdf { max-height: 50px; }
-.info-empresa h1 { margin: 0; font-size: 24px; }
-.info-remito { border: 1px solid black; padding: 10px; }
-.tabla-pdf { width: 100%; border-collapse: collapse; margin-top: 20px; }
-.tabla-pdf th, .tabla-pdf td { border: 1px solid black; padding: 8px; }
-.pie-pdf { margin-top: 100px; display: flex; justify-content: flex-end; }
-.firma { border-top: 1px solid black; width: 200px; text-align: center; padding-top: 5px; }
-
-/* Reutiliza los estilos de inputs del formulario anterior... */
 .card-datos, .card-items { background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
 .fila { display: flex; gap: 20px; }
 .col-cliente { flex: 2; }
@@ -327,4 +326,100 @@ input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius
 .input-cant { width: 100px; }
 .btn-add { background: #27ae60; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
 .btn-del { background: transparent; border: none; cursor: pointer; }
+
+/* --- ESTILOS PDF (CRUCIALES PARA QUE NO SE CORTE) --- */
+.pdf-container { 
+    position: fixed; 
+    left: -9999px; 
+    top: 0; 
+    z-index: -1;
+}
+
+.hoja-a4 { 
+    /* Dimensiones exactas A4 */
+    width: 210mm; 
+    min-height: 297mm; 
+    background: white; 
+    
+    /* EL SECRETO: Box Sizing y Padding interno */
+    box-sizing: border-box; 
+    padding: 15mm; 
+    
+    font-family: Arial, Helvetica, sans-serif; 
+    color: black; 
+    border: 1px solid white; /* Borde invisible para evitar colapsos */
+}
+
+/* Header con Tabla */
+.header-table { 
+    width: 100%; 
+    border-collapse: collapse;
+    margin-bottom: 10px; 
+    border-bottom: 2px solid black; 
+    padding-bottom: 10px; 
+}
+.header-table td { padding: 5px; }
+
+.logo-pdf { max-height: 60px; max-width: 100%; object-fit: contain; }
+
+.titulo-empresa { margin: 0; font-size: 24px; font-weight: 900; letter-spacing: 1px; line-height: 1.2; }
+.subtitulo { margin: 5px 0; font-size: 18px; font-weight: bold; }
+.legales { font-size: 10px; color: #555; margin: 0; }
+
+.cuadro-datos { 
+    border: 1px solid black; 
+    padding: 10px; 
+    border-radius: 4px; 
+    background: #fdfdfd; 
+}
+
+/* Cliente */
+.box-cliente { 
+    width: 100%;
+    border: 1px solid #ccc; 
+    padding: 10px; 
+    margin-bottom: 15px; 
+    background-color: #f5f5f5; 
+    border-radius: 4px;
+    box-sizing: border-box; /* Asegura que el padding no rompa el ancho */
+}
+.box-cliente p { margin: 0; font-size: 14px; }
+
+/* Tabla Items */
+.contenedor-tabla-items {
+    width: 100%;
+    min-height: 400px; /* Asegura un espacio mínimo en el cuerpo */
+}
+
+.tabla-items { 
+    width: 100%; 
+    border-collapse: collapse; 
+    margin-top: 10px; 
+    font-size: 12px; 
+    table-layout: fixed; /* Fuerza a las columnas a respetar los anchos */
+}
+.tabla-items th { 
+    background: #333; 
+    color: white; 
+    padding: 8px; 
+    text-align: left; 
+    text-transform: uppercase; 
+}
+.tabla-items td { 
+    border-bottom: 1px solid #ddd; 
+    padding: 10px 8px; 
+    word-wrap: break-word; /* Evita que textos largos rompan la hoja */
+}
+.tabla-items tr:nth-child(even) { background-color: #f9f9f9; }
+
+/* Pie */
+.pie-pdf { 
+    margin-top: 50px; 
+    display: flex; 
+    justify-content: flex-end; 
+    page-break-inside: avoid; /* Evita que la firma quede sola en otra hoja */
+}
+.firma-box { width: 250px; text-align: center; float: right; } 
+.linea-firma { border-top: 1px solid black; margin-bottom: 5px; }
+.aclaracion { font-size: 10px; color: #777; }
 </style>

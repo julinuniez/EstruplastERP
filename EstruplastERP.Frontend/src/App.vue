@@ -1,18 +1,16 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useSesionStore } from './stores/sesion'; // 1. Usamos el store de Pinia correctamente
+import { useSesionStore } from './stores/sesion';
 
-// 2. Inicializamos el store
+// 1. Inicializamos el store y el router
 const sesion = useSesionStore();
-const router = useRouter(); // 2. Instanciarlo
+const router = useRouter();
 
-// 3. Crear una función para salir
+// 2. Función para cerrar sesión y redirigir
 function cerrarSesion() {
-  sesion.cerrar(); // Borra token y usuario
-  router.push({ name: 'login' }); // Redirige a la pantalla de login
+  sesion.cerrar(); // Limpia variables y localStorage
+  router.push({ name: 'login' }); // Manda al usuario al login
 }
-
 </script>
 
 <template>
@@ -20,9 +18,11 @@ function cerrarSesion() {
     
     <header>
       <div class="usuario-info">
-          Hola, {{ sesion.usuario || 'Invitado' }}
+          Hola, <strong>{{ sesion.usuario?.nombre || 'Invitado' }}</strong>
           
-          <button @click="sesion.cerrar()" class="btn-salir">Cerrar Sesión</button>
+          <button v-if="sesion.estaLogueado" @click="cerrarSesion" class="btn-salir">
+            Cerrar Sesión
+          </button>
       </div>
 
       <div class="logo-container">
@@ -44,7 +44,7 @@ function cerrarSesion() {
         </router-link>
 
         <router-link :to="{ name: 'remitos' }" class="nav-btn" active-class="activo">
-        🚚 Remitos / Despacho
+            🚚 Remitos / Despacho
         </router-link>
 
         <router-link :to="{ name: 'formulas' }" class="nav-btn" active-class="activo">
@@ -134,7 +134,7 @@ header {
   border-radius: 6px;
   transition: all 0.2s;
   color: #555;
-  text-decoration: none; /* Quitar subrayado de links */
+  text-decoration: none;
   display: inline-block;
 }
 
