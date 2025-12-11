@@ -28,7 +28,7 @@ async function ingresar() {
         sesion.iniciar(datosUsuario) 
         
         // 4. Redirigimos
-        router.push('/dashboard') 
+        router.push({ name: 'produccion' })
         
     } catch (e: any) {
         console.error(e)

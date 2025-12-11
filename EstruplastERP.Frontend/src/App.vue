@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useSesionStore } from './stores/sesion'; // 1. Usamos el store de Pinia correctamente
 
 // 2. Inicializamos el store
 const sesion = useSesionStore();
+const router = useRouter(); // 2. Instanciarlo
 
-onMounted(() => {
-    sesion.recuperar();
-});
+// 3. Crear una función para salir
+function cerrarSesion() {
+  sesion.cerrar(); // Borra token y usuario
+  router.push({ name: 'login' }); // Redirige a la pantalla de login
+}
 
-// 🚨 NOTA: Hemos borrado 'recargarTabla' y 'tablaHistorial'. 
-// Con el Router, App.vue ya no debe controlar lo que pasa dentro de Producción.
-// Cada vista se maneja sola.
 </script>
 
 <template>
@@ -19,7 +20,7 @@ onMounted(() => {
     
     <header>
       <div class="usuario-info">
-          Hola, {{ sesion.usuario?.nombre || 'Invitado' }} 
+          Hola, {{ sesion.usuario || 'Invitado' }}
           
           <button @click="sesion.cerrar()" class="btn-salir">Cerrar Sesión</button>
       </div>

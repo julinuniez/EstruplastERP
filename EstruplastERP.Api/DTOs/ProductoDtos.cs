@@ -22,8 +22,8 @@
         public decimal Espesor { get; set; }
         public decimal PesoEspecifico { get; set; }
         public decimal StockMinimo { get; set; }
+        public string? Color { get; set; }
 
-        // Aquí la clave: Una lista simple de ingredientes, no "Formulas"
         public List<IngredienteDto> Receta { get; set; } = new List<IngredienteDto>();
     }
 
@@ -37,6 +37,7 @@
         public decimal Ancho { get; set; }
         public decimal Espesor { get; set; }
         public decimal PesoEspecifico { get; set; }
+        public string? Color { get; set; }
         public decimal PrecioCosto { get; set; }
         public decimal StockMinimo { get; set; }
         public List<IngredienteDto>? Receta { get; set; }

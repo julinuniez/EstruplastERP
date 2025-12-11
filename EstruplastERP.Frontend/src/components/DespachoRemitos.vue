@@ -1,22 +1,55 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import axios from 'axios';
 
-// --- Estado ---
-const listaProductosTerminados = ref([]);
-const listaClientes = ref([]); 
-const carrito = ref([]); 
+// --- 1. INTERFACES (Tipado Estricto) ---
+interface Producto {
+    id: number;
+    nombre: string;
+    codigoSku: string;
+    stockActual: number;
+    esProductoTerminado: boolean;
+}
+
+interface Cliente {
+    id: number;
+    razonSocial: string;
+}
+
+interface ItemCarrito {
+    productoId: number;
+    nombre: string;
+    sku: string;
+    cantidad: number;
+}
+
+// --- ESTADO ---
+const listaProductosTerminados = ref<Producto[]>([]);
+const listaClientes = ref<Cliente[]>([]); 
+const carrito = ref<ItemCarrito[]>([]); 
 const cargando = ref(false);
 
 const datosRemito = ref({
-    clienteNombre: '', // Guardamos la Razón Social aquí
+    clienteNombre: '', 
     numero: '',
     fecha: new Date().toISOString().split('T')[0]
 });
 
-// Variables temporales
-const lineaTemp = ref({ productoId: '', cantidad: 1 });
+// Tipamos 'productoId' como number | string para manejar el estado inicial vacío del select
+const lineaTemp = ref<{ productoId: number | '', cantidad: number }>({ 
+    productoId: '', 
+    cantidad: 1 
+});
 
-// --- Carga Inicial ---
+const apiUrl = 'https://localhost:7244/api';
+
+// --- HELPER TOKEN ---
+const getAuthConfig = () => {
+    const token = localStorage.getItem('token');
+    return { headers: { Authorization: `Bearer ${token}` } };
+};
+
+// --- CARGA INICIAL ---
 onMounted(async () => {
     await cargarProductos();
     await cargarClientes();
@@ -24,64 +57,69 @@ onMounted(async () => {
 
 async function cargarProductos() {
     try {
-        // Asegúrate que esta URL sea la correcta según tu StockController
-        const res = await fetch('https://localhost:7244/api/Stock/inventario'); 
-        if (res.ok) {
-            const todos = await res.json();
-            // Filtramos solo productos terminados
-            listaProductosTerminados.value = todos.filter((p: any) => p.esProductoTerminado);
-        }
-    } catch (e) { console.error(e); }
+        const res = await axios.get(`${apiUrl}/Productos`, getAuthConfig()); // O /Stock/inventario según tu backend
+        const todos: Producto[] = res.data;
+        // TypeScript ahora sabe que 'p' es un Producto
+        listaProductosTerminados.value = todos.filter(p => p.esProductoTerminado);
+    } catch (e: any) { 
+        console.error("Error productos:", e);
+        if (e.response?.status === 401) alert("Sesión expirada");
+    }
 }
 
 async function cargarClientes() {
     try {
-        const res = await fetch('https://localhost:7244/api/Clientes');
-        if (res.ok) {
-            listaClientes.value = await res.json();
-        }
-    } catch (e) { console.error("Error cargando clientes", e); }
+        const res = await axios.get(`${apiUrl}/Clientes`, getAuthConfig());
+        listaClientes.value = res.data;
+    } catch (e) { console.error("Error clientes", e); }
 }
 
-// 🚨 CREAR CLIENTE RÁPIDO ADAPTADO A TU CLASE
+// --- CREAR CLIENTE RÁPIDO ---
 async function crearClienteRapido() {
     const razonSocial = prompt("Ingrese la Razón Social del Nuevo Cliente:");
     if (!razonSocial) return;
 
     try {
-        const res = await fetch('https://localhost:7244/api/Clientes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            // Enviamos el objeto tal cual lo espera tu clase C#
-            body: JSON.stringify({ 
-                razonSocial: razonSocial, 
-                activo: true,
-                direccion: '', // Campos opcionales vacíos para evitar error
-                telefono: '',
-                email: ''
-            })
-        });
+        const payload = { 
+            razonSocial: razonSocial, 
+            activo: true,
+            direccion: '', 
+            telefono: '', 
+            email: ''
+        };
 
-        if (res.ok) {
-            await cargarClientes(); 
-            datosRemito.value.clienteNombre = razonSocial; 
-            alert("✅ Cliente agregado.");
-        } else {
-            alert("Error al guardar cliente. Revisa la consola.");
-        }
-    } catch (e) { alert("Error de conexión"); }
+        await axios.post(`${apiUrl}/Clientes`, payload, getAuthConfig());
+        
+        await cargarClientes(); 
+        datosRemito.value.clienteNombre = razonSocial; 
+        alert("✅ Cliente agregado.");
+
+    } catch (e: any) { 
+        alert("Error al crear cliente: " + (e.response?.data?.mensaje || e.message)); 
+    }
 }
 
+// --- LÓGICA CARRITO ---
 const agregarAlCarrito = () => {
     const pid = Number(lineaTemp.value.productoId);
     const cant = Number(lineaTemp.value.cantidad);
     
-    if (!pid || cant <= 0) return alert("Selecciona producto y cantidad.");
+    if (!pid || cant <= 0) {
+        alert("Selecciona producto y cantidad válida.");
+        return;
+    }
 
-    const prod: any = listaProductosTerminados.value.find((p: any) => p.id === pid);
+    // Buscamos en la lista tipada
+    const prod = listaProductosTerminados.value.find(p => p.id === pid);
     
-    // Buscar si ya existe en el carrito para sumar cantidad
-    const existe: any = carrito.value.find((item: any) => item.productoId === pid);
+    // VALIDACIÓN DE SEGURIDAD DE TYPESCRIPT
+    if (!prod) {
+        alert("Producto no encontrado en la lista.");
+        return;
+    }
+    
+    // Buscar si ya existe
+    const existe = carrito.value.find(item => item.productoId === pid);
     
     if (existe) {
         existe.cantidad += cant;
@@ -93,6 +131,7 @@ const agregarAlCarrito = () => {
             cantidad: cant
         });
     }
+    
     // Resetear input
     lineaTemp.value.productoId = '';
     lineaTemp.value.cantidad = 1;
@@ -102,39 +141,37 @@ const quitarDelCarrito = (index: number) => {
     carrito.value.splice(index, 1);
 };
 
+// --- CONFIRMAR REMITO ---
 const procesarRemito = async () => {
     if (carrito.value.length === 0) return alert("El remito está vacío.");
-    if (!datosRemito.value.clienteNombre || !datosRemito.value.numero) return alert("Faltan datos.");
+    if (!datosRemito.value.clienteNombre || !datosRemito.value.numero) return alert("Faltan datos (Cliente o N° Remito).");
 
     cargando.value = true;
     try {
         const payload = {
             cliente: datosRemito.value.clienteNombre, 
             numeroRemito: datosRemito.value.numero,
-            items: carrito.value.map((i: any) => ({
+            // Mapeamos el carrito al formato que espera tu DTO de C#
+            items: carrito.value.map(i => ({
                 productoId: i.productoId,
                 cantidad: i.cantidad
             }))
         };
 
-        const res = await fetch('https://localhost:7244/api/Stock/registrar-remito', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.mensaje);
+        await axios.post(`${apiUrl}/Stock/registrar-remito`, payload, getAuthConfig());
 
         alert("🚚 Despacho Exitoso!");
+        
+        // Limpieza
         carrito.value = [];
         datosRemito.value.numero = '';
         datosRemito.value.clienteNombre = '';
         
-        await cargarProductos(); // Actualizar stock visual
+        await cargarProductos(); // Actualizar stock visualmente
 
     } catch (e: any) {
-        alert("❌ Error: " + e.message);
+        const mensaje = e.response?.data?.mensaje || e.message;
+        alert("❌ Error: " + mensaje);
     } finally {
         cargando.value = false;
     }
@@ -206,6 +243,9 @@ const procesarRemito = async () => {
                         <button @click="quitarDelCarrito(index)" class="btn-del">❌</button>
                     </td>
                 </tr>
+                <tr v-if="carrito.length === 0">
+                    <td colspan="4" style="text-align: center; color: #888;">El remito está vacío.</td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -221,7 +261,6 @@ const procesarRemito = async () => {
 </template>
 
 <style scoped>
-/* Estilos igual que antes */
 .panel-remitos { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 .header-remito { border-bottom: 2px solid #eee; margin-bottom: 20px; }
 .card-datos, .card-items { background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #ddd; margin-bottom: 20px; }
@@ -241,5 +280,6 @@ input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius
 .tabla-remito td { padding: 10px; border-bottom: 1px solid #eee; }
 .acciones-finales { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 10px; border-top: 2px solid #eee; }
 .btn-confirmar { background: #e67e22; color: white; border: none; padding: 10px 30px; font-size: 1.1em; font-weight: bold; border-radius: 6px; cursor: pointer; }
-.btn-del { background: transparent; border: none; cursor: pointer; }
+.btn-confirmar:disabled { background: #ccc; cursor: not-allowed; }
+.btn-del { background: transparent; border: none; cursor: pointer; font-size: 1.2em; }
 </style>

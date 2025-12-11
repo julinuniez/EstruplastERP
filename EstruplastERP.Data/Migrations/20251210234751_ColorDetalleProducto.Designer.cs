@@ -4,6 +4,7 @@ using EstruplastERP.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EstruplastERP.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251210234751_ColorDetalleProducto")]
+    partial class ColorDetalleProducto
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -279,56 +282,6 @@ namespace EstruplastERP.Data.Migrations
                     b.ToTable("Productos");
                 });
 
-            modelBuilder.Entity("EstruplastERP.Core.Remito", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ClienteNombre")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("Fecha")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("NumeroRemito")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Remitos");
-                });
-
-            modelBuilder.Entity("EstruplastERP.Core.RemitoDetalle", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<double>("Cantidad")
-                        .HasColumnType("float");
-
-                    b.Property<int>("ProductoId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RemitoId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProductoId");
-
-                    b.HasIndex("RemitoId");
-
-                    b.ToTable("RemitoDetalles");
-                });
-
             modelBuilder.Entity("EstruplastERP.Core.Usuario", b =>
                 {
                     b.Property<int>("Id")
@@ -433,25 +386,6 @@ namespace EstruplastERP.Data.Migrations
                     b.Navigation("Producto");
                 });
 
-            modelBuilder.Entity("EstruplastERP.Core.RemitoDetalle", b =>
-                {
-                    b.HasOne("EstruplastERP.Core.Producto", "Producto")
-                        .WithMany()
-                        .HasForeignKey("ProductoId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("EstruplastERP.Core.Remito", "Remito")
-                        .WithMany("Detalles")
-                        .HasForeignKey("RemitoId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Producto");
-
-                    b.Navigation("Remito");
-                });
-
             modelBuilder.Entity("EstruplastERP.Core.Usuario", b =>
                 {
                     b.HasOne("EstruplastERP.Core.Empleado", "Empleado")
@@ -464,11 +398,6 @@ namespace EstruplastERP.Data.Migrations
             modelBuilder.Entity("EstruplastERP.Core.Producto", b =>
                 {
                     b.Navigation("Formulas");
-                });
-
-            modelBuilder.Entity("EstruplastERP.Core.Remito", b =>
-                {
-                    b.Navigation("Detalles");
                 });
 #pragma warning restore 612, 618
         }

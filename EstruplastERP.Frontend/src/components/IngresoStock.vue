@@ -1,11 +1,29 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import axios from 'axios'
 
-const listaInsumos = ref([])
-const listaUltimosMovimientos = ref([]) // <--- NUEVO: Para mostrar historial reciente
+// --- 1. INTERFACES (Tipado Estricto) ---
+interface Insumo {
+    id: number;
+    nombre: string;
+    stockActual: number;
+    // Agrega otras propiedades si las necesitas
+}
+
+interface Movimiento {
+    id: number;
+    fecha: string;
+    producto: string; // Nombre del producto
+    cantidad: number;
+    tipoMovimiento: string;
+}
+
+// --- ESTADO ---
+const listaInsumos = ref<Insumo[]>([])
+const listaUltimosMovimientos = ref<Movimiento[]>([]) 
 
 const form = ref({
-  productoId: '',
+  productoId: '' as number | '', // Puede estar vacío al inicio
   cantidad: 0,
   proveedor: '',
   costoTotalFactura: 0
@@ -15,6 +33,12 @@ const mensaje = ref('')
 const error = ref('')
 
 const apiUrl = 'https://localhost:7244/api' 
+
+// --- HELPER TOKEN ---
+const getAuthConfig = () => {
+    const token = localStorage.getItem('token');
+    return { headers: { Authorization: `Bearer ${token}` } };
+};
 
 // Calculamos el unitario automáticamente
 const precioUnitarioCalculado = computed(() => {
@@ -26,30 +50,35 @@ const precioUnitarioCalculado = computed(() => {
 
 onMounted(async () => {
   await cargarInsumos();
-  await cargarHistorialReciente(); // <--- Cargamos historial al entrar
+  await cargarHistorialReciente(); 
 })
 
+// --- CARGA DE DATOS ---
 async function cargarInsumos() {
     try {
-        const res = await fetch(`${apiUrl}/Stock/materias-primas`)
-        if (res.ok) listaInsumos.value = await res.json()
-    } catch (e) { console.error("Error cargando insumos") }
+        const res = await axios.get(`${apiUrl}/Stock/materias-primas`, getAuthConfig())
+        listaInsumos.value = res.data
+    } catch (e: any) { 
+        console.error("Error cargando insumos:", e)
+        if (e.response?.status === 401) error.value = "Sesión expirada."
+    }
 }
 
-// --- NUEVA FUNCIÓN: CARGAR HISTORIAL RECIENTE ---
 async function cargarHistorialReciente() {
     try {
-        const res = await fetch(`${apiUrl}/Movimientos`)
-        if (res.ok) {
-            const todos = await res.json()
-            // Filtramos solo ENTRADAS y mostramos las ultimas 5
-            listaUltimosMovimientos.value = todos
-                .filter((m: any) => m.tipoMovimiento.includes("ENTRADA") || m.tipoMovimiento.includes("Ingreso"))
-                .slice(0, 5) 
-        }
-    } catch (e) { console.error("Error cargando historial") }
+        const res = await axios.get(`${apiUrl}/Movimientos`, getAuthConfig())
+        const todos: Movimiento[] = res.data
+        
+        // Filtramos solo ENTRADAS y mostramos las ultimas 5
+        // TypeScript ahora sabe que 'm' es un Movimiento
+        listaUltimosMovimientos.value = todos
+            .filter(m => m.tipoMovimiento.toUpperCase().includes("ENTRADA") || m.tipoMovimiento.toUpperCase().includes("INGRESO"))
+            .slice(0, 5) 
+            
+    } catch (e) { console.error("Error cargando historial", e) }
 }
 
+// --- REGISTRAR INGRESO ---
 async function registrarIngreso() {
   mensaje.value = ''
   error.value = ''
@@ -64,50 +93,49 @@ async function registrarIngreso() {
       precioUnitarioParaEnviar = form.value.costoTotalFactura / form.value.cantidad
   }
 
+  const payload = {
+      productoId: Number(form.value.productoId), // Aseguramos que sea número
+      cantidad: form.value.cantidad,
+      proveedor: form.value.proveedor,
+      nuevoPrecio: precioUnitarioParaEnviar 
+  }
+
   try {
-    const res = await fetch(`${apiUrl}/Stock/ingresar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            productoId: form.value.productoId,
-            cantidad: form.value.cantidad,
-            proveedor: form.value.proveedor,
-            nuevoPrecio: precioUnitarioParaEnviar 
-        })
-    })
+    await axios.post(`${apiUrl}/Stock/ingresar`, payload, getAuthConfig())
 
-    if (!res.ok) throw new Error('Error al guardar ingreso')
-
-    mensaje.value = `✅ Ingreso guardado. Costo unitario actualizado a $${precioUnitarioCalculado.value}`
+    mensaje.value = `✅ Ingreso guardado. Stock actualizado.`
     
     // Limpiamos form
     form.value.cantidad = 0
     form.value.costoTotalFactura = 0
     form.value.proveedor = ''
+    // Nota: No limpiamos el productoId por si quiere cargar otro lote del mismo
     
     // Recargamos datos para ver cambios al instante
     await cargarInsumos()
     await cargarHistorialReciente()
 
-  } catch (e) {
-    error.value = "❌ Error al conectar con el servidor"
+  } catch (e: any) {
+    console.error(e)
+    const msg = e.response?.data?.mensaje || e.message
+    error.value = "❌ Error: " + msg
   }
 }
 
-// --- NUEVA FUNCIÓN: ELIMINAR (DESHACER) ---
+// --- ELIMINAR (DESHACER) ---
 async function eliminarMovimiento(id: number) {
     if(!confirm("⚠️ ¿Te equivocaste? \nAl eliminar este ingreso, se descontará el stock automáticamente.")) return;
 
     try {
-        const res = await fetch(`${apiUrl}/Movimientos/eliminar/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-            alert("✅ Ingreso eliminado correctamente.");
-            await cargarHistorialReciente(); // Refrescar lista
-            await cargarInsumos(); // Refrescar stock en el select
-        } else {
-            alert("❌ No se pudo eliminar.");
-        }
-    } catch (e) { alert("Error de conexión"); }
+        await axios.delete(`${apiUrl}/Movimientos/eliminar/${id}`, getAuthConfig());
+        
+        alert("✅ Ingreso eliminado correctamente.");
+        await cargarHistorialReciente(); // Refrescar lista
+        await cargarInsumos(); // Refrescar stock en el select
+
+    } catch (e: any) { 
+        alert("Error al eliminar: " + (e.response?.data?.mensaje || e.message)); 
+    }
 }
 </script>
 
@@ -129,13 +157,13 @@ async function eliminarMovimiento(id: number) {
 
         <div class="campo">
           <label>Cantidad (Kg/Uni):</label>
-          <input type="number" v-model="form.cantidad" placeholder="0" />
+          <input type="number" v-model="form.cantidad" placeholder="0" min="0" step="0.1" />
         </div>
 
         <div class="campo">
           <label>Total de la Factura ($):</label>
           <div style="display: flex; gap: 5px; align-items: center;">
-              <input type="number" v-model="form.costoTotalFactura" placeholder="Monto total pagado" />
+              <input type="number" v-model="form.costoTotalFactura" placeholder="Monto total pagado" min="0" step="0.01" />
           </div>
           
           <small v-if="form.costoTotalFactura > 0" style="color: #27ae60; font-weight: bold;">
@@ -167,7 +195,8 @@ async function eliminarMovimiento(id: number) {
               </thead>
               <tbody>
                   <tr v-for="mov in listaUltimosMovimientos" :key="mov.id">
-                      <td>{{ mov.fecha.split(' ')[0] }}</td> <td>{{ mov.producto }}</td>
+                      <td>{{ mov.fecha?.split(' ')[0] || '-' }}</td> 
+                      <td>{{ mov.producto }}</td>
                       <td style="font-weight:bold; color:green;">+{{ mov.cantidad }}</td>
                       <td>
                           <button @click="eliminarMovimiento(mov.id)" class="btn-undo" title="Deshacer ingreso">
@@ -176,7 +205,7 @@ async function eliminarMovimiento(id: number) {
                       </td>
                   </tr>
                   <tr v-if="listaUltimosMovimientos.length === 0">
-                      <td colspan="4" style="text-align:center; color:#888;">No hay cargas recientes hoy.</td>
+                      <td colspan="4" style="text-align:center; color:#888;">No hay cargas recientes.</td>
                   </tr>
               </tbody>
           </table>

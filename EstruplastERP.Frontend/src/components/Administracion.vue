@@ -1,56 +1,79 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import axios from 'axios'
 
-const pestana = ref('empleados')
-const lista = ref([])
+// --- INTERFAZ ---
+interface Entidad {
+    id: number;
+    nombreCompleto?: string;
+    dni?: string;
+    puesto?: string;
+    razonSocial?: string;
+    cuit?: string;
+    activo: boolean;
+}
+
+// --- ESTADO ---
+const pestana = ref<'empleados' | 'clientes'>('empleados')
+const lista = ref<Entidad[]>([]) 
 const cargando = ref(false)
 
-// 👇 1. TU LISTA HARDCODEADA DE PUESTOS (Edítala aquí si necesitas)
 const listaPuestos = [
-    'Operario General',
-    'Logística',
-    'Extrusor',
-    'Impresor',
-    'Supervisor',
-    'Mantenimiento',
-    'Administración',
-    'Gerencia',
-    'Chofer'
+    'Operario General', 'Logística', 'Extrusor', 'Impresor', 
+    'Supervisor', 'Mantenimiento', 'Administración', 'Gerencia', 'Chofer'
 ]
 
-const itemForm = ref({ 
+// Tipamos el formulario explícitamente para evitar conflictos
+const itemForm = ref<{
+    id: number;
+    nombre: string;
+    dni: string;
+    cuit: string;
+    puesto: string;
+    activo: boolean;
+}>({ 
     id: 0, 
     nombre: '', 
     dni: '', 
     cuit: '', 
-    puesto: 'Operario General', // Valor por defecto
+    puesto: 'Operario General', 
     activo: true 
 })
 
 const modoEdicion = ref(false)
-const apiUrl = 'https://localhost:7244/api' // Ajusta puerto si hace falta
+const apiUrl = 'https://localhost:7244/api' 
+
+const getAuthConfig = () => {
+    const token = localStorage.getItem('token');
+    return { headers: { Authorization: `Bearer ${token}` } };
+};
+
+// --- CRUD ---
 
 async function cargarDatos() {
   cargando.value = true
   const endpoint = pestana.value === 'empleados' ? 'Empleados' : 'Clientes'
   try {
-    const res = await fetch(`${apiUrl}/${endpoint}`)
-    if (res.ok) lista.value = await res.json()
-  } catch (e) { console.error(e) }
-  finally { cargando.value = false }
+    const res = await axios.get(`${apiUrl}/${endpoint}`, getAuthConfig())
+    lista.value = res.data
+  } catch (e: any) { 
+    console.error(e)
+    if (e.response?.status === 401) alert("Sesión expirada.")
+  } finally { 
+    cargando.value = false 
+  }
 }
 
 async function guardar() {
   const endpoint = pestana.value === 'empleados' ? 'Empleados' : 'Clientes'
   
-  // Armamos el objeto según sea Empleado o Cliente
   const payload = pestana.value === 'empleados' 
     ? { 
         id: itemForm.value.id,
         nombreCompleto: itemForm.value.nombre, 
         dni: itemForm.value.dni, 
         activo: itemForm.value.activo,
-        puesto: itemForm.value.puesto // 👇 Enviamos el puesto seleccionado
+        puesto: itemForm.value.puesto 
       }
     : { 
         id: itemForm.value.id,
@@ -59,41 +82,48 @@ async function guardar() {
         activo: itemForm.value.activo 
       }
 
-  const metodo = modoEdicion.value ? 'PUT' : 'POST'
   const url = modoEdicion.value ? `${apiUrl}/${endpoint}/${itemForm.value.id}` : `${apiUrl}/${endpoint}`
 
   try {
-      const res = await fetch(url, {
-          method: metodo,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-      })
-      
-      if(!res.ok) throw new Error("Error en la petición")
-
+      if (modoEdicion.value) {
+          await axios.put(url, payload, getAuthConfig())
+      } else {
+          await axios.post(url, payload, getAuthConfig())
+      }
       alert("✅ Guardado correctamente")
       limpiarForm()
       cargarDatos()
-  } catch(e) { alert("Error al guardar: Verifique los datos") }
+  } catch(e: any) { 
+      const msg = e.response?.data?.mensaje || e.message
+      alert("❌ Error al guardar: " + msg) 
+  }
 }
 
-function editar(item) {
+function editar(item: Entidad) {
     modoEdicion.value = true
+    
+    // CORRECCIÓN AQUÍ 👇
+    // Agregamos " || '' " al final para asegurar que NUNCA sea undefined
     itemForm.value = {
         id: item.id,
-        nombre: item.nombreCompleto || item.razonSocial,
+        nombre: item.nombreCompleto || item.razonSocial || '',
         dni: item.dni || '',
         cuit: item.cuit || '',
-        // Si el empleado ya tiene puesto, lo ponemos. Si no, el primero de la lista.
-        puesto: item.puesto || listaPuestos[0], 
+        // Si item.puesto es null Y listaPuestos[0] falla, usamos un string vacío
+        puesto: item.puesto || listaPuestos[0] || '', 
         activo: item.activo
     }
 }
 
-function eliminar(id) {
+async function eliminar(id: number) {
     if(!confirm("¿Desea eliminar/desactivar este registro?")) return
     const endpoint = pestana.value === 'empleados' ? 'Empleados' : 'Clientes'
-    fetch(`${apiUrl}/${endpoint}/${id}`, { method: 'DELETE' }).then(() => cargarDatos())
+    try {
+        await axios.delete(`${apiUrl}/${endpoint}/${id}`, getAuthConfig())
+        cargarDatos()
+    } catch (e: any) {
+        alert("Error al eliminar: " + e.message)
+    }
 }
 
 function limpiarForm() {
@@ -103,7 +133,8 @@ function limpiarForm() {
         nombre: '', 
         dni: '', 
         cuit: '', 
-        puesto: listaPuestos[0], 
+        // CORRECCIÓN AQUÍ TAMBIÉN 👇
+        puesto: listaPuestos[0] || '', 
         activo: true 
     }
 }
@@ -158,7 +189,8 @@ onMounted(() => cargarDatos())
                 <thead>
                     <tr>
                         <th>Nombre</th>
-                        <th v-if="pestana==='empleados'">Puesto</th> <th>Identificación</th>
+                        <th v-if="pestana==='empleados'">Puesto</th> 
+                        <th>Identificación</th>
                         <th>Estado</th>
                         <th>Acciones</th>
                     </tr>
@@ -182,6 +214,9 @@ onMounted(() => cargarDatos())
                             <button @click="eliminar(item.id)" class="btn-small btn-del">🗑️</button>
                         </td>
                     </tr>
+                    <tr v-if="lista.length === 0">
+                        <td colspan="5" style="text-align: center; color: #888;">No hay datos cargados.</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -190,7 +225,7 @@ onMounted(() => cargarDatos())
 </template>
 
 <style scoped>
-/* (Mismos estilos de antes + estilo nuevo para el select) */
+/* (ESTILOS ORIGINALES CON PEQUEÑAS MEJORAS) */
 .panel-admin { max-width: 1000px; margin: 0 auto; }
 .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
 .tabs button { background: none; border: none; font-size: 1.1em; cursor: pointer; padding: 10px; color: #777; }
@@ -199,24 +234,22 @@ onMounted(() => cargarDatos())
 .contenido-abm { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
 .card-form { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: fit-content; }
 
-/* Estilos Inputs y Selects */
 .card-form input[type="text"], 
-.card-form select { 
-    width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; 
-}
+.card-form select { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
 
-.check-box { margin: 10px 0; display: flex; gap: 5px; align-items: center; }
+.check-box { margin: 10px 0; display: flex; gap: 5px; align-items: center; cursor: pointer; }
 
 .btn-group { display: flex; gap: 5px; margin-top: 10px; }
-.btn-save { flex: 1; background: #27ae60; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; }
+.btn-save { flex: 1; background: #27ae60; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-save:hover { background: #219150; }
 .btn-cancel { background: #95a5a6; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; }
 
 .tabla-container { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
 
-.badge-ok { background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
-.badge-no { background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
+.badge-ok { background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+.badge-no { background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
 .badge-puesto { background: #e3f2fd; color: #0d47a1; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
 
 .btn-small { border: none; background: #eee; padding: 5px 8px; border-radius: 4px; cursor: pointer; margin-right: 5px; }

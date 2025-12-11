@@ -18,6 +18,8 @@ namespace EstruplastERP.Data
         public DbSet<Cliente> Clientes { get; set; }
         public DbSet<Produccion> Producciones { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }
+        public DbSet<Remito> Remitos { get; set; }
+        public DbSet<RemitoDetalle> RemitoDetalles { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

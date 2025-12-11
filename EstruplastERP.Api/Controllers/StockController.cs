@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using EstruplastERP.Data;
 using EstruplastERP.Core;
+using EstruplastERP.Api.Dtos; // Si ya creaste el archivo en DTOs, bien. Si no, usa las clases de abajo.
 
 namespace EstruplastERP.Api.Controllers
 {
@@ -62,7 +63,7 @@ namespace EstruplastERP.Api.Controllers
             var producto = await _context.Productos.FindAsync(ajuste.ProductoId);
             if (producto == null) return NotFound("Producto no encontrado");
 
-            // Calculamos la diferencia (Ej: Sistema dice 100, Realidad 90 -> Ajuste -10)
+            // Calculamos la diferencia
             decimal diferencia = ajuste.CantidadReal - producto.StockActual;
 
             if (diferencia == 0) return Ok(new { mensaje = "El stock ya coincide, no se hicieron cambios." });
@@ -75,7 +76,7 @@ namespace EstruplastERP.Api.Controllers
             {
                 Fecha = DateTime.Now,
                 ProductoId = ajuste.ProductoId,
-                Cantidad = diferencia, // Guardamos cuánto se ajustó (+ o -)
+                Cantidad = diferencia,
                 TipoMovimiento = "AJUSTE_INVENTARIO",
                 Observacion = $"Ajuste Manual: {ajuste.Motivo}",
                 Turno = "Administracion"
@@ -88,79 +89,93 @@ namespace EstruplastERP.Api.Controllers
         }
 
         // ==========================================
-        // 3. NUEVO: REGISTRAR REMITO (Salida Masiva) 🚚
+        // 3. REGISTRAR REMITO (Salida Masiva)
         // ==========================================
         [HttpPost("registrar-remito")]
-        public async Task<IActionResult> RegistrarRemito([FromBody] NuevoRemitoDto data)
+        public async Task<IActionResult> RegistrarRemito([FromBody] NuevoRemitoDto dto)
         {
-            if (data.Items == null || data.Items.Count == 0)
+            if (dto.Items == null || dto.Items.Count == 0)
                 return BadRequest("El remito no tiene ítems.");
 
-            // Usamos transacción para asegurar que o se descuentan TODOS o NINGUNO
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                foreach (var item in data.Items)
+                // 1. Crear la cabecera del Remito
+                var nuevoRemito = new Remito
+                {
+                    Fecha = DateTime.Now,
+                    NumeroRemito = dto.NumeroRemito,
+                    ClienteNombre = dto.Cliente
+                };
+                _context.Remitos.Add(nuevoRemito);
+                await _context.SaveChangesAsync(); // Guardamos para obtener el ID
+
+                // 2. Procesar cada item
+                foreach (var item in dto.Items)
                 {
                     var producto = await _context.Productos.FindAsync(item.ProductoId);
 
                     if (producto == null)
-                        throw new Exception($"El producto ID {item.ProductoId} no existe.");
+                        throw new Exception($"Producto ID {item.ProductoId} no existe.");
 
-                    // Validación de Stock (Opcional: quitar si quieres permitir negativo)
-                    if (producto.StockActual < item.Cantidad)
-                        throw new Exception($"Stock insuficiente para '{producto.Nombre}'. Hay {producto.StockActual}, intentas sacar {item.Cantidad}.");
+                    // Convertimos a decimal para comparar (tu base de datos usa decimal)
+                    decimal cantidadRequerida = (decimal)item.Cantidad;
 
-                    // 1. Descuento de Stock
-                    producto.StockActual -= item.Cantidad;
+                    if (producto.StockActual < cantidadRequerida)
+                        throw new Exception($"Stock insuficiente para {producto.Nombre}. Tienes {producto.StockActual}, intentas sacar {cantidadRequerida}.");
 
-                    // 2. Registro de Movimiento
-                    var movimiento = new Movimiento
+                    // A. Restar Stock
+                    producto.StockActual -= cantidadRequerida;
+
+                    // B. Guardar Detalle del Remito
+                    var detalle = new RemitoDetalle
+                    {
+                        RemitoId = nuevoRemito.Id,
+                        ProductoId = producto.Id,
+                        Cantidad = (double)cantidadRequerida // Convertimos si tu modelo usa double
+                    };
+                    _context.RemitoDetalles.Add(detalle);
+
+                    // C. Registrar Movimiento
+                    _context.Movimientos.Add(new Movimiento
                     {
                         Fecha = DateTime.Now,
-                        ProductoId = item.ProductoId,
-                        Cantidad = -item.Cantidad, // Negativo porque sale
-                        TipoMovimiento = "VENTA_REMITO",
-                        Observacion = $"Cliente: {data.Cliente} | Remito: {data.NumeroRemito}",
-                        Turno = "Despacho"
-                    };
-                    _context.Movimientos.Add(movimiento);
+                        ProductoId = producto.Id,
+                        Cantidad = -cantidadRequerida, // Negativo
+                        TipoMovimiento = $"SALIDA - Remito {dto.NumeroRemito}"
+                    });
                 }
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                return Ok(new { mensaje = "✅ Remito registrado y stock actualizado correctamente." });
+                return Ok(new { mensaje = "Remito registrado y stock actualizado." });
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                // Devolvemos BadRequest con el mensaje del error (ej: Stock insuficiente)
                 return BadRequest(new { mensaje = ex.Message });
             }
         }
 
         // ==========================================
-        // MÉTODOS DE LECTURA (GET)
+        // MÉTODOS GET AUXILIARES
         // ==========================================
         [HttpGet("inventario")]
         public async Task<ActionResult<IEnumerable<object>>> GetInventarioCompleto()
         {
             var inventario = await _context.Productos
-                .Where(p => p.Activo == true)
+                .Where(p => p.Activo)
                 .OrderBy(p => p.Nombre)
                 .Select(p => new
                 {
                     p.Id,
                     p.Nombre,
                     p.CodigoSku,
-                    p.EsProductoTerminado, // Necesario para el filtro en Despacho
-                    Categoria = p.EsMateriaPrima ? "Materia Prima" : "Producto Terminado",
+                    p.EsProductoTerminado,
                     p.StockActual,
                     p.StockMinimo,
-                    p.PrecioCosto,
-                    Estado = p.StockActual <= p.StockMinimo ? "CRITICO" : "NORMAL",
-                    ValorTotal = p.StockActual * p.PrecioCosto
+                    p.PrecioCosto
                 })
                 .ToListAsync();
 
@@ -171,41 +186,41 @@ namespace EstruplastERP.Api.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetMateriasPrimas()
         {
             return await _context.Productos
-                .Where(p => p.EsMateriaPrima == true)
-                .Select(p => new { p.Id, p.Nombre, p.StockActual, p.CodigoSku })
+                .Where(p => p.EsMateriaPrima && p.Activo)
+                .Select(p => new { p.Id, p.Nombre, p.StockActual })
                 .ToListAsync();
         }
+    }
 
-        // ==========================================
-        // CLASES DTO (Data Transfer Objects)
-        // ==========================================
-        public class IngresoDto
-        {
-            public int ProductoId { get; set; }
-            public decimal Cantidad { get; set; }
-            public decimal NuevoPrecio { get; set; }
-            public string? Proveedor { get; set; }
-        }
+    // ==========================================
+    // DTOs LOCALES (Si no tienes el archivo separado)
+    // ==========================================
+    public class IngresoDto
+    {
+        public int ProductoId { get; set; }
+        public decimal Cantidad { get; set; }
+        public decimal NuevoPrecio { get; set; }
+        public string? Proveedor { get; set; }
+    }
 
-        public class AjusteDto
-        {
-            public int ProductoId { get; set; }
-            public decimal CantidadReal { get; set; }
-            public string Motivo { get; set; }
-        }
+    public class AjusteDto
+    {
+        public int ProductoId { get; set; }
+        public decimal CantidadReal { get; set; }
+        public string Motivo { get; set; }
+    }
 
-        // Nuevos DTOs para Remitos
-        public class NuevoRemitoDto
-        {
-            public string Cliente { get; set; }
-            public string NumeroRemito { get; set; }
-            public List<ItemRemitoDto> Items { get; set; }
-        }
+    // Estos son los que te faltaban:
+    public class NuevoRemitoDto
+    {
+        public string Cliente { get; set; }
+        public string NumeroRemito { get; set; }
+        public List<ItemRemitoDto> Items { get; set; }
+    }
 
-        public class ItemRemitoDto
-        {
-            public int ProductoId { get; set; }
-            public decimal Cantidad { get; set; }
-        }
+    public class ItemRemitoDto
+    {
+        public int ProductoId { get; set; }
+        public double Cantidad { get; set; }
     }
 }

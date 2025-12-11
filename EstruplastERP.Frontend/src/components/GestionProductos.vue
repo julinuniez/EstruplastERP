@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router'; 
+import axios from 'axios'; // 1. IMPORTANTE: Usamos Axios para la seguridad
 
 const route = useRoute(); 
 
@@ -17,6 +18,7 @@ const form = ref({
     espesor: 0,
     stockMinimo: 1000,
     pesoEspecifico: 0.92,
+    color: '',
     precioCosto: 0,
     receta: [] as { materiaPrimaId: number, nombreMP: string, cantidad: number }[]
 })
@@ -29,29 +31,23 @@ const ingredienteTemp = ref({ id: '', cantidad: 0 });
 const mensaje = ref('');
 const error = ref('');
 
-// VARIABLE PARA DEBUG
-const debugDatosRecibidos = ref<any>(null);
-
 // ===============================================
-// 1. FUNCIÓN DE COPIADO
+// 1. FUNCIÓN DE COPIADO (CON AXIOS)
 // ===============================================
 async function copiarDatosDeProducto() {
     if (!productoBaseId.value) return;
 
     try {
         error.value = '';
-        const res = await fetch(`https://localhost:7244/api/Productos/${productoBaseId.value}`);
-        if (!res.ok) throw new Error("Error al conectar con el servidor.");
+        // CAMBIO: Axios maneja la URL y la respuesta automática
+        const res = await axios.get(`https://localhost:7244/api/Productos/${productoBaseId.value}`);
+        const data = res.data; // En axios la data viene aquí directo
         
-        const data = await res.json();
-        
-        // DEBUG
-        debugDatosRecibidos.value = data; 
-        console.log("📦 JSON RECIBIDO:", data);
+        console.log("📦 Datos copiados:", data);
 
         // --- MAPEO DE DATOS ---
         form.value.nombre = `${data.nombre || data.Nombre} (Copia)`;
-        form.value.codigoSku = ""; 
+        form.value.codigoSku = ""; // El SKU no se copia, debe ser único
         
         form.value.largo = data.largo ?? data.Largo ?? 0;
         form.value.ancho = data.ancho ?? data.Ancho ?? 0;
@@ -82,32 +78,50 @@ async function copiarDatosDeProducto() {
         }
 
     } catch (e: any) {
-        console.error("Error fatal:", e);
-        error.value = "Error al copiar: " + e.message;
+        console.error("Error al copiar:", e);
+        error.value = "Error al copiar producto.";
     }
 }
 
 // ===============================================
-// 2. CARGA INICIAL
+// 2. CARGA INICIAL (CON AXIOS)
 // ===============================================
 onMounted(async () => {
     try {
+        // Obtenemos Token para asegurarnos (Axios interceptor debería manejarlo, pero por seguridad)
+        const token = localStorage.getItem('token');
+        if(!token) {
+            error.value = "No hay sesión activa.";
+            return;
+        }
+
+        const config = { headers: { Authorization: `Bearer ${token}` } };
+
         const [resMP, resProd] = await Promise.all([
-            fetch('https://localhost:7244/api/Stock/materias-primas'),
-            fetch('https://localhost:7244/api/Productos')
+            axios.get('https://localhost:7244/api/Stock/materias-primas', config),
+            axios.get('https://localhost:7244/api/Productos', config)
         ]);
-        listaMateriasPrimas.value = await resMP.json();
-        listaProductosBase.value = await resProd.json();
+        
+        listaMateriasPrimas.value = resMP.data;
+        listaProductosBase.value = resProd.data;
         
         if (esModoEdicion.value && productoId.value) {
-            await cargarDatosEdicion(productoId.value);
+            await cargarDatosEdicion(productoId.value, config);
         }
-    } catch (e) { console.error("Error inicial", e); }
+    } catch (e: any) { 
+        console.error("Error inicial", e);
+        if(e.response && e.response.status === 401) {
+            error.value = "Sesión expirada. Por favor inicie sesión nuevamente.";
+        } else {
+            error.value = "Error al cargar listas del servidor.";
+        }
+    }
 });
 
-async function cargarDatosEdicion(id: number) {
-    const res = await fetch(`https://localhost:7244/api/Productos/${id}`);
-    const data = await res.json();
+async function cargarDatosEdicion(id: number, config: any) {
+    const res = await axios.get(`https://localhost:7244/api/Productos/${id}`, config);
+    const data = res.data;
+
     form.value.nombre = data.nombre || data.Nombre;
     form.value.codigoSku = data.codigoSku || data.CodigoSku;
     form.value.largo = data.largo || data.Largo;
@@ -139,31 +153,48 @@ function agregarIngrediente() {
 }
 function quitarIngrediente(index: number) { form.value.receta.splice(index, 1) }
 
+// ===============================================
+// 4. GUARDAR (CON AXIOS)
+// ===============================================
 async function guardarProducto() {
     mensaje.value = ''; error.value = '';
     if (!form.value.nombre || !form.value.codigoSku) { error.value = "Faltan datos obligatorios"; return; }
 
+    if (!esModoEdicion.value && modoCreacion.value === 'PT' && form.value.receta.length === 0) {
+        error.value = "⛔ Error: No puedes crear un Producto Terminado sin fórmula. Agrega al menos un ingrediente.";
+        return; // Detenemos la función aquí
+    }
+
     const url = esModoEdicion.value 
         ? `https://localhost:7244/api/Productos/actualizar/${productoId.value}`
         : 'https://localhost:7244/api/Productos/crear';
-    const method = esModoEdicion.value ? 'PUT' : 'POST';
+
+    // Configuración del header manual por si acaso
+    const token = localStorage.getItem('token');
+    const config = { headers: { Authorization: `Bearer ${token}` } };
 
     try {
-        const res = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(form.value)
-        })
-        if(res.ok) {
-            mensaje.value = "✅ Guardado correctamente";
-            if(!esModoEdicion.value) {
-                form.value.nombre = ''; form.value.codigoSku = ''; form.value.receta = [];
-                productoBaseId.value = ''; debugDatosRecibidos.value = null;
-            }
+        if (esModoEdicion.value) {
+            await axios.put(url, form.value, config);
         } else {
-            const d = await res.json(); error.value = "❌ " + (d.mensaje || "Error servidor");
+            await axios.post(url, form.value, config);
         }
-    } catch(e: any) { error.value = "❌ Red: " + e.message; }
+
+        // Si no salta al catch, es éxito
+        mensaje.value = "✅ Guardado correctamente";
+        
+        if(!esModoEdicion.value) {
+            form.value.nombre = ''; form.value.codigoSku = ''; form.value.receta = [];
+            productoBaseId.value = ''; 
+        }
+
+    } catch(e: any) { 
+        if (e.response && e.response.data) {
+             error.value = "❌ " + (e.response.data.mensaje || JSON.stringify(e.response.data));
+        } else {
+             error.value = "❌ Error de conexión: " + e.message;
+        }
+    }
 }
 </script>
 
@@ -182,15 +213,6 @@ async function guardarProducto() {
                     </option>
                 </select>
             </div>
-        </div>
-
-        <div v-if="debugDatosRecibidos" class="debug-box">
-            <h4>🔍 Diagnóstico de Carga</h4>
-            <p><strong>Fórmulas recibidas (Raw):</strong> {{ debugDatosRecibidos.formulas || debugDatosRecibidos.Formulas || 'Ninguna' }}</p>
-            <details>
-                <summary>Ver JSON Completo</summary>
-                <pre>{{ debugDatosRecibidos }}</pre>
-            </details>
         </div>
 
         <div class="tabs">
@@ -220,6 +242,14 @@ async function guardarProducto() {
                     </div>
                 </div>
 
+                <div class="campo-row">
+                    </div>
+
+                <div class="campo">
+                    <label>Color / Acabado</label>
+                    <input v-model="form.color" type="text" placeholder="Ej: Blanco, Negro, Transparente...">
+                </div>
+                
                 <div v-if="modoCreacion === 'PT'" class="seccion-pt">
                     <h4 class="subtitulo">Dimensiones y Material</h4>
                     
@@ -275,13 +305,13 @@ async function guardarProducto() {
                 </div>
 
                 <div v-else class="alerta-bloqueo">
-    <div style="font-size: 1.5rem; margin-bottom: 5px;">🧪</div>
-    <strong>Fórmula Gestionada en otro Módulo</strong>
-    <p style="margin: 5px 0 0 0; font-size: 0.9em;">
-        Para modificar ingredientes o cantidades, por favor dirígete a la sección 
-        <strong>"Fórmulas"</strong> en el menú principal.
-    </p>
-    </div>
+                    <div style="font-size: 1.5rem; margin-bottom: 5px;">🧪</div>
+                    <strong>Fórmula Gestionada en otro Módulo</strong>
+                    <p style="margin: 5px 0 0 0; font-size: 0.9em;">
+                        Para modificar ingredientes o cantidades, por favor dirígete a la sección 
+                        <strong>"Fórmulas"</strong> en el menú principal.
+                    </p>
+                </div>
 
                 <div class="lista-items">
                     <div v-for="(item, index) in form.receta" :key="index" class="item-receta">
@@ -325,10 +355,6 @@ async function guardarProducto() {
 .selector-copia { background: #f0f4f8; padding: 8px 15px; border-radius: 6px; border: 1px solid #dceefb; display: flex; align-items: center; gap: 10px; }
 .selector-copia select { border: 1px solid #bdc3c7; background: white; padding: 5px; border-radius: 4px; min-width: 250px; }
 
-/* Debug Box */
-.debug-box { background: #333; color: #0f0; padding: 15px; margin-bottom: 20px; border-radius: 5px; font-family: monospace; font-size: 0.8rem; overflow-x: auto;}
-.debug-box pre { background: #111; padding: 10px; border: 1px solid #444; }
-
 /* Tabs */
 .tabs { display: flex; gap: 5px; margin-bottom: 15px; border-bottom: 2px solid #eee; }
 .tab { padding: 10px 20px; cursor: pointer; border-radius: 5px 5px 0 0; background: #f9f9f9; color: #777; }
@@ -350,28 +376,17 @@ input:focus { border-color: #3498db; outline: none; }
 .input-con-unidad { display: flex; align-items: center; gap: 5px; }
 .input-con-unidad span { color: #666; font-size: 0.9rem; white-space: nowrap; }
 
-/* --- ESTILOS DE BARRA DE AGREGAR AJUSTADOS --- */
-.add-bar { 
-    display: flex; 
-    gap: 10px; 
-    margin-bottom: 10px; 
-}
-/* El select crece para ocupar espacio */
-.add-bar select { 
-    flex-grow: 1; 
-}
-/* El input de cantidad se queda fijo pequeño */
-.input-cant {
-    width: 90px !important;
-}
+/* --- ESTILOS DE BARRA DE AGREGAR --- */
+.add-bar { display: flex; gap: 10px; margin-bottom: 10px; }
+.add-bar select { flex-grow: 1; }
+.input-cant { width: 90px !important; }
 
 .btn-icon { background: #27ae60; color: white; border: none; width: 45px; cursor: pointer; border-radius: 4px; font-weight: bold; font-size: 1.2rem; }
-/* --------------------------------------------- */
 
 /* Alerta de bloqueo */
 .alerta-bloqueo {
-    background-color: #e3f2fd; /* Azul suave */
-    color: #0d47a1;            /* Azul oscuro texto */
+    background-color: #e3f2fd;
+    color: #0d47a1;
     padding: 15px;
     border-radius: 8px;
     border: 1px solid #bbdefb;
@@ -386,6 +401,7 @@ input:focus { border-color: #3498db; outline: none; }
 .lista-items { border: 1px solid #eee; border-radius: 4px; max-height: 250px; overflow-y: auto; background: #fafafa; }
 .item-receta { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid #eee; background: white; }
 .btn-trash { background: none; border: none; cursor: pointer; font-size: 1.2rem; }
+.vacio { padding: 15px; text-align: center; color: #999; font-style: italic; }
 
 /* Footer */
 .footer-actions { margin-top: 20px; display: flex; justify-content: flex-end; align-items: center; gap: 15px; }

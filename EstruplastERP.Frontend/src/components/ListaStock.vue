@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router'; 
+import axios from 'axios'; // Importamos Axios
 
 // --- Estado Reactivo (Datos) ---
 const listaInventario = ref([]); 
@@ -9,20 +10,24 @@ const mostrandoModal = ref(false);
 const itemAjustar = ref({}); 
 const router = useRouter(); 
 
-// --- Lógica (Carga desde la API real) ---
+// --- Helper para obtener el Token ---
+const getConfig = () => {
+    const token = localStorage.getItem('token');
+    return {
+        headers: { Authorization: `Bearer ${token}` }
+    };
+};
 
+// --- Lógica (Carga desde la API real) ---
 const cargarInventario = async () => {
-    console.log('🔄 Cargando inventario real...');
     const API_URL = 'https://localhost:7244/api/Productos/inventario-completo'; 
     
     try {
-        const res = await fetch(API_URL);
+        // CAMBIO: Usamos axios + Token
+        const res = await axios.get(API_URL, getConfig());
 
-        if (!res.ok) {
-            throw new Error(`Fallo la carga de inventario: ${res.statusText}`);
-        }
-
-        const datosReales = await res.json();
+        // En Axios, los datos vienen directo en .data
+        const datosReales = res.data;
         
         listaInventario.value = datosReales.map(item => ({
             ...item,
@@ -31,7 +36,10 @@ const cargarInventario = async () => {
         }));
 
     } catch (e) {
-        console.error("❌ Error al cargar el inventario desde la API:", e);
+        console.error("❌ Error al cargar el inventario:", e);
+        if (e.response && e.response.status === 401) {
+            alert("⚠️ Su sesión ha expirado. Por favor inicie sesión nuevamente.");
+        }
         listaInventario.value = []; 
     }
 };
@@ -54,15 +62,6 @@ const listaFiltrada = computed(() => {
 });
 const totalItems = computed(() => listaInventario.value.length);
 const itemsCriticos = computed(() => listaInventario.value.filter(item => item.estado === 'CRITICO').length);
-
-// ❌ VALORIZACIÓN: Mantenemos la computed property pero no se usará en el template.
-const valorTotalInventario = computed(() => {
-    return listaInventario.value.reduce((total, item) => {
-        const stock = Number(item.stockActual) || 0;
-        const costo = Number(item.precioCosto) || 0;
-        return total + (stock * costo);
-    }, 0);
-});
 
 
 // --- Métodos (Acciones del Usuario) ---
@@ -89,54 +88,39 @@ const guardarAjuste = async () => {
     }
 
     try {
-        // B. Preparamos los datos para el DTO "AjusteDto" de C#
+        // B. Preparamos los datos
         const payload = {
             productoId: itemAjustar.value.id,
-            cantidadReal: Number(itemAjustar.value.stockRealNuevo), // Aseguramos que sea número
+            cantidadReal: Number(itemAjustar.value.stockRealNuevo),
             motivo: itemAjustar.value.motivo
         };
 
-        // C. Enviamos al endpoint correcto (StockController)
-        const res = await fetch('https://localhost:7244/api/Stock/ajuste', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        // C. Enviamos con AXIOS + Token
+        const res = await axios.post('https://localhost:7244/api/Stock/ajuste', payload, getConfig());
 
-        // D. Manejo de respuesta
-        if (!res.ok) {
-            const data = await res.json().catch(() => ({ mensaje: 'Error del servidor' }));
-            throw new Error(data.mensaje || 'No se pudo guardar el ajuste.');
-        }
+        // D. Éxito
+        alert(`✅ ${res.data.mensaje || 'Ajuste realizado'}`);
 
-        const respuestaExito = await res.json();
-        alert(`✅ ${respuestaExito.mensaje}`);
-
-        // E. Cerramos modal y recargamos la tabla para ver el cambio
+        // E. Cerramos modal y recargamos la tabla
         mostrandoModal.value = false;
         await cargarInventario(); 
 
     } catch (e) {
         console.error(e);
-        alert("❌ Error al ajustar stock: " + e.message);
+        const msg = e.response?.data?.mensaje || e.message;
+        alert("❌ Error al ajustar stock: " + msg);
     }
 };
-// 3. 🚨 IMPLEMENTACIÓN REAL DE LA ELIMINACIÓN
+
+// 3. ELIMINACIÓN (CON AXIOS)
 const eliminarProducto = async (id, nombre) => {
     if (confirm(`¿Estás seguro de que quieres ELIMINAR DEFINITIVAMENTE el producto ${nombre} (ID: ${id})? Esta acción no se puede deshacer.`)) {
         
         try {
             const API_DELETE_URL = `https://localhost:7244/api/Productos/eliminar/${id}`;
             
-            const res = await fetch(API_DELETE_URL, {
-                method: 'DELETE'
-            });
-
-            if (!res.ok) {
-                const errorData = await res.json().catch(() => ({ mensaje: 'Error desconocido del servidor.' }));
-                alert(`❌ No se pudo eliminar el producto: ${errorData.mensaje}`);
-                return;
-            }
+            // CAMBIO: Axios Delete + Token
+            await axios.delete(API_DELETE_URL, getConfig());
 
             // Éxito: Eliminar de la lista local
             listaInventario.value = listaInventario.value.filter(item => item.id !== id);
@@ -144,24 +128,19 @@ const eliminarProducto = async (id, nombre) => {
             mostrandoModal.value = false;
 
         } catch (error) {
-            alert("🚨 Error de red o conexión al intentar eliminar el producto.");
-            console.error("Error de eliminación:", error);
+            const msg = error.response?.data?.mensaje || error.message;
+            alert(`🚨 No se pudo eliminar: ${msg}`);
         }
     }
 };
 
-// 4. Implementación del botón Nuevo Producto (Creación)
+// 4. Navegación limpia
 const abrirCreacion = () => {
-    console.log("🟢 CLICK DETECTADO: Intentando navegar a crear-producto"); // <--- AGREGA ESTO
-    console.log("Router instance:", router); // <--- Y ESTO
-    router.push({ name: 'crear-producto' })
-        .then(() => console.log("Navegación exitosa"))
-        .catch((err) => console.error("Error de navegación:", err));
+    router.push({ name: 'crear-producto' });
 };
 
-// 5. 🚨 IMPLEMENTACIÓN DEL BOTÓN EDITAR DATOS (Precio, Nombre, etc.)
+// 5. Editar
 const editarDatos = (id) => {
-    // Navega a la ruta de edición, pasando el ID como parámetro
     router.push({ name: 'editar-producto', params: { id: id } }); 
 };
 </script>
@@ -307,10 +286,6 @@ h2 {
   color: #dc3545;
 }
 
-.card-kpi.money {
-  border-left-color: #28a745;
-}
-
 /* --- Buscador --- */
 .buscador {
   display: flex;
@@ -394,7 +369,7 @@ h2 {
 }
 
 .numero {
-  text-align: right; /* Alineación para números */
+  text-align: right;
   font-weight: bold;
 }
 

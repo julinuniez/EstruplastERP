@@ -17,23 +17,24 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
-        // GET: api/Productos
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProductoListaDto>>> GetProductos()
-        {   
-            return await _context.Productos
-                .OrderByDescending(p => p.Id)
-                .Select(p => new ProductoListaDto
+        [HttpGet("inventario-completo")]
+        public async Task<ActionResult<IEnumerable<object>>> GetInventarioCompleto()
+        {
+            var productos = await _context.Productos
+                .Select(p => new
                 {
-                    Id = p.Id,
-                    Nombre = p.Nombre,
-                    CodigoSku = p.CodigoSku,
-                    StockActual = p.StockActual,
-                    PrecioCosto = p.PrecioCosto,
-                    EsProductoTerminado = p.EsProductoTerminado,
-                    EsMateriaPrima = p.EsMateriaPrima
+                    p.Id,
+                    p.Nombre,
+                    p.CodigoSku,
+                    p.StockActual,
+                    p.StockMinimo,
+                    p.PrecioCosto,
+                    p.EsProductoTerminado,
+                    p.Color // <--- NUEVO
                 })
                 .ToListAsync();
+
+            return Ok(productos);
         }
 
         // GET: api/productos/materias-primas
@@ -50,6 +51,15 @@ namespace EstruplastERP.Api.Controllers
                     StockActual = p.StockActual,
                     CodigoSku = p.CodigoSku
                 })
+                .ToListAsync();
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Producto>>> GetProductos()
+        {
+            return await _context.Productos
+                .Where(p => p.Activo)
+                .OrderBy(p => p.Nombre)
                 .ToListAsync();
         }
 
@@ -76,13 +86,14 @@ namespace EstruplastERP.Api.Controllers
                 Ancho = producto.Ancho,
                 Espesor = producto.Espesor,
                 PesoEspecifico = producto.PesoEspecifico,
+                Color = producto.Color, // <--- NUEVO (Asegúrate de agregarlo en ProductoDetalleDto)
                 EsProductoTerminado = producto.EsProductoTerminado,
                 EsMateriaPrima = producto.EsMateriaPrima,
 
                 Receta = producto.Formulas.Select(f => new IngredienteDto
                 {
                     MateriaPrimaId = f.MateriaPrimaId,
-                    NombreInsumo = f.MateriaPrima.Nombre, 
+                    NombreInsumo = f.MateriaPrima.Nombre,
                     Cantidad = f.Cantidad
                 }).ToList()
             };
@@ -121,6 +132,7 @@ namespace EstruplastERP.Api.Controllers
                     PesoEspecifico = data.PesoEspecifico,
                     StockMinimo = data.StockMinimo,
                     PrecioCosto = data.PrecioCosto,
+                    Color = data.Color, // <--- NUEVO: Guardamos el color
                     StockActual = 0,
                     Activo = true,
                     FechaCreacion = DateTime.Now
@@ -173,6 +185,7 @@ namespace EstruplastERP.Api.Controllers
             producto.Ancho = data.Ancho;
             producto.Espesor = data.Espesor;
             producto.PesoEspecifico = data.PesoEspecifico;
+            producto.Color = data.Color; // <--- NUEVO: Actualizamos el color
 
             bool esPT = data.Receta != null && data.Receta.Count > 0;
             producto.EsProductoTerminado = esPT;

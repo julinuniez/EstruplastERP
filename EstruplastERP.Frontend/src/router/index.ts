@@ -9,6 +9,7 @@ import EditorRecetas from '../components/EditorRecetas.vue';
 import Administracion from '../components/Administracion.vue';
 import Login from '../components/Login.vue';
 import DespachoRemitos from '../components/DespachoRemitos.vue';
+import VistaRemitos from '@/components/VistaRemitos.vue';
 
 const routes: Array<RouteRecordRaw> = [
     // RUTA PÚBLICA: Login
@@ -79,7 +80,13 @@ const routes: Array<RouteRecordRaw> = [
         name: 'remitos', 
         component: DespachoRemitos,
         meta: { requiresAuth: true }
-    }
+    },
+    {
+      path: '/remitos',
+      name: 'remitos',
+      component: VistaRemitos,
+      meta: { requiresAuth: true } // Si usas protección de rutas
+    },
 ];
 
 const router = createRouter({
