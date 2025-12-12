@@ -99,27 +99,45 @@ async function copiarDatosDeProducto() {
 // ===============================================
 onMounted(async () => {
     try {
-        const config = getAuthConfig();
+        console.log("🚀 Iniciando carga de productos..."); // Log de depuración
         
-        // Carga paralela de Insumos y Productos Existentes
+        const token = localStorage.getItem('token');
+        if(!token) {
+            console.warn("⚠️ No hay token en localStorage");
+            error.value = "No hay sesión activa.";
+            return;
+        }
+
+        const config = { headers: { Authorization: `Bearer ${token}` } };
+        console.log("🔑 Token encontrado, consultando API en:", apiUrl);
+
         const [resMP, resProd] = await Promise.all([
-            // Insumos para el dropdown de receta
             axios.get(`${apiUrl}/Productos/materias-primas`, config),
-            // Productos Terminados para la lista
             axios.get(`${apiUrl}/Productos`, config)
         ]);
         
+        console.log("✅ Datos recibidos:", resMP.data, resProd.data);
+
         listaMateriasPrimas.value = resMP.data;
-        // Filtramos solo los terminados (Materiales de Venta)
-        listaProductosBase.value = resProd.data.filter((p:any) => p.esProductoTerminado);
+        listaProductosBase.value = resProd.data.filter((p: any) => p.esProductoTerminado);
         
-        // Si venimos a editar
         if (esModoEdicion.value && productoId.value) {
             await cargarDatosEdicion(productoId.value, config);
         }
     } catch (e: any) { 
-        if(e.response && e.response.status === 401) error.value = "Sesión expirada.";
-        else error.value = "Error de conexión o datos.";
+        // 👇 ESTO ES LO QUE FALTABA: IMPRIMIR EL ERROR
+        console.error("🔥 ERROR CRÍTICO:", e); 
+        
+        if (e.response) {
+            console.error("Status:", e.response.status);
+            console.error("Datos:", e.response.data);
+        }
+
+        if(e.response && e.response.status === 401) {
+            error.value = "Sesión expirada.";
+        } else {
+            error.value = "Error de conexión o datos (Mira la consola F12).";
+        }
     }
 });
 

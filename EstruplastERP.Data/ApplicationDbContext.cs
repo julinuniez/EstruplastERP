@@ -223,8 +223,17 @@ namespace EstruplastERP.Data
                 new Formula { Id = 203, ProductoTerminadoId = 51, MateriaPrimaId = 9, Cantidad = 2 },
 
                 // PP NATURAL: 100% PP (Id 3)
-                new Formula { Id = 204, ProductoTerminadoId = 70, MateriaPrimaId = 3, Cantidad = 100 }
+                new Formula { Id = 204, ProductoTerminadoId = 70, MateriaPrimaId = 3, Cantidad = 100 },
+
+                //PAI COLOR
+                new Formula { Id = 215, ProductoTerminadoId = 52, MateriaPrimaId = 1, Cantidad = 100 }
             );
+
+            // COLORES ESPECÍFICOS (Para que el usuario elija en el combo)
+            new Producto { Id = 11, Nombre = "Masterbatch Rojo", CodigoSku = "MP-MST-ROJ", EsMateriaPrima = true, EsProductoTerminado = false, PesoEspecifico = 1.20m, StockMinimo = 50, Activo = true, FechaCreacion = DateTime.Now };
+            new Producto { Id = 12, Nombre = "Masterbatch Azul", CodigoSku = "MP-MST-AZU", EsMateriaPrima = true, EsProductoTerminado = false, PesoEspecifico = 1.20m, StockMinimo = 50, Activo = true, FechaCreacion = DateTime.Now };
+            new Producto { Id = 13, Nombre = "Masterbatch Verde", CodigoSku = "MP-MST-VER", EsMateriaPrima = true, EsProductoTerminado = false, PesoEspecifico = 1.20m, StockMinimo = 50, Activo = true, FechaCreacion = DateTime.Now };
+            new Producto { Id = 14, Nombre = "Masterbatch Amarillo", CodigoSku = "MP-MST-AMA", EsMateriaPrima = true, EsProductoTerminado = false, PesoEspecifico = 1.20m, StockMinimo = 50, Activo = true, FechaCreacion = DateTime.Now };
 
 
         }
