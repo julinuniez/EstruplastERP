@@ -9,7 +9,8 @@ import EditorRecetas from '../components/EditorRecetas.vue';
 import Administracion from '../components/Administracion.vue';
 import Login from '../components/Login.vue';
 import DespachoRemitos from '../components/DespachoRemitos.vue';
-import VistaRemitos from '@/components/VistaRemitos.vue';
+// import VistaRemitos from '@/components/VistaRemitos.vue'; // ⚠️ Comentado por duplicado
+// import FormularioProducto from '@/components/FormularioProducto.vue'; // ⚠️ No lo necesitas si usas GestionProductos para todo
 
 const routes: Array<RouteRecordRaw> = [
     // RUTA PÚBLICA: Login
@@ -17,10 +18,10 @@ const routes: Array<RouteRecordRaw> = [
         path: '/login', 
         name: 'login', 
         component: Login,
-        meta: { requiresAuth: false } // No requiere autenticación
+        meta: { requiresAuth: false } 
     },
 
-    // RUTAS PRIVADAS (Todas tienen meta: requiresAuth: true)
+    // RUTAS PRIVADAS
     { 
         path: '/', 
         redirect: { name: 'produccion' } 
@@ -33,27 +34,34 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true } 
     },
 
+    // --- GESTIÓN DE PRODUCTOS (Lista y Edición en el mismo componente) ---
+    { 
+        path: '/productos', 
+        name: 'GestionProductos', // Ruta principal de la lista
+        component: GestionProductos,
+        meta: { requiresAuth: true }
+    },
     { 
         path: '/productos/nuevo', 
         name: 'crear-producto', 
-        component: GestionProductos,
+        component: GestionProductos, // Reusamos el mismo componente
         meta: { requiresAuth: true }
     },
-    
     { 
         path: '/productos/editar/:id', 
-        name: 'editar-producto', 
-        component: GestionProductos,
-        meta: { requiresAuth: true }
+        name: 'EditarProducto', // 🔥 Este nombre debe coincidir con el router.push
+        component: GestionProductos, // Reusamos el mismo componente
+        meta: { requiresAuth: true },
+        props: true 
     },
 
+    // --- INVENTARIO ---
     { 
         path: '/inventario', 
         name: 'inventario', 
         component: ListaStock,
         meta: { requiresAuth: true }
     },
-
     { 
         path: '/ingreso-stock', 
         name: 'ingreso-stock', 
@@ -61,6 +69,7 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true }
     },
 
+    // --- FÓRMULAS ---
     { 
         path: '/formulas', 
         name: 'formulas', 
@@ -68,6 +77,7 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true }
     },
 
+    // --- CONFIGURACIÓN ---
     { 
         path: '/configuracion', 
         name: 'configuracion', 
@@ -75,17 +85,12 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true }
     },
     
+    // --- REMITOS ---
     { 
         path: '/remitos', 
         name: 'remitos', 
-        component: DespachoRemitos,
+        component: DespachoRemitos, // Elige uno de los dos componentes
         meta: { requiresAuth: true }
-    },
-    {
-      path: '/remitos',
-      name: 'remitos',
-      component: VistaRemitos,
-      meta: { requiresAuth: true } // Si usas protección de rutas
     },
 ];
 
@@ -95,26 +100,19 @@ const router = createRouter({
 });
 
 // ========================================================
-// 🛡️ GUARDIA DE NAVEGACIÓN (El Portero)
+// 🛡️ GUARDIA DE NAVEGACIÓN
 // ========================================================
 router.beforeEach((to, from, next) => {
-    // 1. Buscamos el token en localStorage
     const token = localStorage.getItem('token');
-    
-    // 2. Verificamos si la ruta a la que va requiere autenticación
-    // (Usamos to.matched.some por si usas rutas hijas anidadas)
     const requiereAuth = to.matched.some(record => record.meta.requiresAuth);
 
     if (requiereAuth && !token) {
-        // CASO A: Quiere entrar a zona VIP sin token -> Lo mandamos al Login
         next({ name: 'login' });
     } 
     else if (to.name === 'login' && token) {
-        // CASO B: Ya tiene token y quiere ir al Login -> Lo mandamos adentro
         next({ name: 'produccion' });
     } 
     else {
-        // CASO C: Todo correcto, pase usted
         next();
     }
 });

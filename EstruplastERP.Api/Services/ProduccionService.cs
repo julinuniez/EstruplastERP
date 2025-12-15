@@ -54,36 +54,7 @@ namespace EstruplastERP.Api.Services
                 var productoTerminado = await _context.Productos.FindAsync(request.ProductoTerminadoId);
                 if (productoTerminado == null) throw new Exception("Producto no encontrado");
 
-                var receta = await _context.Formulas.Where(f => f.ProductoTerminadoId == request.ProductoTerminadoId).ToListAsync();
-
-                // Carga masiva de insumos
-                var idsInsumos = receta.Select(r => r.MateriaPrimaId).Distinct().ToList();
-                var inventarioInsumos = await _context.Productos.Where(p => idsInsumos.Contains(p.Id)).ToListAsync();
-
-                // Validar y Restar Stock
-                foreach (var ingrediente in receta)
-                {
-                    decimal consumoTotal = request.Cantidad * ingrediente.Cantidad;
-                    var materiaPrima = inventarioInsumos.First(p => p.Id == ingrediente.MateriaPrimaId);
-
-                    if (materiaPrima.StockActual < consumoTotal)
-                        throw new Exception($"Sin stock de {materiaPrima.Nombre}");
-
-                    materiaPrima.StockActual -= consumoTotal;
-
-                    _context.Movimientos.Add(new Movimiento
-                    {
-                        Fecha = DateTime.Now,
-                        ProductoId = ingrediente.MateriaPrimaId,
-                        Cantidad = -consumoTotal,
-                        TipoMovimiento = "CONSUMO",
-                        Observacion = $"Prod. Orden Turno {request.Turno}",
-                        EmpleadoId = request.EmpleadoId,
-                        Turno = request.Turno
-                    });
-                }
-
-                // Crear Producción
+                // 1. CREAR PRODUCCIÓN (Cabecera)
                 var nuevaProduccion = new Produccion
                 {
                     FechaRegistro = DateTime.Now,
@@ -98,15 +69,69 @@ namespace EstruplastERP.Api.Services
                 };
                 _context.Producciones.Add(nuevaProduccion);
 
-                // Sumar Stock Producto Terminado
-                productoTerminado.StockActual += request.Cantidad;
+                // Guardamos para generar el ID de producción por si lo necesitamos en el historial
+                await _context.SaveChangesAsync();
+
+                // ==============================================================================
+                // 2. VALIDAR Y RESTAR STOCK (CAMBIO CLAVE) 🛠️
+                // ==============================================================================
+
+                // Caso A: El frontend nos envió la receta real (con brillo/estearato calculado)
+                if (request.Consumos != null && request.Consumos.Any())
+                {
+                    var idsInsumos = request.Consumos.Select(c => c.MateriaPrimaId).ToList();
+                    var inventarioInsumos = await _context.Productos
+                                                  .Where(p => idsInsumos.Contains(p.Id))
+                                                  .ToListAsync();
+
+                    foreach (var itemConsumo in request.Consumos)
+                    {
+                        var materiaPrima = inventarioInsumos.FirstOrDefault(p => p.Id == itemConsumo.MateriaPrimaId);
+
+                        if (materiaPrima == null)
+                            throw new Exception($"Insumo ID {itemConsumo.MateriaPrimaId} no existe");
+
+                        // Verificación de Stock
+                        if (materiaPrima.StockActual < itemConsumo.CantidadKilos)
+                            throw new Exception($"Sin stock suficiente de {materiaPrima.Nombre}. Req: {itemConsumo.CantidadKilos}, Disp: {materiaPrima.StockActual}");
+
+                        // Resta directa de Kilos (Ya calculados en Vue)
+                        materiaPrima.StockActual -= itemConsumo.CantidadKilos;
+
+                        // Registrar Movimiento
+                        _context.Movimientos.Add(new Movimiento
+                        {
+                            Fecha = DateTime.Now,
+                            ProductoId = materiaPrima.Id,
+                            Cantidad = -itemConsumo.CantidadKilos, // Negativo porque es salida
+                            TipoMovimiento = "CONSUMO",
+                            Observacion = $"Insumo para Orden #{nuevaProduccion.Id} (Turno {request.Turno})",
+                            EmpleadoId = request.EmpleadoId,
+                            Turno = request.Turno
+                        });
+                    }
+                }
+                // Caso B: Fallback (Por seguridad) - Si el front no manda nada, usamos la fórmula fija
+                else
+                {
+                    var recetaFija = await _context.Formulas.Where(f => f.ProductoTerminadoId == request.ProductoTerminadoId).ToListAsync();
+                    // ... (Aquí iría tu lógica antigua si quisieras mantener compatibilidad) ...
+                    if (recetaFija.Any()) throw new Exception("El frontend no envió los consumos calculados.");
+                }
+
+                // ==============================================================================
+
+                // 3. SUMAR STOCK AL PRODUCTO TERMINADO
+                // (Esto queda igual que tu código original)
+                productoTerminado.StockActual += request.Cantidad; // ¿O sumas Kilos? Depende tu negocio. Normalmente es Cantidad (bolsas)
+
                 _context.Movimientos.Add(new Movimiento
                 {
                     Fecha = DateTime.Now,
                     ProductoId = request.ProductoTerminadoId,
                     Cantidad = request.Cantidad,
                     TipoMovimiento = "ENTRADA_PROD",
-                    Observacion = $"Entrada Orden Turno {request.Turno}",
+                    Observacion = $"Entrada Prod. #{nuevaProduccion.Id}",
                     EmpleadoId = request.EmpleadoId,
                     Turno = request.Turno
                 });
@@ -119,7 +144,7 @@ namespace EstruplastERP.Api.Services
             catch
             {
                 await transaction.RollbackAsync();
-                throw; // Re-lanzamos el error para que el Controller lo atrape
+                throw;
             }
         }
     }

@@ -50,7 +50,8 @@ namespace EstruplastERP.Api.Controllers
                     p.Id,
                     p.Nombre,
                     p.CodigoSku,
-                    p.PesoEspecifico
+                    p.PesoEspecifico,
+                    p.StockActual
                 })
                 .ToListAsync();
         }
@@ -68,13 +69,21 @@ namespace EstruplastERP.Api.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<ProductoDetalleDto>> GetProducto(int id)
         {
+            // ---------------------------------------------------------------
+            // PASO 1: Consulta a la Base de Datos (SQL JOIN)
+            // ---------------------------------------------------------------
             var producto = await _context.Productos
+                // A. Trae la tabla intermedia 'Formulas'
                 .Include(p => p.Formulas)
+                // B. IMPORTANTE: Entra en Formula y trae el nombre de 'Productos' (Materia Prima)
                 .ThenInclude(f => f.MateriaPrima)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
             if (producto == null) return NotFound("❌ Producto no encontrado.");
 
+            // ---------------------------------------------------------------
+            // PASO 2: Mapeo a DTO (Transformación de Datos)
+            // ---------------------------------------------------------------
             var dto = new ProductoDetalleDto
             {
                 Id = producto.Id,
@@ -87,14 +96,22 @@ namespace EstruplastERP.Api.Controllers
                 Ancho = producto.Ancho,
                 Espesor = producto.Espesor,
                 PesoEspecifico = producto.PesoEspecifico,
-                Color = producto.Color, 
+                Color = producto.Color,
                 EsProductoTerminado = producto.EsProductoTerminado,
                 EsMateriaPrima = producto.EsMateriaPrima,
 
+                // -----------------------------------------------------------
+                // PASO 3: Llenado de la Receta (Aquí es donde extraemos la info)
+                // -----------------------------------------------------------
                 Receta = producto.Formulas.Select(f => new IngredienteDto
                 {
                     MateriaPrimaId = f.MateriaPrimaId,
-                    NombreInsumo = f.MateriaPrima.Nombre,
+
+                    // 🔥 MEJORA DE SEGURIDAD:
+                    // Usamos '?' y '??' para evitar que la API explote (Error 500) 
+                    // si por error de base de datos la MateriaPrima es null.
+                    NombreInsumo = f.MateriaPrima?.Nombre ?? "(MP No Encontrada)",
+
                     Cantidad = f.Cantidad
                 }).ToList()
             };
@@ -122,10 +139,6 @@ namespace EstruplastERP.Api.Controllers
                     CodigoSku = data.CodigoSku.Trim().ToUpper(),
                     EsProductoTerminado = esProductoTerminado,
                     EsMateriaPrima = !esProductoTerminado,
-                    Largo = data.Largo,
-                    Ancho = data.Ancho,
-                    Espesor = data.Espesor,
-                    PesoEspecifico = data.PesoEspecifico,
                     StockMinimo = data.StockMinimo,
                     PrecioCosto = data.PrecioCosto,
                     Color = data.Color, 
@@ -160,62 +173,31 @@ namespace EstruplastERP.Api.Controllers
                 return StatusCode(500, "Error en servidor: " + ex.Message);
             }
         }
-
         [HttpPut("actualizar/{id}")]
-        public async Task<IActionResult> ActualizarProducto(int id, [FromBody] NuevoProductoDto data)
+        public async Task<IActionResult> ActualizarProducto(int id, [FromBody] ProductoEditarDto data)
         {
             if (id <= 0) return BadRequest("ID inválido.");
 
+            // 1. Buscamos el producto. .
             var producto = await _context.Productos
-                .Include(p => p.Formulas)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
             if (producto == null) return NotFound("❌ Producto no encontrado.");
 
-            // Actualizar propiedades
+            // 2. Actualizar SOLO propiedades Administrativas
             producto.Nombre = data.Nombre.Trim();
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
-            producto.PrecioCosto = data.PrecioCosto;
-            producto.Largo = data.Largo;
-            producto.Ancho = data.Ancho;
-            producto.Espesor = data.Espesor;
-            producto.PesoEspecifico = data.PesoEspecifico;
             producto.Color = data.Color;
 
-            bool esPT = data.Receta != null && data.Receta.Count > 0;
-            producto.EsProductoTerminado = esPT;
-            producto.EsMateriaPrima = !esPT;
-
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            // 3. Guardar cambios
             try
             {
-                if (producto.Formulas != null && producto.Formulas.Any())
-                {
-                    _context.Formulas.RemoveRange(producto.Formulas);
-                    await _context.SaveChangesAsync();
-                }
-
-                if (esPT && data.Receta != null)
-                {
-                    foreach (var item in data.Receta)
-                    {
-                        _context.Formulas.Add(new Formula
-                        {
-                            ProductoTerminadoId = producto.Id,
-                            MateriaPrimaId = item.MateriaPrimaId,
-                            Cantidad = item.Cantidad
-                        });
-                    }
-                    await _context.SaveChangesAsync();
-                }
-
-                await transaction.CommitAsync();
+                await _context.SaveChangesAsync();
                 return Ok(new { mensaje = "✅ Ítem actualizado correctamente." });
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
                 return StatusCode(500, "Error al actualizar: " + ex.Message);
             }
         }

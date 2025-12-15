@@ -33,14 +33,18 @@
     {
         public string Nombre { get; set; } = string.Empty;
         public string CodigoSku { get; set; } = string.Empty;
-        public decimal Largo { get; set; }
-        public decimal Ancho { get; set; }
-        public decimal Espesor { get; set; }
-        public decimal PesoEspecifico { get; set; }
         public string? Color { get; set; }
         public decimal PrecioCosto { get; set; }
         public decimal StockMinimo { get; set; }
         public List<IngredienteDto>? Receta { get; set; }
+    }
+
+    public class ProductoEditarDto
+    {
+        public string Nombre { get; set; }
+        public string CodigoSku { get; set; }
+        public string? Color { get; set; }
+        public decimal StockMinimo { get; set; }
     }
 
     // 4. INGREDIENTE (Usado en Detalle y Creación)
