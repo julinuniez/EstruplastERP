@@ -48,6 +48,7 @@ namespace EstruplastERP.Core
         public string? ImagenUrl { get; set; }
 
         // Lógica de Negocio
+        public bool EsGenerico { get; set; }
         public bool EsMateriaPrima { get; set; }      
         public bool EsProductoTerminado { get; set; }
         public bool Activo { get; set; } = true;

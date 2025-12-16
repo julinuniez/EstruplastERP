@@ -1,425 +1,146 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import axios from 'axios';
-// @ts-ignore
-import html2pdf from 'html2pdf.js';
+import { ref, onMounted } from 'vue'
+import axios from 'axios'
 
 // --- INTERFACES ---
-interface Producto { id: number; nombre: string; codigoSku: string; stockActual: number; esProductoTerminado: boolean; }
-interface Cliente { id: number; razonSocial: string; }
-interface ItemCarrito { productoId: number; nombre: string; sku: string; cantidad: number; }
+interface Cliente {
+  id: number;
+  razonSocial: string;
+}
 
-interface RemitoHistorial {
+interface RemitoItem {
     id: number;
-    numeroRemito: string;
-    fecha: string;
-    clienteNombre: string;
-    totalItems: number;
-    items: { producto: string; sku: string; cantidad: number }[];
+    productoNombre: string;
+    cantidad: number;
+    detalle?: string; // ✅ Aquí viene el "Rojo" o "40 micrones"
+}
+
+interface Remito {
+  id: number;
+  fecha: string;
+  clienteId: number;
+  cliente?: Cliente;
+  observacion?: string;
+  items?: RemitoItem[]; // ✅ Lista de items dentro del remito
 }
 
 // --- ESTADO ---
-const pestana = ref<'nuevo' | 'historial'>('nuevo');
-const listaProductosTerminados = ref<Producto[]>([]);
-const listaClientes = ref<Cliente[]>([]);
-const listaHistorial = ref<RemitoHistorial[]>([]);
-const carrito = ref<ItemCarrito[]>([]);
-const cargando = ref(false);
-
-const remitoParaImprimir = ref<RemitoHistorial | null>(null);
-
-const datosRemito = ref({
-    clienteNombre: '',
-    numero: '',
-    fecha: new Date().toISOString().split('T')[0]
-});
-
-const lineaTemp = ref<{ productoId: number | '', cantidad: number }>({ productoId: '', cantidad: 1 });
-const apiUrl = 'https://localhost:7244/api';
+const remitos = ref<Remito[]>([])
+const cargando = ref(false)
+const error = ref('')
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');
     return { headers: { Authorization: `Bearer ${token}` } };
 };
 
-// --- CARGA INICIAL ---
-onMounted(async () => {
-    await cargarProductos();
-    await cargarClientes();
-    await cargarHistorial();
-});
-
-// --- FUNCIONES DE CARGA ---
-async function cargarProductos() {
-    try {
-        const res = await axios.get(`${apiUrl}/Productos`, getAuthConfig());
-        listaProductosTerminados.value = res.data.filter((p: any) => p.esProductoTerminado);
-    } catch (e) { console.error(e); }
-}
-
-async function cargarClientes() {
-    try {
-        const res = await axios.get(`${apiUrl}/Clientes`, getAuthConfig());
-        listaClientes.value = res.data;
-    } catch (e) { console.error(e); }
-}
-
+// --- FUNCIONES ---
 async function cargarHistorial() {
+    cargando.value = true;
+    error.value = '';
     try {
         const res = await axios.get(`${apiUrl}/Remitos`, getAuthConfig());
-        listaHistorial.value = res.data;
-    } catch (e) { console.error("Error historial", e); }
-}
-
-// --- LÓGICA CARRITO ---
-const agregarAlCarrito = () => {
-    const pid = Number(lineaTemp.value.productoId);
-    const cant = Number(lineaTemp.value.cantidad);
-    if (!pid || cant <= 0) return alert("Datos inválidos");
-    
-    const prod = listaProductosTerminados.value.find(p => p.id === pid);
-    if (!prod) return;
-    
-    const existe = carrito.value.find(i => i.productoId === pid);
-    if (existe) existe.cantidad += cant;
-    else carrito.value.push({ productoId: pid, nombre: prod.nombre, sku: prod.codigoSku, cantidad: cant });
-    
-    lineaTemp.value.productoId = ''; lineaTemp.value.cantidad = 1;
-};
-
-const quitarDelCarrito = (i: number) => carrito.value.splice(i, 1);
-
-async function crearClienteRapido() {
-    const razonSocial = prompt("Nombre del Nuevo Cliente:");
-    if (!razonSocial) return;
-    try {
-        await axios.post(`${apiUrl}/Clientes`, { razonSocial, activo: true }, getAuthConfig());
-        await cargarClientes();
-        datosRemito.value.clienteNombre = razonSocial;
-    } catch (e) { alert("Error al crear cliente"); }
-}
-
-// --- PROCESAR REMITO ---
-const procesarRemito = async () => {
-    if (carrito.value.length === 0 || !datosRemito.value.clienteNombre || !datosRemito.value.numero) {
-        return alert("Faltan datos (Cliente, Número o Items).");
-    }
-
-    cargando.value = true;
-    try {
-        const payload = {
-            cliente: datosRemito.value.clienteNombre,
-            numeroRemito: datosRemito.value.numero,
-            items: carrito.value.map(i => ({ productoId: i.productoId, cantidad: i.cantidad }))
-        };
-
-        await axios.post(`${apiUrl}/Stock/registrar-remito`, payload, getAuthConfig());
-
-        alert("🚚 Despacho Exitoso!");
-        carrito.value = [];
-        datosRemito.value.numero = '';
-        datosRemito.value.clienteNombre = '';
-        
-        await cargarProductos();
-        await cargarHistorial();
-        pestana.value = 'historial';
-
+        remitos.value = res.data;
     } catch (e: any) {
-        alert("❌ Error: " + (e.response?.data?.mensaje || e.message));
+        console.error(e);
+        error.value = 'Error al cargar el historial.';
     } finally {
         cargando.value = false;
     }
-};
+}
 
-// --- IMPRIMIR PDF (AJUSTADO PARA QUE ENTRE EN LA HOJA) ---
-const prepararImpresion = (remito: RemitoHistorial) => {
-    remitoParaImprimir.value = remito;
+function verDetalle(id: number) {
+    alert(`Aquí se generaría el PDF del Remito #${id}`);
+    // Aquí iría la lógica de html2pdf
+}
 
-    setTimeout(() => {
-        const elemento = document.getElementById('remito-pdf');
-        if (!elemento) return alert("Error al generar vista previa.");
-
-        const opt = {
-            margin: 0, // MARGEN CERO: Dejamos que el CSS controle el espacio interno
-            filename: `Remito_${remito.numeroRemito}.pdf`,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
-        // @ts-ignore
-        html2pdf().set(opt).from(elemento).save();
-    }, 300);
-};
+onMounted(() => {
+    cargarHistorial();
+});
 </script>
 
 <template>
-  <div class="panel-remitos">
-    
-    <div class="tabs">
-        <button :class="{ active: pestana === 'nuevo' }" @click="pestana = 'nuevo'">➕ Nuevo Despacho</button>
-        <button :class="{ active: pestana === 'historial' }" @click="pestana = 'historial'">📂 Historial</button>
-    </div>
-
-    <div v-if="pestana === 'nuevo'">
-        <div class="header-remito">
-            <h2>🚚 Nuevo Remito</h2>
-            <p>Salida de stock</p>
-        </div>
-
-        <div class="card-datos">
-            <div class="fila">
-                <div class="col-cliente">
-                    <label>Cliente:</label>
-                    <div class="input-group">
-                        <select v-model="datosRemito.clienteNombre">
-                            <option value="">Seleccionar...</option>
-                            <option v-for="c in listaClientes" :key="c.id" :value="c.razonSocial">{{ c.razonSocial }}</option>
-                        </select>
-                        <button @click="crearClienteRapido" class="btn-small">➕</button>
-                    </div>
-                </div>
-                <div><label>N° Remito:</label><input v-model="datosRemito.numero" type="text" placeholder="0001-0000..."></div>
-                <div><label>Fecha:</label><input v-model="datosRemito.fecha" type="date"></div>
-            </div>
-        </div>
-
-        <div class="card-items">
-            <div class="fila-agregar">
-                <select v-model="lineaTemp.productoId" class="select-prod">
-                    <option value="">Producto...</option>
-                    <option v-for="p in listaProductosTerminados" :key="p.id" :value="p.id">
-                        {{ p.codigoSku }} - {{ p.nombre }} (Stock: {{ p.stockActual }})
-                    </option>
-                </select>
-                <input v-model.number="lineaTemp.cantidad" type="number" class="input-cant" placeholder="Cant.">
-                <button @click="agregarAlCarrito" class="btn-add">⬇️</button>
-            </div>
-        </div>
-
-        <div class="tabla-container">
-            <table class="tabla-remito">
-                <thead><tr><th>SKU</th><th>Producto</th><th>Cant</th><th></th></tr></thead>
-                <tbody>
-                    <tr v-for="(item, index) in carrito" :key="index">
-                        <td>{{ item.sku }}</td><td>{{ item.nombre }}</td><td class="numero">{{ item.cantidad }}</td>
-                        <td><button @click="quitarDelCarrito(index)" class="btn-del">❌</button></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="acciones-finales">
-            <button @click="procesarRemito" :disabled="cargando" class="btn-confirmar">✅ CONFIRMAR SALIDA</button>
+  <div class="contenedor-historial">
+    <div class="header-seccion">
+        <h2>📄 Historial de Remitos</h2>
+        
+        <div class="botones">
+            <button class="btn-recargar" @click="cargarHistorial">🔄 Recargar</button>
+            <router-link :to="{ name: 'DespachoRemitos' }" class="btn-nuevo">
+                ➕ Nuevo Remito
+            </router-link>
         </div>
     </div>
 
-    <div v-else class="vista-historial">
-        <h2>📂 Historial de Remitos</h2>
-        <table class="tabla-remito">
+    <div v-if="cargando" class="loading">Cargando datos...</div>
+    <div v-if="error" class="error-msg">{{ error }}</div>
+
+    <div class="tabla-container" v-if="!cargando && remitos.length > 0">
+        <table>
             <thead>
                 <tr>
-                    <th>Fecha</th>
-                    <th>N° Remito</th>
-                    <th>Cliente</th>
-                    <th>Items</th>
-                    <th>Acción</th>
+                    <th>Nro #</th>
+                    <th>Fecha</th> <th>Cliente</th>
+                    <th>Productos / Detalle</th> <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="r in listaHistorial" :key="r.id">
-                    <td>{{ r.fecha }}</td>
-                    <td style="font-weight: bold;">{{ r.numeroRemito }}</td>
-                    <td>{{ r.clienteNombre }}</td>
-                    <td>{{ r.totalItems }} un.</td>
+                <tr v-for="r in remitos" :key="r.id">
+                    <td><strong>{{ r.id.toString().padStart(4, '0') }}</strong></td>
+                    
+                    <td>{{ new Date(r.fecha).toLocaleDateString() }}</td>
+                    
+                    <td class="cliente-cell">{{ r.cliente?.razonSocial || 'Desconocido' }}</td>
+                    
+                    <td class="celda-productos">
+                        <div v-for="item in r.items" :key="item.id" class="item-fila">
+                            • {{ item.productoNombre }} 
+                            <span v-if="item.detalle" class="tag-detalle">({{ item.detalle }})</span>
+                            <strong>x {{ item.cantidad }}kg</strong>
+                        </div>
+                        <small v-if="!r.items || r.items.length === 0" style="color:#999">Sin detalles</small>
+                    </td>
+
                     <td>
-                        <button @click="prepararImpresion(r)" class="btn-print">🖨️ Imprimir</button>
+                        <button class="btn-ver" @click="verDetalle(r.id)">📄 PDF</button>
                     </td>
                 </tr>
             </tbody>
         </table>
     </div>
 
-    <div class="pdf-container">
-        <div id="remito-pdf" class="hoja-a4" v-if="remitoParaImprimir">
-            
-            <table class="header-table">
-                <tr>
-                    <td style="width: 20%; vertical-align: top;">
-                        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..." alt="LOGO" class="logo-pdf">
-                    </td>
-                    
-                    <td style="width: 50%; text-align: center; vertical-align: middle;">
-                        <h1 class="titulo-empresa">ESTRUPLAST S.A.</h1>
-                        <p class="subtitulo">REMITO "R"</p>
-                        <p class="legales">DOCUMENTO NO VÁLIDO COMO FACTURA</p>
-                    </td>
-
-                    <td style="width: 30%; vertical-align: top;">
-                        <div class="cuadro-datos">
-                            <table style="width: 100%;">
-                                <tr><td><strong>N°:</strong></td><td style="text-align: right;">{{ remitoParaImprimir.numeroRemito }}</td></tr>
-                                <tr><td><strong>Fecha:</strong></td><td style="text-align: right;">{{ remitoParaImprimir.fecha }}</td></tr>
-                            </table>
-                        </div>
-                    </td>
-                </tr>
-            </table>
-
-            <div class="box-cliente">
-                <p><strong>Señor(es):</strong> {{ remitoParaImprimir.clienteNombre }}</p>
-            </div>
-
-            <div class="contenedor-tabla-items">
-                <table class="tabla-items">
-                    <thead>
-                        <tr>
-                            <th style="width: 25%;">CÓDIGO</th>
-                            <th style="width: 55%;">DESCRIPCIÓN</th>
-                            <th style="width: 20%; text-align: right;">CANTIDAD</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(item, i) in remitoParaImprimir.items" :key="i">
-                            <td>{{ item.sku }}</td>
-                            <td>{{ item.producto }}</td>
-                            <td style="text-align: right;">{{ item.cantidad }}</td>
-                        </tr>
-                        <tr v-if="remitoParaImprimir.items.length < 5">
-                            <td colspan="3" style="height: 50px;"></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="pie-pdf">
-                <div class="firma-box">
-                    <div class="linea-firma"></div>
-                    <p>Recibí Conforme</p>
-                    <p class="aclaracion">(Firma y Aclaración)</p>
-                </div>
-            </div>
-        </div>
+    <div v-else-if="!cargando && remitos.length === 0" class="vacio">
+        <p>📭 No se han generado remitos aún.</p>
     </div>
-
   </div>
 </template>
 
 <style scoped>
-/* --- ESTILOS GENERALES PANTALLA --- */
-.panel-remitos { max-width: 900px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-.tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #eee; }
-.tabs button { background: none; border: none; padding: 10px 20px; font-size: 16px; cursor: pointer; color: #777; }
-.tabs button.active { color: #e67e22; border-bottom: 3px solid #e67e22; font-weight: bold; }
-.tabla-remito { width: 100%; border-collapse: collapse; margin-top: 10px; }
-.tabla-remito th { background: #2c3e50; color: white; padding: 10px; text-align: left; }
-.tabla-remito td { padding: 10px; border-bottom: 1px solid #eee; }
-.btn-print { background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
-.btn-confirmar { background: #e67e22; color: white; border: none; padding: 10px 30px; font-size: 1.1em; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 20px; }
-.card-datos, .card-items { background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
-.fila { display: flex; gap: 20px; }
-.col-cliente { flex: 2; }
-.input-group { display: flex; gap: 5px; }
-input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-.fila-agregar { display: flex; gap: 10px; }
-.select-prod { flex-grow: 1; }
-.input-cant { width: 100px; }
-.btn-add { background: #27ae60; color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-.btn-del { background: transparent; border: none; cursor: pointer; }
+.contenedor-historial { padding: 20px; background: #f8f9fa; border-radius: 8px; min-height: 400px; }
+.header-seccion { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
+h2 { margin: 0; color: #2c3e50; }
+.botones { display: flex; gap: 10px; }
 
-/* --- ESTILOS PDF (CRUCIALES PARA QUE NO SE CORTE) --- */
-.pdf-container { 
-    position: fixed; 
-    left: -9999px; 
-    top: 0; 
-    z-index: -1;
-}
+.tabla-container { overflow-x: auto; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 14px; }
+th { background: #2c3e50; color: white; padding: 12px; text-align: left; }
+td { padding: 12px; border-bottom: 1px solid #eee; color: #333; vertical-align: top; }
+tr:hover { background-color: #f1f1f1; }
 
-.hoja-a4 { 
-    /* Dimensiones exactas A4 */
-    width: 210mm; 
-    min-height: 297mm; 
-    background: white; 
-    
-    /* EL SECRETO: Box Sizing y Padding interno */
-    box-sizing: border-box; 
-    padding: 15mm; 
-    
-    font-family: Arial, Helvetica, sans-serif; 
-    color: black; 
-    border: 1px solid white; /* Borde invisible para evitar colapsos */
-}
+.cliente-cell { font-weight: bold; color: #2980b9; text-transform: uppercase; }
+.celda-productos { font-size: 0.95em; }
+.item-fila { margin-bottom: 4px; }
+.tag-detalle { background-color: #eef2f3; color: #555; padding: 1px 5px; border-radius: 4px; font-style: italic; font-size: 0.9em; }
 
-/* Header con Tabla */
-.header-table { 
-    width: 100%; 
-    border-collapse: collapse;
-    margin-bottom: 10px; 
-    border-bottom: 2px solid black; 
-    padding-bottom: 10px; 
-}
-.header-table td { padding: 5px; }
+.btn-recargar { background: #95a5a6; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-nuevo { background: #27ae60; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; font-size: 14px; display: inline-block; }
+.btn-nuevo:hover { background: #2ecc71; }
 
-.logo-pdf { max-height: 60px; max-width: 100%; object-fit: contain; }
+.btn-ver { background: #34495e; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.btn-ver:hover { background: #2c3e50; }
 
-.titulo-empresa { margin: 0; font-size: 24px; font-weight: 900; letter-spacing: 1px; line-height: 1.2; }
-.subtitulo { margin: 5px 0; font-size: 18px; font-weight: bold; }
-.legales { font-size: 10px; color: #555; margin: 0; }
-
-.cuadro-datos { 
-    border: 1px solid black; 
-    padding: 10px; 
-    border-radius: 4px; 
-    background: #fdfdfd; 
-}
-
-/* Cliente */
-.box-cliente { 
-    width: 100%;
-    border: 1px solid #ccc; 
-    padding: 10px; 
-    margin-bottom: 15px; 
-    background-color: #f5f5f5; 
-    border-radius: 4px;
-    box-sizing: border-box; /* Asegura que el padding no rompa el ancho */
-}
-.box-cliente p { margin: 0; font-size: 14px; }
-
-/* Tabla Items */
-.contenedor-tabla-items {
-    width: 100%;
-    min-height: 400px; /* Asegura un espacio mínimo en el cuerpo */
-}
-
-.tabla-items { 
-    width: 100%; 
-    border-collapse: collapse; 
-    margin-top: 10px; 
-    font-size: 12px; 
-    table-layout: fixed; /* Fuerza a las columnas a respetar los anchos */
-}
-.tabla-items th { 
-    background: #333; 
-    color: white; 
-    padding: 8px; 
-    text-align: left; 
-    text-transform: uppercase; 
-}
-.tabla-items td { 
-    border-bottom: 1px solid #ddd; 
-    padding: 10px 8px; 
-    word-wrap: break-word; /* Evita que textos largos rompan la hoja */
-}
-.tabla-items tr:nth-child(even) { background-color: #f9f9f9; }
-
-/* Pie */
-.pie-pdf { 
-    margin-top: 50px; 
-    display: flex; 
-    justify-content: flex-end; 
-    page-break-inside: avoid; /* Evita que la firma quede sola en otra hoja */
-}
-.firma-box { width: 250px; text-align: center; float: right; } 
-.linea-firma { border-top: 1px solid black; margin-bottom: 5px; }
-.aclaracion { font-size: 10px; color: #777; }
+.loading { text-align: center; padding: 20px; color: #7f8c8d; }
+.error-msg { color: #c0392b; background: #fadbd8; padding: 10px; border-radius: 4px; margin-bottom: 10px; }
+.vacio { text-align: center; color: #bdc3c7; padding: 40px; font-size: 18px; }
 </style>

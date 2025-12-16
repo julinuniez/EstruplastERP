@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 
 // --- 1. INTERFACES (Tipado Estricto) ---
@@ -21,6 +21,7 @@ interface ItemCarrito {
     nombre: string;
     sku: string;
     cantidad: number;
+    detalle: string; // ✅ Campo clave para el color/medida específica
 }
 
 // --- ESTADO ---
@@ -30,18 +31,19 @@ const carrito = ref<ItemCarrito[]>([]);
 const cargando = ref(false);
 
 const datosRemito = ref({
-    clienteNombre: '', 
+    clienteId: '' as number | '', // Usamos ID para vincular correctamente
     numero: '',
-    fecha: new Date().toISOString().split('T')[0]
+    fecha: new Date().toISOString().split('T')[0] // Por defecto Hoy
 });
 
-// Tipamos 'productoId' como number | string para manejar el estado inicial vacío del select
-const lineaTemp = ref<{ productoId: number | '', cantidad: number }>({ 
-    productoId: '', 
-    cantidad: 1 
+// Estado temporal para la línea que se está agregando
+const itemTemporal = ref({
+    productoId: null as number | null,
+    cantidad: '' as number | '',
+    detalle: '' // Aquí escribes "Rojo", "40 micrones", etc.
 });
 
-const apiUrl = 'https://localhost:7244/api';
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
 
 // --- HELPER TOKEN ---
 const getAuthConfig = () => {
@@ -57,9 +59,9 @@ onMounted(async () => {
 
 async function cargarProductos() {
     try {
-        const res = await axios.get(`${apiUrl}/Productos`, getAuthConfig()); // O /Stock/inventario según tu backend
+        const res = await axios.get(`${apiUrl}/Productos`, getAuthConfig());
         const todos: Producto[] = res.data;
-        // TypeScript ahora sabe que 'p' es un Producto
+        // Filtramos solo productos terminados (Bobinas, Bolsas, Materiales para venta)
         listaProductosTerminados.value = todos.filter(p => p.esProductoTerminado);
     } catch (e: any) { 
         console.error("Error productos:", e);
@@ -82,16 +84,16 @@ async function crearClienteRapido() {
     try {
         const payload = { 
             razonSocial: razonSocial, 
-            activo: true,
-            direccion: '', 
-            telefono: '', 
-            email: ''
+            activo: true
         };
 
-        await axios.post(`${apiUrl}/Clientes`, payload, getAuthConfig());
+        const res = await axios.post(`${apiUrl}/Clientes`, payload, getAuthConfig());
         
         await cargarClientes(); 
-        datosRemito.value.clienteNombre = razonSocial; 
+        // Auto-seleccionar el cliente recién creado
+        if(res.data && res.data.id) {
+            datosRemito.value.clienteId = res.data.id;
+        }
         alert("✅ Cliente agregado.");
 
     } catch (e: any) { 
@@ -100,78 +102,82 @@ async function crearClienteRapido() {
 }
 
 // --- LÓGICA CARRITO ---
-const agregarAlCarrito = () => {
-    const pid = Number(lineaTemp.value.productoId);
-    const cant = Number(lineaTemp.value.cantidad);
+const agregarItem = () => {
+    const pid = itemTemporal.value.productoId;
+    const cant = Number(itemTemporal.value.cantidad);
+    const detalleTexto = itemTemporal.value.detalle.trim();
     
     if (!pid || cant <= 0) {
         alert("Selecciona producto y cantidad válida.");
         return;
     }
 
-    // Buscamos en la lista tipada
     const prod = listaProductosTerminados.value.find(p => p.id === pid);
+    if (!prod) return;
     
-    // VALIDACIÓN DE SEGURIDAD DE TYPESCRIPT
-    if (!prod) {
-        alert("Producto no encontrado en la lista.");
-        return;
-    }
-    
-    // Buscar si ya existe
-    const existe = carrito.value.find(item => item.productoId === pid);
-    
-    if (existe) {
-        existe.cantidad += cant;
-    } else {
-        carrito.value.push({
-            productoId: pid,
-            nombre: prod.nombre,
-            sku: prod.codigoSku,
-            cantidad: cant
-        });
-    }
+    // Agregamos al carrito con el detalle específico (NO sumamos si es distinto detalle)
+    // Ejemplo: 100kg PAI (Rojo) es distinto de 100kg PAI (Azul)
+    carrito.value.push({
+        productoId: pid,
+        nombre: prod.nombre,
+        sku: prod.codigoSku,
+        cantidad: cant,
+        detalle: detalleTexto // ✅ Guardamos "Rojo" o "40 micrones"
+    });
     
     // Resetear input
-    lineaTemp.value.productoId = '';
-    lineaTemp.value.cantidad = 1;
+    itemTemporal.value = { productoId: null, cantidad: '', detalle: '' };
 };
 
 const quitarDelCarrito = (index: number) => {
     carrito.value.splice(index, 1);
 };
 
-// --- CONFIRMAR REMITO ---
 const procesarRemito = async () => {
+    // 1. Validaciones básicas
     if (carrito.value.length === 0) return alert("El remito está vacío.");
-    if (!datosRemito.value.clienteNombre || !datosRemito.value.numero) return alert("Faltan datos (Cliente o N° Remito).");
+    if (!datosRemito.value.clienteId) return alert("Seleccione un Cliente.");
+
+    // ✅ CORRECCIÓN: Ahora el Número de Remito es OBLIGATORIO
+    if (!datosRemito.value.numero) {
+        return alert("⚠️ Error: Debe ingresar el Número de Remito obligatoriamente.");
+    }
 
     cargando.value = true;
     try {
         const payload = {
-            cliente: datosRemito.value.clienteNombre, 
-            numeroRemito: datosRemito.value.numero,
-            // Mapeamos el carrito al formato que espera tu DTO de C#
+            clienteId: datosRemito.value.clienteId, 
+            numeroRemito: datosRemito.value.numero, // Ahora sí se enviará siempre
+            fecha: datosRemito.value.fecha,
+            observacion: `Generado desde Despacho.`,
+            
+            // Mapeo de items (Producto, Cantidad y Detalle/Color)
             items: carrito.value.map(i => ({
                 productoId: i.productoId,
-                cantidad: i.cantidad
+                cantidad: i.cantidad,
+                detalle: i.detalle 
             }))
         };
 
-        await axios.post(`${apiUrl}/Stock/registrar-remito`, payload, getAuthConfig());
+        // ✅ PETICIÓN AL BACKEND
+        // Asegúrate de que tu Controller tenga [Route("api/[controller]")] y la clase se llame RemitosController
+        await axios.post(`${apiUrl}/Remitos`, payload, getAuthConfig());
 
-        alert("🚚 Despacho Exitoso!");
+        alert("🚚 Despacho Exitoso! Stock descontado.");
         
-        // Limpieza
+        // --- Limpieza del formulario ---
         carrito.value = [];
         datosRemito.value.numero = '';
-        datosRemito.value.clienteNombre = '';
+        datosRemito.value.clienteId = ''; // Reseteamos el selector
         
-        await cargarProductos(); // Actualizar stock visualmente
+        // Actualizamos el stock visualmente para que se refleje el descuento
+        await cargarProductos(); 
 
     } catch (e: any) {
-        const mensaje = e.response?.data?.mensaje || e.message;
-        alert("❌ Error: " + mensaje);
+        console.error(e);
+        // Manejo de errores detallado
+        const mensaje = e.response?.data?.mensaje || e.message || "Error desconocido";
+        alert("❌ Error al procesar: " + mensaje);
     } finally {
         cargando.value = false;
     }
@@ -182,7 +188,7 @@ const procesarRemito = async () => {
   <div class="panel-remitos">
     <div class="header-remito">
         <h2>🚚 Remito / Salida de Stock</h2>
-        <p>Solo productos terminados.</p>
+        <p>Seleccione producto genérico y aclare color/medida en "Detalle".</p>
     </div>
 
     <div class="card-datos">
@@ -190,9 +196,9 @@ const procesarRemito = async () => {
             <div class="col-cliente">
                 <label>Cliente / Destino:</label>
                 <div class="input-group">
-                    <select v-model="datosRemito.clienteNombre">
+                    <select v-model="datosRemito.clienteId">
                         <option value="">Seleccionar Cliente...</option>
-                        <option v-for="c in listaClientes" :key="c.id" :value="c.razonSocial">
+                        <option v-for="c in listaClientes" :key="c.id" :value="c.id">
                             {{ c.razonSocial }}
                         </option>
                     </select>
@@ -200,9 +206,9 @@ const procesarRemito = async () => {
                 </div>
             </div>
             <div>
-                <label>N° Remito:</label>
-                <input v-model="datosRemito.numero" type="text" placeholder="0001-00001234">
-            </div>
+    <label>N° Remito <span style="color:red">*</span>:</label>
+    <input v-model="datosRemito.numero" type="text" placeholder="Ej: 0001-00005544">
+</div>
             <div>
                 <label>Fecha:</label>
                 <input v-model="datosRemito.fecha" type="date">
@@ -213,14 +219,24 @@ const procesarRemito = async () => {
     <div class="card-items">
         <h3>📦 Agregar Productos</h3>
         <div class="fila-agregar">
-            <select v-model="lineaTemp.productoId" class="select-prod">
-                <option value="">Seleccionar Producto Terminado...</option>
+            <select v-model="itemTemporal.productoId" class="select-prod">
+                <option :value="null">Seleccionar Producto...</option>
                 <option v-for="p in listaProductosTerminados" :key="p.id" :value="p.id">
-                    {{ p.codigoSku }} - {{ p.nombre }} (Stock: {{ p.stockActual }})
+                    {{ p.nombre }} (Stock: {{ p.stockActual }})
                 </option>
             </select>
-            <input v-model.number="lineaTemp.cantidad" type="number" placeholder="Cant." class="input-cant">
-            <button @click="agregarAlCarrito" class="btn-add">⬇️ Agregar</button>
+
+            <input type="number" 
+                   v-model="itemTemporal.cantidad" 
+                   placeholder="Kg" 
+                   class="input-cant">
+
+            <input type="text" 
+                   v-model="itemTemporal.detalle" 
+                   placeholder="Detalle (Ej: Rojo, 40 micrones)" 
+                   class="input-detalle">
+
+            <button @click="agregarItem" class="btn-add">➕</button>
         </div>
     </div>
 
@@ -230,7 +246,7 @@ const procesarRemito = async () => {
                 <tr>
                     <th>SKU</th>
                     <th>Producto</th>
-                    <th>Cantidad</th>
+                    <th>Detalle / Color</th> <th>Cantidad</th>
                     <th></th>
                 </tr>
             </thead>
@@ -238,13 +254,20 @@ const procesarRemito = async () => {
                 <tr v-for="(item, index) in carrito" :key="index">
                     <td>{{ item.sku }}</td>
                     <td>{{ item.nombre }}</td>
-                    <td class="numero">{{ item.cantidad }}</td>
+                    
+                    <td style="font-style: italic; color: #555;">
+                        {{ item.detalle || '-' }}
+                    </td>
+                    
+                    <td class="numero"><strong>{{ item.cantidad }} kg</strong></td>
                     <td style="text-align: center;">
                         <button @click="quitarDelCarrito(index)" class="btn-del">❌</button>
                     </td>
                 </tr>
                 <tr v-if="carrito.length === 0">
-                    <td colspan="4" style="text-align: center; color: #888;">El remito está vacío.</td>
+                    <td colspan="5" style="text-align: center; color: #888; padding: 20px;">
+                        El remito está vacío. Agregue productos arriba.
+                    </td>
                 </tr>
             </tbody>
         </table>
@@ -270,16 +293,27 @@ const procesarRemito = async () => {
 .input-group { display: flex; gap: 5px; }
 .btn-small { background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 35px; }
 label { display: block; font-weight: bold; font-size: 0.9em; margin-bottom: 5px; }
-input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-.fila-agregar { display: flex; gap: 10px; }
-.select-prod { flex-grow: 1; }
+input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+.fila-agregar { display: flex; gap: 10px; align-items: center; }
+.select-prod { flex-grow: 2; }
 .input-cant { width: 100px; }
-.btn-add { background: #3498db; color: white; border: none; padding: 0 20px; border-radius: 4px; cursor: pointer; }
+.input-detalle { flex-grow: 2; } 
+.btn-add { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-add:hover { background: #2980b9; }
+
 .tabla-remito { width: 100%; border-collapse: collapse; margin-top: 10px; }
 .tabla-remito th { background: #2c3e50; color: white; padding: 10px; text-align: left; }
 .tabla-remito td { padding: 10px; border-bottom: 1px solid #eee; }
-.acciones-finales { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 10px; border-top: 2px solid #eee; }
-.btn-confirmar { background: #e67e22; color: white; border: none; padding: 10px 30px; font-size: 1.1em; font-weight: bold; border-radius: 6px; cursor: pointer; }
+.acciones-finales { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 10px; border-top: 2px solid #eee; }
+.btn-confirmar { background: #e67e22; color: white; border: none; padding: 12px 30px; font-size: 1.1em; font-weight: bold; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+.btn-confirmar:hover { background: #d35400; }
 .btn-confirmar:disabled { background: #ccc; cursor: not-allowed; }
 .btn-del { background: transparent; border: none; cursor: pointer; font-size: 1.2em; }
+.resumen { font-weight: bold; color: #555; }
+
+@media (max-width: 700px) {
+    .fila { flex-direction: column; gap: 10px; }
+    .fila-agregar { flex-direction: column; }
+    .input-cant, .input-detalle, .select-prod { width: 100%; }
+}
 </style>
