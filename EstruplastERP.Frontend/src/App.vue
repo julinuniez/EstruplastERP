@@ -35,20 +35,12 @@ function cerrarSesion() {
             ⚙️ Producción
         </router-link>
 
-        <router-link :to="{ name: 'crear-producto' }" class="nav-btn" active-class="activo">
-            📦 Productos
-        </router-link>
-
         <router-link :to="{ name: 'ingreso-stock' }" class="nav-btn" active-class="activo">
             🚚 Ingreso Stock
         </router-link>
 
         <router-link :to="{ name: 'remitos' }" class="nav-btn" active-class="activo">
             🚚 Remitos / Despacho
-        </router-link>
-
-        <router-link :to="{ name: 'formulas' }" class="nav-btn" active-class="activo">
-            🧪 Fórmulas
         </router-link>
 
         <router-link :to="{ name: 'inventario' }" class="nav-btn" active-class="activo">

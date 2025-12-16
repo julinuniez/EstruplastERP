@@ -1,19 +1,21 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
+import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
 
-// 1. Importamos tus componentes
-import VistaProduccion from '../components/VistaProduccion.vue';
-import GestionProductos from '../components/GestionProductos.vue';
-import ListaStock from '../components/ListaStock.vue';
-import IngresoStock from '../components/IngresoStock.vue';
-import EditorRecetas from '../components/EditorRecetas.vue';
-import Administracion from '../components/Administracion.vue';
+// 1. Componentes Esenciales
+import VistaProduccion from '../components/VistaProduccion.vue'; // La pantalla principal
+import ListaStock from '../components/ListaStock.vue';           // Para ver stock
+import IngresoStock from '../components/IngresoStock.vue';       // Para reponer stock
+import Administracion from '../components/Administracion.vue';   // Configuración (Usuarios/Turnos)
 import Login from '../components/Login.vue';
+
+// --- REMITOS ---
 import DespachoRemitos from '../components/DespachoRemitos.vue';
-// import VistaRemitos from '@/components/VistaRemitos.vue'; // ⚠️ Comentado por duplicado
-// import FormularioProducto from '@/components/FormularioProducto.vue'; // ⚠️ No lo necesitas si usas GestionProductos para todo
+import VistaRemitos from '../components/VistaRemitos.vue';
+
+// ⚠️ NOTA: Ya no importamos 'GestionProductos' ni 'EditorRecetas' 
+// porque eso ahora es estático desde el código.
 
 const routes: Array<RouteRecordRaw> = [
-    // RUTA PÚBLICA: Login
+    // --- LOGIN ---
     { 
         path: '/login', 
         name: 'login', 
@@ -21,12 +23,13 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: false } 
     },
 
-    // RUTAS PRIVADAS
+    // --- HOME (Redirige a producción) ---
     { 
         path: '/', 
         redirect: { name: 'produccion' } 
     }, 
 
+    // --- MÓDULO PRINCIPAL: PRODUCCIÓN ---
     { 
         path: '/produccion', 
         name: 'produccion', 
@@ -34,28 +37,7 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true } 
     },
 
-    // --- GESTIÓN DE PRODUCTOS (Lista y Edición en el mismo componente) ---
-    { 
-        path: '/productos', 
-        name: 'GestionProductos', // Ruta principal de la lista
-        component: GestionProductos,
-        meta: { requiresAuth: true }
-    },
-    { 
-        path: '/productos/nuevo', 
-        name: 'crear-producto', 
-        component: GestionProductos, // Reusamos el mismo componente
-        meta: { requiresAuth: true }
-    },
-    { 
-        path: '/productos/editar/:id', 
-        name: 'EditarProducto', // 🔥 Este nombre debe coincidir con el router.push
-        component: GestionProductos, // Reusamos el mismo componente
-        meta: { requiresAuth: true },
-        props: true 
-    },
-
-    // --- INVENTARIO ---
+    // --- MÓDULO: INVENTARIO (Solo ver cantidades y reponer) ---
     { 
         path: '/inventario', 
         name: 'inventario', 
@@ -69,11 +51,17 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true }
     },
 
-    // --- FÓRMULAS ---
+    // --- MÓDULO: REMITOS ---
     { 
-        path: '/formulas', 
-        name: 'formulas', 
-        component: EditorRecetas,
+        path: '/remitos', 
+        name: 'remitos', 
+        component: VistaRemitos, // Historial
+        meta: { requiresAuth: true }
+    },
+    { 
+        path: '/remitos/nuevo', 
+        name: 'DespachoRemitos', 
+        component: DespachoRemitos, // Crear Nuevo
         meta: { requiresAuth: true }
     },
 
@@ -84,24 +72,14 @@ const routes: Array<RouteRecordRaw> = [
         component: Administracion,
         meta: { requiresAuth: true }
     },
-    
-    // --- REMITOS ---
-    { 
-        path: '/remitos', 
-        name: 'remitos', 
-        component: DespachoRemitos, // Elige uno de los dos componentes
-        meta: { requiresAuth: true }
-    },
 ];
 
 const router = createRouter({
-    history: createWebHistory(),
+    history: createWebHashHistory(), // Usamos Hash para evitar problemas de recarga
     routes,
 });
 
-// ========================================================
-// 🛡️ GUARDIA DE NAVEGACIÓN
-// ========================================================
+// Guardia de navegación (Auth)
 router.beforeEach((to, from, next) => {
     const token = localStorage.getItem('token');
     const requiereAuth = to.matched.some(record => record.meta.requiresAuth);
