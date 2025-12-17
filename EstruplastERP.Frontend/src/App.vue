@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router';
 import { useSesionStore } from './stores/sesion';
 
+
 // 1. Inicializamos el store y el router
 const sesion = useSesionStore();
 const router = useRouter();

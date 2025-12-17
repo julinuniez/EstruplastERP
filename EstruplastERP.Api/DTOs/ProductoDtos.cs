@@ -1,7 +1,8 @@
-﻿namespace EstruplastERP.Api.Dtos
+﻿using System.Collections.Generic;
+
+namespace EstruplastERP.Api.Dtos
 {
     // 1. PARA LECTURA EN LISTAS (GET /inventario)
-    // Ligero: Sin receta, solo datos clave para grillas.
     public class ProductoListaDto
     {
         public int Id { get; set; }
@@ -11,10 +12,13 @@
         public decimal PrecioCosto { get; set; }
         public bool EsProductoTerminado { get; set; }
         public bool EsMateriaPrima { get; set; }
+
+        // ✅ AGREGADO: Necesario para que el Frontend sepa si bloquear medidas
+        public bool EsGenerico { get; set; }
     }
 
     // 2. PARA EDICIÓN O DETALLE (GET /id)
-    // Completo: Incluye dimensiones y la Receta limpia (sin ciclos).
+    // Hereda de ProductoListaDto, así que ya tiene 'EsGenerico'
     public class ProductoDetalleDto : ProductoListaDto
     {
         public decimal Largo { get; set; }
@@ -27,8 +31,7 @@
         public List<IngredienteDto> Receta { get; set; } = new List<IngredienteDto>();
     }
 
-    // 3. PARA CREAR/EDITAR (POST/PUT)
-    // Es el que ya tenías, pero ahora en su propia casa.
+    // 3. PARA CREAR (POST)
     public class NuevoProductoDto
     {
         public string Nombre { get; set; } = string.Empty;
@@ -36,9 +39,14 @@
         public string? Color { get; set; }
         public decimal PrecioCosto { get; set; }
         public decimal StockMinimo { get; set; }
+
+        // Opcional: Si quieres poder definir si es Genérico desde el Front
+        // public bool EsGenerico { get; set; } 
+
         public List<IngredienteDto>? Receta { get; set; }
     }
 
+    // 4. PARA EDITAR (PUT)
     public class ProductoEditarDto
     {
         public string Nombre { get; set; }
@@ -47,11 +55,11 @@
         public decimal StockMinimo { get; set; }
     }
 
-    // 4. INGREDIENTE (Usado en Detalle y Creación)
+    // 5. INGREDIENTE
     public class IngredienteDto
     {
         public int MateriaPrimaId { get; set; }
-        public string? NombreInsumo { get; set; } // Opcional, solo para lectura
+        public string? NombreInsumo { get; set; }
         public decimal Cantidad { get; set; }
     }
 }

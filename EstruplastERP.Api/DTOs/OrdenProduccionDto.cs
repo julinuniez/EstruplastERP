@@ -1,6 +1,6 @@
 ﻿namespace EstruplastERP.Api.DTOs
 {
-    public class OrdenProduccion
+    public class OrdenProduccionDto
     {
         public int ProductoTerminadoId { get; set; }
         public decimal Cantidad { get; set; }

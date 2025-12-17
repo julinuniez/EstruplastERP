@@ -34,6 +34,11 @@ namespace EstruplastERP.Core
 
         [Column(TypeName = "decimal(18,4)")]
         public decimal PesoEspecifico { get; set; }
+
+        public int? ProductoPadreId { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public Producto? ProductoPadre { get; set; }
         // Inventario y Precios
         [Column(TypeName = "decimal(18,2)")]
         public decimal StockActual { get; set; }
@@ -46,6 +51,10 @@ namespace EstruplastERP.Core
 
         // Datos Multimedia
         public string? ImagenUrl { get; set; }
+        public int? ClienteId { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public Cliente? Cliente { get; set; }
 
         // Lógica de Negocio
         public bool EsGenerico { get; set; }
@@ -55,5 +64,6 @@ namespace EstruplastERP.Core
 
         public DateTime FechaCreacion { get; set; } = DateTime.Now;
         public ICollection<Formula> Formulas { get; set; } = new List<Formula>();
+
     }
 }

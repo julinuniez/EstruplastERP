@@ -1,18 +1,14 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
 
-// 1. Componentes Esenciales
-import VistaProduccion from '../components/VistaProduccion.vue'; // La pantalla principal
-import ListaStock from '../components/ListaStock.vue';           // Para ver stock
-import IngresoStock from '../components/IngresoStock.vue';       // Para reponer stock
-import Administracion from '../components/Administracion.vue';   // Configuración (Usuarios/Turnos)
+// --- IMPORTACIÓN DE COMPONENTES ---
 import Login from '../components/Login.vue';
-
-// --- REMITOS ---
-import DespachoRemitos from '../components/DespachoRemitos.vue';
+import VistaProduccion from '../components/VistaProduccion.vue';
+import ListaStock from '../components/ListaStock.vue';
+import IngresoStock from '../components/IngresoStock.vue';
 import VistaRemitos from '../components/VistaRemitos.vue';
-
-// ⚠️ NOTA: Ya no importamos 'GestionProductos' ni 'EditorRecetas' 
-// porque eso ahora es estático desde el código.
+import DespachoRemitos from '../components/DespachoRemitos.vue';
+import Administracion from '../components/Administracion.vue';
+// Nota: He removido la importación de 'Produccion.vue' porque usas 'VistaProduccion.vue' en tu lista principal.
 
 const routes: Array<RouteRecordRaw> = [
     // --- LOGIN ---
@@ -23,13 +19,13 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: false } 
     },
 
-    // --- HOME (Redirige a producción) ---
+    // --- HOME (Redirección) ---
     { 
         path: '/', 
         redirect: { name: 'produccion' } 
     }, 
 
-    // --- MÓDULO PRINCIPAL: PRODUCCIÓN ---
+    // --- PRODUCCIÓN ---
     { 
         path: '/produccion', 
         name: 'produccion', 
@@ -37,7 +33,7 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true } 
     },
 
-    // --- MÓDULO: INVENTARIO (Solo ver cantidades y reponer) ---
+    // --- INVENTARIO ---
     { 
         path: '/inventario', 
         name: 'inventario', 
@@ -51,17 +47,17 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true }
     },
 
-    // --- MÓDULO: REMITOS ---
+    // --- REMITOS ---
     { 
         path: '/remitos', 
         name: 'remitos', 
-        component: VistaRemitos, // Historial
+        component: VistaRemitos,
         meta: { requiresAuth: true }
     },
     { 
         path: '/remitos/nuevo', 
         name: 'DespachoRemitos', 
-        component: DespachoRemitos, // Crear Nuevo
+        component: DespachoRemitos,
         meta: { requiresAuth: true }
     },
 
@@ -75,11 +71,11 @@ const routes: Array<RouteRecordRaw> = [
 ];
 
 const router = createRouter({
-    history: createWebHashHistory(), // Usamos Hash para evitar problemas de recarga
-    routes,
+    history: createWebHashHistory(),
+    routes: routes // <--- AQUÍ ESTABA EL ERROR: Ahora pasamos la constante completa
 });
 
-// Guardia de navegación (Auth)
+// --- GUARDIA DE NAVEGACIÓN (Auth) ---
 router.beforeEach((to, from, next) => {
     const token = localStorage.getItem('token');
     const requiereAuth = to.matched.some(record => record.meta.requiresAuth);

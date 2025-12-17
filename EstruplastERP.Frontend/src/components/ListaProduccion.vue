@@ -32,7 +32,7 @@ const apiUrl = 'https://localhost:7244/api'
 async function cargarHistorial() {
   cargando.value = true
   try {
-    const url = `${apiUrl}/Produccion/rango?desde=${filtros.value.desde}&hasta=${filtros.value.hasta}`
+    const url = `${apiUrl}/Ordenes/rango?desde=${filtros.value.desde}&hasta=${filtros.value.hasta}`
     const respuesta = await fetch(url)
     
     if (respuesta.ok) {
@@ -175,8 +175,22 @@ onMounted(() => {
               <td class="numero">{{ p.cantidad }}</td>
               <td class="numero">{{ p.kilos }} kg</td>
               <td style="text-align: center;">
-                 <button @click="imprimirEtiqueta(p)" class="btn-print" title="Imprimir Etiqueta">🖨️</button>
-              </td>
+    
+    <button 
+        v-if="p.estado !== 'Finalizada'"
+        @click="finalizarOrden(p.id)" 
+        class="btn-check" 
+        title="Finalizar Producción">
+        ✅
+    </button>
+    
+    &nbsp; 
+
+    <button @click="imprimirEtiqueta(p)" class="btn-print" title="Imprimir Etiqueta">
+        🖨️
+    </button>
+
+</td>
             </tr>
             <tr v-if="producciones.length === 0 && !cargando">
                 <td colspan="8" class="vacio">No hay registros en estas fechas.</td>

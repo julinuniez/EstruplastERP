@@ -17,6 +17,9 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
+        // ==========================================
+        // 1. GET: INVENTARIO (Optimizado)
+        // ==========================================
         [HttpGet("inventario-completo")]
         public async Task<ActionResult<IEnumerable<object>>> GetInventarioCompleto()
         {
@@ -30,18 +33,20 @@ namespace EstruplastERP.Api.Controllers
                     p.StockMinimo,
                     p.PrecioCosto,
                     p.EsProductoTerminado,
-                    p.Color 
+                    p.EsGenerico, 
+                    p.Color
                 })
                 .ToListAsync();
 
             return Ok(productos);
         }
 
-        // GET: api/Productos/materias-primas
+        // ==========================================
+        // 2. GET: MATERIAS PRIMAS
+        // ==========================================
         [HttpGet("materias-primas")]
         public async Task<ActionResult<IEnumerable<object>>> GetMateriasPrimas()
         {
-            // Verifica que estás usando _context y no otra variable
             return await _context.Productos
                 .Where(p => p.EsMateriaPrima && p.Activo)
                 .OrderBy(p => p.Nombre)
@@ -56,34 +61,88 @@ namespace EstruplastERP.Api.Controllers
                 .ToListAsync();
         }
 
+        // ==========================================
+        // 3. GET: TODOS LOS PRODUCTOS (CORREGIDO EL FALLO)
+        // ==========================================
+        // GET: api/Productos?clienteId=5
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Producto>>> GetProductos()
+        public async Task<ActionResult<IEnumerable<object>>> GetProductos([FromQuery] int? clienteId)
         {
-            return await _context.Productos
+            
+            var query = _context.Productos
                 .Where(p => p.Activo)
+                .AsQueryable();
+            if (clienteId.HasValue && clienteId.Value > 0)
+            {
+              
+                query = query.Where(p => p.ClienteId == null || p.ClienteId == clienteId);
+            }
+            else
+            {
+                
+                query = query.Where(p => p.ClienteId == null);
+            }
+            var productos = await query
                 .OrderBy(p => p.Nombre)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Nombre,
+                    p.CodigoSku,
+                    p.EsProductoTerminado,
+                    p.EsMateriaPrima,
+                    p.EsGenerico,
+                    EsFazon = p.ClienteId != null,
+                    p.StockActual,
+                    p.PesoEspecifico,
+                    p.Largo,
+                    p.Ancho,
+                    p.Espesor,
+                    p.Color
+                })
                 .ToListAsync();
+
+            return Ok(productos);
         }
 
-        // GET: api/productos/5 (Para Edición)
+        // ==========================================
+        // 4. GET: UN PRODUCTO (Para Edición)
+        // ==========================================
         [HttpGet("{id}")]
         public async Task<ActionResult<ProductoDetalleDto>> GetProducto(int id)
         {
-            // ---------------------------------------------------------------
-            // PASO 1: Consulta a la Base de Datos (SQL JOIN)
-            // ---------------------------------------------------------------
             var producto = await _context.Productos
-                // A. Trae la tabla intermedia 'Formulas'
                 .Include(p => p.Formulas)
-                // B. IMPORTANTE: Entra en Formula y trae el nombre de 'Productos' (Materia Prima)
                 .ThenInclude(f => f.MateriaPrima)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
             if (producto == null) return NotFound("❌ Producto no encontrado.");
 
-            // ---------------------------------------------------------------
-            // PASO 2: Mapeo a DTO (Transformación de Datos)
-            // ---------------------------------------------------------------
+            // =========================================================
+            // 2. LÓGICA DE HERENCIA DE RECETA (Cascade)
+            // =========================================================
+            List<Formula> formulasFinales;
+
+            if (producto.Formulas != null && producto.Formulas.Any())
+            {
+                formulasFinales = producto.Formulas.ToList();
+            }
+            else if (producto.ProductoPadreId != null)
+            {
+                formulasFinales = await _context.Formulas
+                    .Include(f => f.MateriaPrima)
+                    .Where(f => f.ProductoTerminadoId == producto.ProductoPadreId)
+                    .ToListAsync();
+            }
+            // C. Si no tiene nada, lista vacía.
+            else
+            {
+                formulasFinales = new List<Formula>();
+            }
+
+            // =========================================================
+            // 3. MAPEO A DTO
+            // =========================================================
             var dto = new ProductoDetalleDto
             {
                 Id = producto.Id,
@@ -99,19 +158,13 @@ namespace EstruplastERP.Api.Controllers
                 Color = producto.Color,
                 EsProductoTerminado = producto.EsProductoTerminado,
                 EsMateriaPrima = producto.EsMateriaPrima,
+                EsGenerico = producto.EsGenerico,
 
-                // -----------------------------------------------------------
-                // PASO 3: Llenado de la Receta (Aquí es donde extraemos la info)
-                // -----------------------------------------------------------
-                Receta = producto.Formulas.Select(f => new IngredienteDto
+                // Usamos la lista 'formulasFinales' que calculamos arriba
+                Receta = formulasFinales.Select(f => new IngredienteDto
                 {
                     MateriaPrimaId = f.MateriaPrimaId,
-
-                    // 🔥 MEJORA DE SEGURIDAD:
-                    // Usamos '?' y '??' para evitar que la API explote (Error 500) 
-                    // si por error de base de datos la MateriaPrima es null.
                     NombreInsumo = f.MateriaPrima?.Nombre ?? "(MP No Encontrada)",
-
                     Cantidad = f.Cantidad
                 }).ToList()
             };
@@ -119,6 +172,9 @@ namespace EstruplastERP.Api.Controllers
             return dto;
         }
 
+        // ==========================================
+        // 5. POST: CREAR
+        // ==========================================
         [HttpPost("crear")]
         public async Task<IActionResult> CrearProductoConReceta([FromBody] NuevoProductoDto data)
         {
@@ -139,9 +195,11 @@ namespace EstruplastERP.Api.Controllers
                     CodigoSku = data.CodigoSku.Trim().ToUpper(),
                     EsProductoTerminado = esProductoTerminado,
                     EsMateriaPrima = !esProductoTerminado,
+                    // Si viene en el DTO úsalo, si no, asume false
+                    // EsGenerico = data.EsGenerico, 
                     StockMinimo = data.StockMinimo,
                     PrecioCosto = data.PrecioCosto,
-                    Color = data.Color, 
+                    Color = data.Color,
                     StockActual = 0,
                     Activo = true,
                     FechaCreacion = DateTime.Now
@@ -173,24 +231,83 @@ namespace EstruplastERP.Api.Controllers
                 return StatusCode(500, "Error en servidor: " + ex.Message);
             }
         }
+
+
+        [HttpPost("habilitar-fazon/{clienteId}")]
+        public async Task<IActionResult> HabilitarFazonCliente(int clienteId)
+        {
+            // 1. Validar que el cliente exista
+            var cliente = await _context.Clientes.FindAsync(clienteId);
+            if (cliente == null) return NotFound("❌ El cliente no existe.");
+
+            // 2. Validar que no tenga ya su "Bolsa de Material" creada
+            // Buscamos si existe alguna Materia Prima vinculada a este ClienteId
+            var existeMaterial = await _context.Productos
+                .AnyAsync(p => p.ClienteId == clienteId && p.EsMateriaPrima);
+
+            if (existeMaterial)
+                return BadRequest("⚠️ Este cliente ya tiene habilitado el servicio de Fazon (Ya tiene stock asignado).");
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // 3. Crear la Materia Prima "Cuenta Corriente"
+                var nuevoMaterial = new Producto
+                {
+                    // Nombre claro para identificarlo
+                    Nombre = $"Material Recuperado: {cliente.RazonSocial}",
+
+                    // SKU automático: MP-CLI-005 (rellena con ceros)
+                    CodigoSku = $"MP-CLI-{clienteId.ToString("D3")}",
+
+                    EsMateriaPrima = true,       // Se consume
+                    EsProductoTerminado = false, // No se vende directamente
+                    EsGenerico = false,          // Es un ítem único
+                    ClienteId = clienteId,       // ✅ VINCULADO AL CLIENTE (Candado)
+
+                    StockActual = 0,             // Empieza en 0
+                    StockMinimo = 0,
+                    PrecioCosto = 0,             // El material es del cliente, costo 0 para nosotros
+                    PesoEspecifico = 1.05m,      // Valor por defecto (PAI), editable luego si es otro material
+
+                    Activo = true,
+                    FechaCreacion = DateTime.Now
+                };
+
+                _context.Productos.Add(nuevoMaterial);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new
+                {
+                    mensaje = $"✅ Fazon habilitado para {cliente.RazonSocial}.",
+                    productoId = nuevoMaterial.Id,
+                    nombreMaterial = nuevoMaterial.Nombre
+                });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, "Error al crear material: " + ex.Message);
+            }
+        }
+        // ==========================================
+        // 6. PUT: ACTUALIZAR
+        // ==========================================
         [HttpPut("actualizar/{id}")]
         public async Task<IActionResult> ActualizarProducto(int id, [FromBody] ProductoEditarDto data)
         {
             if (id <= 0) return BadRequest("ID inválido.");
 
-            // 1. Buscamos el producto. .
-            var producto = await _context.Productos
-                .FirstOrDefaultAsync(p => p.Id == id);
-
+            var producto = await _context.Productos.FirstOrDefaultAsync(p => p.Id == id);
             if (producto == null) return NotFound("❌ Producto no encontrado.");
 
-            // 2. Actualizar SOLO propiedades Administrativas
             producto.Nombre = data.Nombre.Trim();
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
             producto.Color = data.Color;
+            // producto.EsGenerico = data.EsGenerico; // Descomentar si agregas esto al DTO
 
-            // 3. Guardar cambios
             try
             {
                 await _context.SaveChangesAsync();
@@ -203,9 +320,8 @@ namespace EstruplastERP.Api.Controllers
         }
 
         // ==========================================
-        // 4. ELIMINACIÓN (DELETE)
+        // 7. DELETE: ELIMINAR
         // ==========================================
-
         [HttpDelete("eliminar/{id}")]
         public async Task<IActionResult> EliminarProducto(int id)
         {
@@ -215,22 +331,16 @@ namespace EstruplastERP.Api.Controllers
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Validación: No borrar si es ingrediente de otro
                 bool esIngredienteDeOtros = await _context.Formulas.AnyAsync(f => f.MateriaPrimaId == id);
                 if (esIngredienteDeOtros)
-                {
                     return BadRequest(new { mensaje = "❌ No se puede eliminar: Es ingrediente de otro producto." });
-                }
 
-                // Borrar Movimientos
                 var movimientos = await _context.Movimientos.Where(m => m.ProductoId == id).ToListAsync();
                 if (movimientos.Any()) _context.Movimientos.RemoveRange(movimientos);
 
-                // Borrar Fórmulas donde este es el producto terminado
                 var formulasDelProducto = await _context.Formulas.Where(f => f.ProductoTerminadoId == id).ToListAsync();
                 if (formulasDelProducto.Any()) _context.Formulas.RemoveRange(formulasDelProducto);
 
-                // Borrar Producto
                 _context.Productos.Remove(producto);
 
                 await _context.SaveChangesAsync();

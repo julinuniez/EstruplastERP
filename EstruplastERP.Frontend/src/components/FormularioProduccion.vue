@@ -15,8 +15,9 @@ interface Producto {
     nombre: string; 
     codigoSku: string; 
     esProductoTerminado: boolean;
-    // ✅ CAMBIO: Agregamos el flag esGenerico
     esGenerico: boolean; 
+    // ✅ Nuevo: Flag para saber si es Fazon
+    esFazon?: boolean;
     largo: number; 
     ancho: number; 
     espesor: number; 
@@ -85,10 +86,9 @@ const productoSeleccionado = computed(() => productos.value.find(p => p.id === f
 const empleadoSeleccionado = computed(() => empleados.value.find(e => e.id === form.value.empleadoId) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === form.value.clienteId) || null);
 
-// ✅ CAMBIO: Computed para saber si bloqueamos los inputs
+// Bloqueo de inputs si es Estándar (No Genérico)
 const medidasBloqueadas = computed(() => {
-    if (!productoSeleccionado.value) return true; // Si no hay nada seleccionado, bloqueamos
-    // Si esGenerico es FALSE (es Estándar), devolvemos TRUE (Bloqueado)
+    if (!productoSeleccionado.value) return true; 
     return !productoSeleccionado.value.esGenerico;
 });
 
@@ -173,50 +173,90 @@ const materiasPrimasParaManual = computed(() => {
 
 // --- 5. FUNCIONES ---
 
-async function CargarDatosProductos(id: number) {
-    if (!id) return;
-    const prod = productos.value.find(p => p.id === id);
-    
-    if (prod) {
-        // ✅ CAMBIO: Lógica de carga de medidas
-        if (!prod.esGenerico) {
-            // Si es ESTÁNDAR (Fijo), forzamos las medidas del producto
-            form.value.largo = prod.largo;
-            form.value.ancho = prod.ancho;
-            form.value.espesor = prod.espesor;
-            // Opcional: Escribir una observación automática
-            if(!form.value.observacion) form.value.observacion = "Producción Estándar de Stock";
-        } else {
-            // Si es GENÉRICO (A Medida), permitimos editar.
-            // Si el producto genérico trae 0 en la BD, limpiamos el form para que el usuario escriba.
-            if (prod.largo > 0) form.value.largo = prod.largo; else form.value.largo = 0;
-            if (prod.ancho > 0) form.value.ancho = prod.ancho; else form.value.ancho = 0;
-            if (prod.espesor > 0) form.value.espesor = prod.espesor; else form.value.espesor = 0;
+// ✅ NUEVO: Carga productos filtrados por cliente (Fazon)
+async function CargarProductosFiltrados(clienteId: number | string = '') {
+    try {
+        let url = `${apiUrl}/Productos`;
+        
+        // Si hay cliente, filtramos por Fazon
+        if (clienteId) {
+            url += `?clienteId=${clienteId}`;
         }
 
-        form.value.esProductoColor = prod.nombre.toUpperCase().includes('COLOR') || prod.nombre.toUpperCase().includes('VARIOS');
-        form.value.colorTexto = prod.color || '';
+        const res = await axios.get(url, getAuthConfig());
+        
+        // Filtramos solo productos terminados para el combo
+        productos.value = res.data.filter((p: any) => p.esProductoTerminado);
+        
+        // Si el producto seleccionado ya no existe (ej: cambiamos cliente), limpiar
+        if (form.value.productoTerminadoId) {
+             const aunExiste = productos.value.find(p => p.id === form.value.productoTerminadoId);
+             if (!aunExiste) {
+                 form.value.productoTerminadoId = '';
+                 recetaDinamica.value = [];
+             }
+        }
+
+    } catch (e) {
+        console.error("Error al cargar lista de productos", e);
+    }
+}
+
+// ✅ NUEVO: Carga datos inteligentes del producto seleccionado
+async function CargarDatosProductos(id: number) {
+    if (!id) return;
+
+    try {
+        // Consultamos al endpoint UNIFICADO que resuelve herencia
+        const res = await axios.get(`${apiUrl}/Productos/${id}`, getAuthConfig());
+        const productoDto = res.data;
+
+        // 1. CARGA DE MEDIDAS
+        if (!productoDto.esGenerico) {
+            // Estándar: Medidas Fijas
+            form.value.largo = productoDto.largo;
+            form.value.ancho = productoDto.ancho;
+            form.value.espesor = productoDto.espesor;
+            if(!form.value.observacion) form.value.observacion = "Producción Estándar de Stock";
+        } else {
+            // Genérico: Medidas Editables (limpiamos si vienen en 0)
+            form.value.largo = productoDto.largo > 0 ? productoDto.largo : 0;
+            form.value.ancho = productoDto.ancho > 0 ? productoDto.ancho : 0;
+            form.value.espesor = productoDto.espesor > 0 ? productoDto.espesor : 0;
+        }
+
+        // 2. CONFIGURACIÓN VISUAL
+        form.value.esProductoColor = productoDto.nombre.toUpperCase().includes('COLOR') || productoDto.nombre.toUpperCase().includes('VARIOS');
+        form.value.colorTexto = productoDto.color || '';
+        
+        // Reset manuales
         form.value.masterbatchId = ''; 
         form.value.aditivoCarga = 0; 
         form.value.aditivoUV = false;
         form.value.aditivoCaucho = false;
-    }
 
-    try {
-        const res = await axios.get(`${apiUrl}/Formulas/${id}`, getAuthConfig());
-        const recetaBase = res.data.map((r: any) => ({
-            id: r.id, 
-            materiaPrimaId: r.materiaPrimaId,
-            nombreInsumo: r.ingrediente || r.Ingrediente,
-            cantidad: r.cantidad,
-            densidad: r.Densidad || 0.92,
-            esColor: false, esCarga: false, esBrillo: false, esEstearato: false,
-            esBase: r.cantidad > 50 
-        }));
-        recetaDinamica.value = recetaBase;
-        recalcularFormulaAutomatica();
+        // 3. MAPEO DE RECETA (Propia o Heredada)
+        if (productoDto.receta && productoDto.receta.length > 0) {
+            const recetaMapeada = productoDto.receta.map((r: any) => {
+                const mpEnStock = listaTodasMateriasPrimas.value.find(m => m.id === r.materiaPrimaId);
+                return {
+                    id: Date.now() + Math.random(),
+                    materiaPrimaId: r.materiaPrimaId,
+                    nombreInsumo: r.nombreInsumo || mpEnStock?.nombre || 'Insumo',
+                    cantidad: r.cantidad,
+                    densidad: mpEnStock ? mpEnStock.pesoEspecifico : 0.92, 
+                    esColor: false, esCarga: false, esBrillo: false, esEstearato: false,
+                    esBase: r.cantidad > 50 
+                };
+            });
+            recetaDinamica.value = recetaMapeada;
+            recalcularFormulaAutomatica();
+        } else {
+            recetaDinamica.value = [];
+        }
+
     } catch (e) {
-        console.error("Error cargando fórmula", e);
+        console.error("Error cargando detalle del producto", e);
         recetaDinamica.value = [];
     }
 }
@@ -356,7 +396,6 @@ async function registrarProduccion() {
       error.value = "Faltan datos obligatorios."; return;
   }
   
-  // Validación de medida para Genéricos
   if (!medidasBloqueadas.value && (form.value.largo <= 0 || form.value.ancho <= 0 || form.value.espesor <= 0)) {
       error.value = "⚠️ Para productos 'A Medida', debe ingresar Largo, Ancho y Espesor."; return;
   }
@@ -395,7 +434,7 @@ async function registrarProduccion() {
   }
   
   try {
-    await axios.post(`${apiUrl}/Produccion/registrar`, payload, getAuthConfig())
+    await axios.post(`${apiUrl}/Ordenes`, payload, getAuthConfig())
     mensaje.value = `✅ Orden Generada Correctamente.`
     idProduccionGenerada.value = true 
     emit('guardado') 
@@ -408,15 +447,23 @@ async function registrarProduccion() {
 function generarOrdenProduccionPDF() {
   const elemento = document.getElementById('hoja-de-impresion')
   const opt = { margin: 0, filename: `Orden_${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
-  // @ts-ignore
   html2pdf().set(opt).from(elemento).save()
 }
 
 // --- 6. WATCHERS ---
+
+// Watcher para filtrar productos si cambia el cliente
+watch(() => form.value.clienteId, (nuevoClienteId) => {
+    CargarProductosFiltrados(nuevoClienteId);
+});
+
+// Watcher para cargar datos al elegir producto
 watch(() => form.value.productoTerminadoId, (newId) => {
     if (newId) CargarDatosProductos(Number(newId));
     else { recetaDinamica.value = []; form.value.largo=0; form.value.ancho=0; form.value.espesor=0; }
 });
+
+// Watchers de aditivos y cálculos
 watch(() => form.value.masterbatchId, recalcularFormulaAutomatica);
 watch(() => form.value.aditivoCarga, recalcularFormulaAutomatica);
 watch(() => form.value.espesor, (v) => { if (v < 1) form.value.conBrillo = false; });
@@ -431,14 +478,15 @@ watch(kilosCalculados, (v) => form.value.kilosTotales = v);
 onMounted(async () => {
     try {
         const config = getAuthConfig();
-        const [resProd, resEmp, resCli, resMat] = await Promise.all([
-            axios.get(`${apiUrl}/Productos`, config),
+        const [resEmp, resCli, resMat] = await Promise.all([
             axios.get(`${apiUrl}/Empleados`, config),
             axios.get(`${apiUrl}/Clientes`, config),
             axios.get(`${apiUrl}/Productos/materias-primas`, config) 
         ]);
         
-        productos.value = resProd.data.filter((p: any) => p.esProductoTerminado);
+        // Ya no cargamos productos directamente, usamos la función filtrada
+        await CargarProductosFiltrados(); // Carga solo los generales al inicio
+        
         listaTodasMateriasPrimas.value = resMat.data;
         listaMasterbatches.value = resMat.data.filter((m: any) => 
             m.nombre && (m.nombre.toUpperCase().includes('MASTERBATCH') || m.nombre.toUpperCase().includes('PIGMENTO'))
@@ -584,11 +632,12 @@ onMounted(async () => {
             <option v-for="c in clientes" :key="c.id" :value="c.id">{{c.razonSocial}}</option>
         </select>
         <select v-model="form.productoTerminadoId">
-            <option disabled value="">Producto...</option>
-            <option v-for="p in productos" :key="p.id" :value="p.id">
-                {{ p.nombre }} {{ p.esGenerico ? '(A Medida)' : '(Estándar)' }}
-            </option>
-        </select>
+    <option disabled value="">Seleccionar Producto...</option>
+    <option v-for="p in productos" :key="p.id" :value="p.id">
+        {{ p.esFazon ? '★ ' : '' }}{{ p.nombre }} 
+        {{ p.esGenerico ? '(A Medida)' : (p.esFazon ? '(Fazon)' : '(Estándar)') }}
+    </option>
+</select>
 
         <div v-if="form.productoTerminadoId" class="seccion-medidas-editables">
             <div v-if="form.esProductoColor" style="margin-bottom: 15px; border: 1px dashed #f39c12; padding: 5px; border-radius: 4px;">

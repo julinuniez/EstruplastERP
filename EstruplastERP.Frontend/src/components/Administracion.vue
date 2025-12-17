@@ -18,12 +18,17 @@ const pestana = ref<'empleados' | 'clientes'>('empleados')
 const lista = ref<Entidad[]>([]) 
 const cargando = ref(false)
 
+// ✅ NUEVO: Variable para mostrar spinner en el botón específico que se está clickeando
+const cargandoFazon = ref<number | null>(null)
+
 const listaPuestos = [
     'Operario General', 'Logística', 'Extrusor', 'Impresor', 
     'Supervisor', 'Mantenimiento', 'Administración', 'Gerencia', 'Chofer'
 ]
 
-// Tipamos el formulario explícitamente para evitar conflictos
+// ... (Resto de tus variables itemForm, modoEdicion, apiUrl, getAuthConfig igual que antes) ...
+// ... (Tus funciones cargarDatos, guardar, editar, eliminar, limpiarForm igual que antes) ...
+
 const itemForm = ref<{
     id: number;
     nombre: string;
@@ -32,110 +37,160 @@ const itemForm = ref<{
     puesto: string;
     activo: boolean;
 }>({ 
-    id: 0, 
-    nombre: '', 
-    dni: '', 
-    cuit: '', 
-    puesto: 'Operario General', 
-    activo: true 
+    id: 0, nombre: '', dni: '', cuit: '', puesto: 'Operario General', activo: true 
 })
 
 const modoEdicion = ref(false)
-const apiUrl = 'https://localhost:7244/api' 
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';  
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');
     return { headers: { Authorization: `Bearer ${token}` } };
 };
 
-// --- CRUD ---
+// ... (Tus funciones existentes CRUD van aquí) ...
+// --- FUNCIONES CRUD IMPLEMENTADAS ---
 
+// 1. Cargar Datos (GET)
 async function cargarDatos() {
-  cargando.value = true
-  const endpoint = pestana.value === 'empleados' ? 'Empleados' : 'Clientes'
-  try {
-    const res = await axios.get(`${apiUrl}/${endpoint}`, getAuthConfig())
-    lista.value = res.data
-  } catch (e: any) { 
-    console.error(e)
-    if (e.response?.status === 401) alert("Sesión expirada.")
-  } finally { 
-    cargando.value = false 
-  }
-}
-
-async function guardar() {
-  const endpoint = pestana.value === 'empleados' ? 'Empleados' : 'Clientes'
-  
-  const payload = pestana.value === 'empleados' 
-    ? { 
-        id: itemForm.value.id,
-        nombreCompleto: itemForm.value.nombre, 
-        dni: itemForm.value.dni, 
-        activo: itemForm.value.activo,
-        puesto: itemForm.value.puesto 
-      }
-    : { 
-        id: itemForm.value.id,
-        razonSocial: itemForm.value.nombre, 
-        cuit: itemForm.value.cuit, 
-        activo: itemForm.value.activo 
-      }
-
-  const url = modoEdicion.value ? `${apiUrl}/${endpoint}/${itemForm.value.id}` : `${apiUrl}/${endpoint}`
-
-  try {
-      if (modoEdicion.value) {
-          await axios.put(url, payload, getAuthConfig())
-      } else {
-          await axios.post(url, payload, getAuthConfig())
-      }
-      alert("✅ Guardado correctamente")
-      limpiarForm()
-      cargarDatos()
-  } catch(e: any) { 
-      const msg = e.response?.data?.mensaje || e.message
-      alert("❌ Error al guardar: " + msg) 
-  }
-}
-
-function editar(item: Entidad) {
-    modoEdicion.value = true
+    cargando.value = true;
+    lista.value = [];
     
-    // CORRECCIÓN AQUÍ 👇
-    // Agregamos " || '' " al final para asegurar que NUNCA sea undefined
+    // Determinamos el endpoint según la pestaña activa
+    const endpoint = pestana.value === 'clientes' ? 'Clientes' : 'Empleados';
+
+    try {
+        const res = await axios.get(`${apiUrl}/${endpoint}`, getAuthConfig());
+        lista.value = res.data;
+    } catch (error) {
+        console.error("Error cargando datos:", error);
+    } finally {
+        cargando.value = false;
+    }
+}
+
+// 2. Guardar (POST / PUT) - CON MAPEO DE DATOS
+async function guardar() {
+    // Validación básica frontend
+    if (!itemForm.value.nombre) {
+        alert("El Nombre / Razón Social es obligatorio.");
+        return;
+    }
+
+    const endpoint = pestana.value === 'clientes' ? 'Clientes' : 'Empleados';
+    
+    // PREPARAR EL OBJETO PARA EL BACKEND (Mapeo)
+    // C# espera propiedades exactas (RazonSocial, NombreCompleto, etc.)
+    let payload: any = {
+        id: itemForm.value.id,
+        activo: itemForm.value.activo
+    };
+
+    if (pestana.value === 'clientes') {
+        // Mapeo para Cliente
+        payload.razonSocial = itemForm.value.nombre; 
+        payload.cuit = itemForm.value.cuit;
+    } else {
+        // Mapeo para Empleado
+        payload.nombreCompleto = itemForm.value.nombre;
+        payload.dni = itemForm.value.dni;
+        payload.puesto = itemForm.value.puesto;
+    }
+
+    try {
+        if (modoEdicion.value) {
+            // EDITAR (PUT)
+            await axios.put(`${apiUrl}/${endpoint}/${itemForm.value.id}`, payload, getAuthConfig());
+            alert("Editado correctamente");
+        } else {
+            // CREAR (POST)
+            // Aseguramos que el ID no vaya o sea 0 para que la DB cree uno nuevo
+            payload.id = 0; 
+            await axios.post(`${apiUrl}/${endpoint}`, payload, getAuthConfig());
+            alert("Creado correctamente");
+        }
+        
+        limpiarForm();
+        cargarDatos(); // Recargar la tabla
+
+    } catch (error: any) {
+        console.error("Error al guardar:", error);
+        // Intentar mostrar el mensaje exacto que manda el backend
+        const mensajeBackend = error.response?.data || error.message;
+        alert("Error al guardar: " + mensajeBackend);
+    }
+}
+
+// 3. Editar (Cargar formulario con datos existentes)
+function editar(item: Entidad) {
+    modoEdicion.value = true;
+
+    // Mapeo INVERSO (Backend -> Formulario)
+    // Si es cliente usa razonSocial, si es empleado usa nombreCompleto
+    const nombre = item.razonSocial || item.nombreCompleto || '';
+    const identificacion = item.cuit || item.dni || '';
+
     itemForm.value = {
         id: item.id,
-        nombre: item.nombreCompleto || item.razonSocial || '',
-        dni: item.dni || '',
-        cuit: item.cuit || '',
-        // Si item.puesto es null Y listaPuestos[0] falla, usamos un string vacío
-        puesto: item.puesto || listaPuestos[0] || '', 
+        nombre: nombre,
+        dni: pestana.value === 'empleados' ? identificacion : '',
+        cuit: pestana.value === 'clientes' ? identificacion : '',
+        puesto: item.puesto || 'Operario General',
         activo: item.activo
-    }
+    };
 }
 
+// 4. Eliminar (DELETE)
 async function eliminar(id: number) {
-    if(!confirm("¿Desea eliminar/desactivar este registro?")) return
-    const endpoint = pestana.value === 'empleados' ? 'Empleados' : 'Clientes'
+    if (!confirm("¿Estás seguro de eliminar/desactivar este registro?")) return;
+
+    const endpoint = pestana.value === 'clientes' ? 'Clientes' : 'Empleados';
+
     try {
-        await axios.delete(`${apiUrl}/${endpoint}/${id}`, getAuthConfig())
-        cargarDatos()
-    } catch (e: any) {
-        alert("Error al eliminar: " + e.message)
+        await axios.delete(`${apiUrl}/${endpoint}/${id}`, getAuthConfig());
+        alert("Eliminado correctamente");
+        cargarDatos();
+    } catch (error: any) {
+        console.error("Error al eliminar:", error);
+        alert("No se pudo eliminar: " + (error.response?.data || error.message));
     }
 }
 
+// 5. Limpiar Formulario
 function limpiarForm() {
-    modoEdicion.value = false
-    itemForm.value = { 
-        id: 0, 
-        nombre: '', 
-        dni: '', 
-        cuit: '', 
-        // CORRECCIÓN AQUÍ TAMBIÉN 👇
-        puesto: listaPuestos[0] || '', 
-        activo: true 
+    modoEdicion.value = false;
+    itemForm.value = {
+        id: 0,
+        nombre: '',
+        dni: '',
+        cuit: '',
+        puesto: 'Operario General',
+        activo: true
+    };
+}
+
+
+// ✅ NUEVA FUNCIÓN: Habilitar Fazon
+async function habilitarFazon(cliente: Entidad) {
+    if (!cliente.razonSocial) return;
+
+    if (!confirm(`¿Desea crear la cuenta de stock de material para ${cliente.razonSocial}?`)) return;
+
+    cargandoFazon.value = cliente.id; // Activamos spinner solo para este ID
+
+    try {
+        // Llamada al endpoint mágico que creamos en el Backend
+        const res = await axios.post(`${apiUrl}/Productos/habilitar-fazon/${cliente.id}`, {}, getAuthConfig());
+        
+        alert(res.data.mensaje); // "✅ Fazon habilitado..."
+        
+    } catch (e: any) {
+        console.error(e);
+        // Si ya existe o hay error, mostramos el mensaje del backend
+        const msg = e.response?.data || "Error al habilitar Fazon.";
+        alert(msg);
+    } finally {
+        cargandoFazon.value = null; // Liberamos el botón
     }
 }
 
@@ -210,8 +265,19 @@ onMounted(() => cargarDatos())
                             </span>
                         </td>
                         <td>
-                            <button @click="editar(item)" class="btn-small">✏️</button>
-                            <button @click="eliminar(item.id)" class="btn-small btn-del">🗑️</button>
+                            <button @click="editar(item)" class="btn-small" title="Editar">✏️</button>
+                            <button @click="eliminar(item.id)" class="btn-small btn-del" title="Eliminar/Desactivar">🗑️</button>
+                            
+                            <button 
+                                v-if="pestana === 'clientes' && item.activo" 
+                                @click="habilitarFazon(item)" 
+                                class="btn-small btn-fazon"
+                                :disabled="cargandoFazon === item.id"
+                                title="Habilitar servicio de Fazon (Crear Stock)"
+                            >
+                                <span v-if="cargandoFazon === item.id">⏳</span>
+                                <span v-else>🏭</span>
+                            </button>
                         </td>
                     </tr>
                     <tr v-if="lista.length === 0">
@@ -254,4 +320,22 @@ th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
 
 .btn-small { border: none; background: #eee; padding: 5px 8px; border-radius: 4px; cursor: pointer; margin-right: 5px; }
 .btn-del { background: #ffcccc; color: red; }
+/* ... tus estilos anteriores ... */
+
+.btn-small { border: none; background: #eee; padding: 5px 8px; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+.btn-del { background: #ffcccc; color: red; }
+
+/* ✅ NUEVO ESTILO */
+.btn-fazon {
+    background-color: #8e44ad; /* Violeta */
+    color: white;
+    transition: background 0.3s;
+}
+.btn-fazon:hover {
+    background-color: #9b59b6; /* Violeta claro */
+}
+.btn-fazon:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
 </style>
