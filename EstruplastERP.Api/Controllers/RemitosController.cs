@@ -21,42 +21,49 @@ namespace EstruplastERP.Api.Controllers
         }
 
         // ================================================================
-        // 1. POST: CREAR NUEVO REMITO
+        // 1. POST: CREAR NUEVO REMITO (DESPACHO)
         // ================================================================
         [HttpPost]
         public async Task<ActionResult> PostRemito(NuevoRemitoDto dto)
         {
-            // A. Validaciones
+            // A. VALIDACIONES PREVIAS
+            // -------------------------------------------------------------
+            // Recorremos los items antes de hacer nada para verificar stock.
+            // Si falta uno, no se hace nada.
             foreach (var itemDto in dto.Items)
             {
                 var producto = await _context.Productos.FindAsync(itemDto.ProductoId);
 
                 if (producto == null)
-                    return BadRequest($"Producto ID {itemDto.ProductoId} no existe.");
+                    return BadRequest($"El producto ID {itemDto.ProductoId} no existe.");
 
-                // Usamos decimal para comparar correctamente
                 if (producto.StockActual < itemDto.Cantidad)
                 {
-                    return BadRequest($"Stock insuficiente para '{producto.Nombre}'. Tienes {producto.StockActual}, intentas sacar {itemDto.Cantidad}.");
+                    return BadRequest($"Stock insuficiente para '{producto.Nombre}'. Stock actual: {producto.StockActual}kg. Intentas despachar: {itemDto.Cantidad}kg.");
                 }
             }
 
             var cliente = await _context.Clientes.FindAsync(dto.ClienteId);
-            if (cliente == null) return BadRequest("Cliente no encontrado.");
+            if (cliente == null) return BadRequest("El cliente seleccionado no existe.");
 
-            // B. Crear la Cabecera
+            // B. CREAR LA CABECERA DEL REMITO
+            // -------------------------------------------------------------
             var nuevoRemito = new Remito
             {
                 ClienteId = dto.ClienteId,
                 NumeroRemito = dto.NumeroRemito,
-                // Si no envía fecha, usa Ahora. Si envía, usa la seleccionada.
+                // Si la fecha viene vacía (default), usamos Ahora.
                 Fecha = dto.Fecha != default ? dto.Fecha : DateTime.Now,
                 Observacion = dto.Observacion,
+
+                // GUARDAMOS EL NOMBRE COMO TEXTO (Plan B por si borran el cliente)
                 ClienteNombre = cliente.RazonSocial,
+
                 Detalles = new List<RemitoDetalle>()
             };
 
-            // C. Procesar Items
+            // C. PROCESAR ITEMS (DESCUENTO Y MOVIMIENTOS)
+            // -------------------------------------------------------------
             foreach (var itemDto in dto.Items)
             {
                 var producto = await _context.Productos.FindAsync(itemDto.ProductoId);
@@ -64,61 +71,75 @@ namespace EstruplastERP.Api.Controllers
                 // 1. Descontar Stock Físico
                 producto.StockActual -= itemDto.Cantidad;
 
-                // 2. Crear Detalle (Aquí guardamos el color/medida)
+                // 2. Agregar al detalle del Remito
                 nuevoRemito.Detalles.Add(new RemitoDetalle
                 {
                     ProductoId = itemDto.ProductoId,
                     Cantidad = itemDto.Cantidad,
-                    Detalle = itemDto.Detalle, // <--- CAMPO CLAVE
-                    PrecioUnitarioSnapshot = 0
+                    Detalle = itemDto.Detalle, // Ej: "Color Rojo"
+                    PrecioUnitarioSnapshot = 0 // Si tuvieras lista de precios, iría aquí
                 });
 
-                // Opcional: Registrar movimiento en historial general si lo usas
+                // 3. Registrar en el Historial de Movimientos (Kardex)
                 _context.Movimientos.Add(new Movimiento
                 {
                     Fecha = DateTime.Now,
                     ProductoId = producto.Id,
-                    Cantidad = -itemDto.Cantidad, // Negativo porque sale
-                    TipoMovimiento = $"SALIDA_REMITO {dto.NumeroRemito}",
-                    Observacion = $"Cliente: {cliente.RazonSocial} | {itemDto.Detalle}",
-                    Turno = "Despacho"
+                    Cantidad = itemDto.Cantidad, // Cantidad involucrada
+                    TipoMovimiento = "SALIDA_REMITO", // String identificador
+                    Observacion = $"Remito #{dto.NumeroRemito} -> {cliente.RazonSocial}. ({itemDto.Detalle})",
+                    ClienteId = cliente.Id,
+                    Turno = "Despacho",
+                    PrecioUnitario = 0,
+                    PrecioTotal = 0
                 });
             }
-
-            // D. Guardar todo
             _context.Remitos.Add(nuevoRemito);
             await _context.SaveChangesAsync();
 
-            return Ok(new { mensaje = "Éxito", id = nuevoRemito.Id });
+            return Ok(new { mensaje = "Remito generado con éxito", id = nuevoRemito.Id });
         }
 
         // ================================================================
-        // 2. GET: HISTORIAL
+        // 2. GET: HISTORIAL COMPLETO
         // ================================================================
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetHistorial()
         {
             var remitos = await _context.Remitos
-                .Include(r => r.Cliente)
-                .Include(r => r.Detalles).ThenInclude(d => d.Producto)
+                .Include(r => r.Cliente)               // Cargar datos del cliente
+                .Include(r => r.Detalles)              // Cargar lista de items
+                    .ThenInclude(d => d.Producto)      // Cargar nombres de productos
                 .OrderByDescending(r => r.Fecha)
+                .ThenByDescending(r => r.Id)
                 .ToListAsync();
 
-            // Mapeamos a un objeto anónimo para enviar al Frontend
+            // Proyección (Mapeo) de datos para el Frontend
             var resultado = remitos.Select(r => new
             {
                 r.Id,
                 r.NumeroRemito,
                 r.Fecha,
-                ClienteNombre = r.Cliente != null ? r.Cliente.RazonSocial : "---",
                 r.Observacion,
-                TotalItems = r.Detalles.Count,
-                TotalKilos = r.Detalles.Sum(d => d.Cantidad),
+
+                
+                ClienteNombreBackup = r.ClienteNombre,
+
+                
+                Cliente = r.Cliente == null ? null : new
+                {
+                    r.Cliente.Id,
+                    r.Cliente.RazonSocial,
+                    r.Cliente.Cuit,       // <--- Para el PDF
+                    r.Cliente.Direccion   // <--- Para el PDF
+                },
+
                 Items = r.Detalles.Select(d => new {
-                    ProductoNombre = d.Producto.Nombre,
-                    Sku = d.Producto.CodigoSku,
-                    Cantidad = d.Cantidad,
-                    Detalle = d.Detalle // <--- Enviamos el color al historial
+                    d.Id,
+                    ProductoNombre = d.Producto != null ? d.Producto.Nombre : "Producto Eliminado",
+                    Sku = d.Producto != null ? d.Producto.CodigoSku : "-",
+                    d.Cantidad,
+                    d.Detalle // El comentario específico (ej: "Bobina 40 micrones")
                 }).ToList()
             });
 
@@ -138,7 +159,7 @@ namespace EstruplastERP.Api.Controllers
     public class ItemRemitoDto
     {
         public int ProductoId { get; set; }
-        public decimal Cantidad { get; set; } // Decimal es clave para evitar errores
-        public string Detalle { get; set; }   // Color, medida, etc.
+        public decimal Cantidad { get; set; }
+        public string Detalle { get; set; }
     }
 }

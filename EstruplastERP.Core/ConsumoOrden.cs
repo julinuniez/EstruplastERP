@@ -11,10 +11,8 @@ namespace EstruplastERP.Core
         public OrdenProduccion OrdenProduccion { get; set; }
 
         // Relación con el Insumo (Que es un Producto en realidad)
-        public int MateriaPrimaId { get; set; }
+        public int? MateriaPrimaId { get; set; }
 
-        // 👇 AQUÍ ESTÁ EL TRUCO 👇
-        // El tipo de dato es 'Producto', pero la propiedad la llamamos 'MateriaPrima'
         [ForeignKey("MateriaPrimaId")]
         public virtual Producto MateriaPrima { get; set; }
 

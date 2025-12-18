@@ -1,19 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted} from 'vue'
+import { ref, onMounted } from 'vue'
 
-// 1. Definimos la "forma" de tus datos para que TypeScript no se queje
+// 1. Definimos la "forma" de tus datos
 interface ProduccionItem {
   id: number;
   fecha: string;
   turno: string;
-  operario: string; // Tu API devuelve 'operario'
-  producto: string; // Tu API devuelve 'producto'
+  operario: string;
+  producto: string;
   lote: string;
   cantidad: number;
+  estado?: number; // 0 = Pendiente, 1 = Finalizado
   kilos: number;
 }
 
-// 2. Aplicamos el tipo a la referencia
+// 2. Variables reactivas
 const producciones = ref<ProduccionItem[]>([])
 const cargando = ref(false)
 
@@ -28,10 +29,20 @@ const filtros = ref({
 
 const apiUrl = 'https://localhost:7244/api' 
 
-// Carga por rango
+// --- FUNCIONES AUXILIARES PARA EL ESTADO (NUEVO) ---
+const obtenerTextoEstado = (estado: number | undefined) => {
+    return estado === 2 ? 'FINALIZADO' : 'PENDIENTE';
+}
+
+const obtenerClaseEstado = (estado: number | undefined) => {
+    return estado === 2 ? 'badge-finalizado' : 'badge-pendiente';
+}
+
+// --- CARGA DE DATOS ---
 async function cargarHistorial() {
   cargando.value = true
   try {
+    // Asegúrate de que tu Backend sea /Ordenes/ o /Produccion/ según corresponda
     const url = `${apiUrl}/Ordenes/rango?desde=${filtros.value.desde}&hasta=${filtros.value.hasta}`
     const respuesta = await fetch(url)
     
@@ -45,8 +56,37 @@ async function cargarHistorial() {
   }
 }
 
+// --- FINALIZAR ORDEN (CON ACTUALIZACIÓN VISUAL INSTANTÁNEA) ---
+const finalizarOrden = async (id: number) => {
+    if (!confirm("¿Confirmas que la producción ha terminado y quieres sumar el stock?")) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${apiUrl}/Ordenes/finalizar/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            // ⚡ TRUCO VISUAL: Actualizamos la lista localmente para que el color cambie YA
+            const item = producciones.value.find(p => p.id === id);
+            if (item) {
+                item.estado = 2; // Lo marcamos como finalizado visualmente
+            }
+            alert("¡Orden finalizada y stock actualizado!");
+        } else {
+            const errorText = await response.text();
+            alert("Error del servidor: " + errorText);
+        }
+    } catch (error) {
+        console.error("Error de conexión:", error);
+        alert("No se pudo conectar con el servidor.");
+    }
+}
+
 const imprimirEtiqueta = (item: ProduccionItem) => {
-    const ventana = window.open('', 'PRINT', 'height=600,width=800'); // Un poco más grande
+    const ventana = window.open('', 'PRINT', 'height=600,width=800');
 
     if (ventana) {
         ventana.document.write(`
@@ -60,11 +100,9 @@ const imprimirEtiqueta = (item: ProduccionItem) => {
                     .main-data { display: flex; justify-content: space-between; border: 2px solid #000; padding: 10px; margin: 15px 0; background: #f0f0f0; }
                     .big-qty { font-size: 40px; font-weight: 900; display: block;}
                     .label-text { font-size: 14px; text-transform: uppercase; color: #555; }
-                    
-                    /* 🚨 ESTO ES LO NUEVO: LA TABLA DE MOVIMIENTOS */
                     .movimientos { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
                     .movimientos th { background: #333; color: white; padding: 5px; text-align: left; }
-                    .movimientos td { border: 1px solid #999; height: 25px; } /* Altura para escribir a mano */
+                    .movimientos td { border: 1px solid #999; height: 25px; }
                 </style>
             </head>
             <body>
@@ -72,12 +110,10 @@ const imprimirEtiqueta = (item: ProduccionItem) => {
                     <h1>ESTRUPLAST S.A.</h1>
                     <small>Etiqueta de Control de Lote</small>
                 </div>
-
                 <div style="text-align: left;">
                     <span class="label-text">Producto:</span><br>
                     <strong style="font-size: 22px;">${item.producto}</strong>
                 </div>
-
                 <div class="main-data">
                     <div>
                         <span class="label-text">Cantidad Inicial</span>
@@ -88,28 +124,17 @@ const imprimirEtiqueta = (item: ProduccionItem) => {
                         <span class="big-qty">${item.lote}</span>
                     </div>
                 </div>
-
                 <div style="text-align: left; margin-bottom: 15px;">
                     <strong>Fecha:</strong> ${new Date(item.fecha).toLocaleDateString()} &nbsp;|&nbsp; 
                     <strong>Operario:</strong> ${item.operario}
                 </div>
-
                 <div style="text-align: left; border-top: 2px dashed #000; padding-top: 10px;">
-                    <strong>📋 CONTROL DE SALIDAS PARCIALES (Escribir al retirar)</strong>
+                    <strong>📋 CONTROL DE SALIDAS PARCIALES</strong>
                     <table class="movimientos">
                         <thead>
-                            <tr>
-                                <th width="30%">Fecha</th>
-                                <th width="20%">Retira</th>
-                                <th width="20%">Quedan</th>
-                                <th width="30%">Firma</th>
-                            </tr>
+                            <tr><th width="30%">Fecha</th><th width="20%">Retira</th><th width="20%">Quedan</th><th width="30%">Firma</th></tr>
                         </thead>
                         <tbody>
-                            <tr><td></td><td></td><td></td><td></td></tr>
-                            <tr><td></td><td></td><td></td><td></td></tr>
-                            <tr><td></td><td></td><td></td><td></td></tr>
-                            <tr><td></td><td></td><td></td><td></td></tr>
                             <tr><td></td><td></td><td></td><td></td></tr>
                             <tr><td></td><td></td><td></td><td></td></tr>
                             <tr><td></td><td></td><td></td><td></td></tr>
@@ -122,7 +147,6 @@ const imprimirEtiqueta = (item: ProduccionItem) => {
             </body>
             </html>
         `);
-        
         ventana.document.close();
         ventana.focus();
         setTimeout(() => { ventana.print(); ventana.close(); }, 500);
@@ -157,43 +181,51 @@ onMounted(() => {
           <thead>
             <tr>
               <th>Fecha/Hora</th>
-              <th>Turno</th>
+              <th>Estado</th> <th>Turno</th>
               <th>Operario</th>
               <th>Producto</th>
               <th>Lote</th>
               <th>Cant.</th>
               <th>Kilos</th>
-              <th>Acción</th> </tr>
+              <th>Acción</th> 
+            </tr>
           </thead>
           <tbody>
             <tr v-for="p in producciones" :key="p.id">
-              <td>{{ new Date(p.fecha).toLocaleDateString() }} <small>{{ new Date(p.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</small></td>
+              <td>
+                  {{ new Date(p.fecha).toLocaleDateString() }} 
+                  <small>{{ new Date(p.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</small>
+              </td>
+
+              <td>
+                  <span :class="obtenerClaseEstado(p.estado)">
+                      {{ obtenerTextoEstado(p.estado) }}
+                  </span>
+              </td>
+
               <td><span class="badge-turno">{{ p.turno }}</span></td>
               <td>{{ p.operario }}</td>
               <td class="texto-prod">{{ p.producto }}</td>
               <td class="mono">{{ p.lote }}</td>
               <td class="numero">{{ p.cantidad }}</td>
               <td class="numero">{{ p.kilos }} kg</td>
-              <td style="text-align: center;">
-    
+              
+              <td class="celda-acciones">
     <button 
-        v-if="p.estado !== 'Finalizada'"
-        @click="finalizarOrden(p.id)" 
-        class="btn-check" 
+        @click="p.estado !== 2 ? finalizarOrden(p.id) : null" 
+        class="btn-check"
+        :class="{ 'invisible': p.estado === 2 }" 
         title="Finalizar Producción">
         ✅
     </button>
-    
-    &nbsp; 
 
     <button @click="imprimirEtiqueta(p)" class="btn-print" title="Imprimir Etiqueta">
         🖨️
     </button>
-
 </td>
             </tr>
             <tr v-if="producciones.length === 0 && !cargando">
-                <td colspan="8" class="vacio">No hay registros en estas fechas.</td>
+                <td colspan="9" class="vacio">No hay registros en estas fechas.</td>
             </tr>
           </tbody>
         </table>
@@ -208,7 +240,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Tus estilos originales se mantienen igual, agrego solo el botón de print */
 .historial-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
 
 .cabecera-historial { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 15px; }
@@ -220,7 +251,7 @@ onMounted(() => {
 .btn-buscar:hover { background: #2980b9; }
 
 .tabla-scroll { overflow-x: auto; }
-.tabla-produccion { width: 100%; border-collapse: collapse; min-width: 600px; }
+.tabla-produccion { width: 100%; border-collapse: collapse; min-width: 800px; } /* Ajusté min-width */
 .tabla-produccion th { background-color: #2c3e50; color: white; padding: 10px; text-align: left; font-size: 0.9em; }
 .tabla-produccion td { padding: 10px; border-bottom: 1px solid #eee; color: #555; }
 .tabla-produccion tr:hover { background-color: #f1f1f1; }
@@ -233,15 +264,48 @@ onMounted(() => {
 
 .totales-pie { margin-top: 15px; text-align: right; font-size: 1.1em; border-top: 2px solid #2c3e50; padding-top: 10px; color: #2c3e50; }
 
-/* Estilo botón imprimir */
+/* --- ESTILOS NUEVOS --- */
+
 .btn-print {
-    background: white;
-    border: 1px solid #ccc;
-    cursor: pointer;
-    font-size: 1.2em;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: transform 0.2s;
+    background: white; border: 1px solid #ccc; cursor: pointer;
+    font-size: 1.2em; padding: 2px 6px; border-radius: 4px; transition: transform 0.2s;
 }
 .btn-print:hover { transform: scale(1.1); background: #f0f8ff; border-color: #3498db; }
+
+/* Botón Check */
+.btn-check {
+    background: white; border: 1px solid #ccc; border-radius: 4px;
+    cursor: pointer; font-size: 1.2em; padding: 2px 6px; margin-right: 5px;
+    color: green; transition: transform 0.2s;
+}
+.btn-check:hover { transform: scale(1.1); background: #e8f5e9; border-color: green; }
+
+/* Estado PENDIENTE (Naranja) */
+.badge-pendiente {
+    background-color: #fff3cd; color: #856404; padding: 4px 8px;
+    border-radius: 20px; font-size: 0.8em; font-weight: bold; border: 1px solid #ffeeba;
+}
+
+/* Estado FINALIZADO (Verde) */
+.badge-finalizado {
+    background-color: #d4edda; color: #155724; padding: 4px 8px;
+    border-radius: 20px; font-size: 0.8em; font-weight: bold; border: 1px solid #c3e6cb;
+}
+/* Alineación de la celda */
+.celda-acciones {
+    text-align: center;
+    white-space: nowrap; /* Evita que los botones se pongan uno abajo del otro */
+}
+
+/* Espacio entre botones */
+.btn-check {
+    margin-right: 10px; /* Separación fija */
+}
+
+/* CLASE MAGICA: Oculta pero mantiene el espacio */
+.invisible {
+    visibility: hidden;
+    pointer-events: none; /* Asegura que no se pueda clickear lo invisible */
+    cursor: default;
+}
 </style>

@@ -4,6 +4,7 @@ using EstruplastERP.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EstruplastERP.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251218144408_Inicial")]
+    partial class Inicial
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -203,10 +206,6 @@ namespace EstruplastERP.Data.Migrations
                     b.Property<DateTime>("Fecha")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("LoteProveedor")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
                     b.Property<string>("NumeroRemito")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -395,14 +394,6 @@ namespace EstruplastERP.Data.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<decimal?>("EspesorMaximo")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("EspesorMinimo")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("datetime2");
 
@@ -456,7 +447,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3856),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3155),
                             Largo = 0m,
                             Nombre = "Poliestireno Alto Impacto (AI/PAI)",
                             PesoEspecifico = 1.1m,
@@ -474,7 +465,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3862),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3160),
                             Largo = 0m,
                             Nombre = "ABS (Acrilonitrilo Butadieno Estireno)",
                             PesoEspecifico = 1.1m,
@@ -492,7 +483,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3866),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3163),
                             Largo = 0m,
                             Nombre = "Polipropileno (PP)",
                             PesoEspecifico = 0.91m,
@@ -510,7 +501,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3869),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3167),
                             Largo = 0m,
                             Nombre = "Polietileno Alta Densidad (PEAD)",
                             PesoEspecifico = 0.95m,
@@ -528,53 +519,13 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3873),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3171),
                             Largo = 0m,
                             Nombre = "Polietileno Baja Densidad (PEBD)",
                             PesoEspecifico = 0.92m,
                             PrecioCosto = 0m,
                             StockActual = 1000m,
                             StockMinimo = 1000m
-                        },
-                        new
-                        {
-                            Id = 6,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-TUTI-FINO",
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            EspesorMaximo = 0.90m,
-                            EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3876),
-                            Largo = 0m,
-                            Nombre = "Recuperado (Tuti) Fino",
-                            PesoEspecifico = 1.1m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 500m
-                        },
-                        new
-                        {
-                            Id = 15,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-TUTI-GRUESO",
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            EspesorMaximo = 5.00m,
-                            EspesorMinimo = 0.91m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3881),
-                            Largo = 0m,
-                            Nombre = "Recuperado (Tuti) Grueso",
-                            PesoEspecifico = 1.1m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 500m
                         },
                         new
                         {
@@ -586,7 +537,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3887),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3174),
                             Largo = 0m,
                             Nombre = "Bioplástico Compostable (Biolam)",
                             PesoEspecifico = 1.25m,
@@ -604,7 +555,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3890),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3182),
                             Largo = 0m,
                             Nombre = "Masterbatch Blanco (Titanio)",
                             PesoEspecifico = 1.80m,
@@ -622,7 +573,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3894),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3187),
                             Largo = 0m,
                             Nombre = "Masterbatch Negro",
                             PesoEspecifico = 1.20m,
@@ -640,7 +591,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3898),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3190),
                             Largo = 0m,
                             Nombre = "Aditivo Genérico",
                             PesoEspecifico = 0.95m,
@@ -658,7 +609,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3901),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3194),
                             Largo = 0m,
                             Nombre = "Masterbatch Rojo",
                             PesoEspecifico = 1.20m,
@@ -676,7 +627,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3904),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3197),
                             Largo = 0m,
                             Nombre = "Masterbatch Azul",
                             PesoEspecifico = 1.20m,
@@ -694,7 +645,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3906),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3200),
                             Largo = 0m,
                             Nombre = "Masterbatch Verde",
                             PesoEspecifico = 1.20m,
@@ -712,7 +663,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(3909),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3279),
                             Largo = 0m,
                             Nombre = "Masterbatch Amarillo",
                             PesoEspecifico = 1.20m,
@@ -730,7 +681,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4005),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3283),
                             Largo = 0m,
                             Nombre = "Aditivo Brillo",
                             PesoEspecifico = 0.92m,
@@ -748,7 +699,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4009),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3286),
                             Largo = 0m,
                             Nombre = "Estearato de Zinc",
                             PesoEspecifico = 0.35m,
@@ -766,7 +717,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4012),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3291),
                             Largo = 0m,
                             Nombre = "Carga Mineral (Carbonato)",
                             PesoEspecifico = 1.80m,
@@ -784,7 +735,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4015),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3294),
                             Largo = 0m,
                             Nombre = "Aditivo UV",
                             PesoEspecifico = 0.95m,
@@ -802,7 +753,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = true,
                             EsProductoTerminado = false,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4018),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3297),
                             Largo = 0m,
                             Nombre = "Aditivo Caucho",
                             PesoEspecifico = 0.94m,
@@ -820,7 +771,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4021),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3300),
                             Largo = 0m,
                             Nombre = "Material PAI Blanco",
                             PesoEspecifico = 0m,
@@ -838,7 +789,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4024),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3303),
                             Largo = 0m,
                             Nombre = "Material PAI Negro",
                             PesoEspecifico = 0m,
@@ -856,7 +807,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4027),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3306),
                             Largo = 0m,
                             Nombre = "Material PAI Color",
                             PesoEspecifico = 0m,
@@ -874,7 +825,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4030),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3309),
                             Largo = 0m,
                             Nombre = "Material PAI Bicapa",
                             PesoEspecifico = 0m,
@@ -892,7 +843,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4033),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3312),
                             Largo = 0m,
                             Nombre = "Material PAI Tricapa",
                             PesoEspecifico = 0m,
@@ -910,7 +861,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4035),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3315),
                             Largo = 0m,
                             Nombre = "Material ABS Blanco",
                             PesoEspecifico = 0m,
@@ -928,7 +879,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4038),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3317),
                             Largo = 0m,
                             Nombre = "Material ABS Negro/Color",
                             PesoEspecifico = 0m,
@@ -946,7 +897,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4040),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3321),
                             Largo = 0m,
                             Nombre = "Material PP",
                             PesoEspecifico = 0m,
@@ -964,7 +915,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4043),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3324),
                             Largo = 0m,
                             Nombre = "Material PEAD",
                             PesoEspecifico = 0m,
@@ -982,7 +933,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4046),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3327),
                             Largo = 0m,
                             Nombre = "Material PEBD",
                             PesoEspecifico = 0m,
@@ -1000,7 +951,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4048),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3330),
                             Largo = 0m,
                             Nombre = "Material Biolam",
                             PesoEspecifico = 0m,
@@ -1018,7 +969,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4053),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3332),
                             Largo = 0m,
                             Nombre = "Lámina PET (Reventa)",
                             PesoEspecifico = 0m,
@@ -1036,7 +987,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0.5m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4057),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3336),
                             Largo = 2000m,
                             Nombre = "Lámina PAI Blanco 1000x2000x0.5 mm",
                             PesoEspecifico = 1.05m,
@@ -1055,7 +1006,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4062),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3342),
                             Largo = 2000m,
                             Nombre = "Lámina PAI Blanco 1000x2000x1.0 mm",
                             PesoEspecifico = 1.05m,
@@ -1074,7 +1025,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.5m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4066),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3346),
                             Largo = 2000m,
                             Nombre = "Lámina PAI Blanco 1000x2000x1.5 mm",
                             PesoEspecifico = 1.05m,
@@ -1093,7 +1044,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0.5m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4071),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3350),
                             Largo = 2440m,
                             Nombre = "Lámina PAI Blanco 1220x2440x0.5 mm",
                             PesoEspecifico = 1.05m,
@@ -1112,7 +1063,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4076),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3356),
                             Largo = 2440m,
                             Nombre = "Lámina PAI Blanco 1220x2440x1.0 mm",
                             PesoEspecifico = 1.05m,
@@ -1131,7 +1082,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.5m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4080),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3360),
                             Largo = 2440m,
                             Nombre = "Lámina PAI Blanco 1220x2440x1.5 mm",
                             PesoEspecifico = 1.05m,
@@ -1150,7 +1101,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4084),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3364),
                             Largo = 2000m,
                             Nombre = "Lámina PAI Bicapa 1000x2000x1.0 mm",
                             PesoEspecifico = 1.05m,
@@ -1169,7 +1120,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.5m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4087),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3368),
                             Largo = 2000m,
                             Nombre = "Lámina PAI Bicapa 1000x2000x1.5 mm",
                             PesoEspecifico = 1.05m,
@@ -1188,7 +1139,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4091),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3372),
                             Largo = 2440m,
                             Nombre = "Lámina PAI Bicapa 1220x2440x1.0 mm",
                             PesoEspecifico = 1.05m,
@@ -1207,7 +1158,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.5m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4193),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3376),
                             Largo = 2440m,
                             Nombre = "Lámina PAI Bicapa 1220x2440x1.5 mm",
                             PesoEspecifico = 1.05m,
@@ -1226,7 +1177,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4198),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3381),
                             Largo = 2000m,
                             Nombre = "Lámina PAI Tricapa 1000x2000x1.0 mm",
                             PesoEspecifico = 1.05m,
@@ -1245,7 +1196,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.5m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4202),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3385),
                             Largo = 2000m,
                             Nombre = "Lámina PAI Tricapa 1000x2000x1.5 mm",
                             PesoEspecifico = 1.05m,
@@ -1264,7 +1215,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.0m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4206),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3389),
                             Largo = 2440m,
                             Nombre = "Lámina PAI Tricapa 1220x2440x1.0 mm",
                             PesoEspecifico = 1.05m,
@@ -1283,7 +1234,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.5m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4210),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3458),
                             Largo = 2440m,
                             Nombre = "Lámina PAI Tricapa 1220x2440x1.5 mm",
                             PesoEspecifico = 1.05m,
@@ -1302,7 +1253,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0.50m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4214),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3462),
                             Largo = 2000m,
                             Nombre = "Lámina PET 1000x2000x0.50 mm",
                             PesoEspecifico = 1.38m,
@@ -1321,7 +1272,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0.80m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4219),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3467),
                             Largo = 2000m,
                             Nombre = "Lámina PET 1000x2000x0.80 mm",
                             PesoEspecifico = 1.38m,
@@ -1340,7 +1291,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.00m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4223),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3472),
                             Largo = 2000m,
                             Nombre = "Lámina PET 1000x2000x1.00 mm",
                             PesoEspecifico = 1.38m,
@@ -1359,7 +1310,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0.50m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4228),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3476),
                             Largo = 2000m,
                             Nombre = "Lámina BIOLAM 1000x2000x0.50 mm",
                             PesoEspecifico = 1.25m,
@@ -1378,7 +1329,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 0.70m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4232),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3480),
                             Largo = 2000m,
                             Nombre = "Lámina BIOLAM 1000x2000x0.70 mm",
                             PesoEspecifico = 1.25m,
@@ -1397,7 +1348,7 @@ namespace EstruplastERP.Data.Migrations
                             EsMateriaPrima = false,
                             EsProductoTerminado = true,
                             Espesor = 1.00m,
-                            FechaCreacion = new DateTime(2025, 12, 18, 14, 41, 30, 956, DateTimeKind.Local).AddTicks(4236),
+                            FechaCreacion = new DateTime(2025, 12, 18, 11, 44, 4, 795, DateTimeKind.Local).AddTicks(3484),
                             Largo = 2000m,
                             Nombre = "Lámina BIOLAM 1000x2000x1.00 mm",
                             PesoEspecifico = 1.25m,
@@ -1416,37 +1367,27 @@ namespace EstruplastERP.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<bool>("Activo")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("ContactoNombre")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                    b.Property<string>("Contacto")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Cuit")
+                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<string>("Direccion")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
                     b.Property<string>("Email")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Observaciones")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("RazonSocial")
                         .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Telefono")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 

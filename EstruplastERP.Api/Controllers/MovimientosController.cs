@@ -17,23 +17,29 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
-        // ==========================================
-        // 1. GET: Historial (Lectura)
-        // ==========================================
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetHistorial()
         {
             var historial = await _context.Movimientos
                 .Include(m => m.Producto)
+                .Include(m => m.Proveedor)
                 .OrderByDescending(m => m.Fecha)
                 .Take(100)
                 .Select(m => new
                 {
                     m.Id,
                     Fecha = m.Fecha.ToString("dd/MM/yyyy HH:mm"),
+
+                    // Lógica visual: Si tiene producto, muestra nombre.
                     Producto = m.Producto != null ? m.Producto.Nombre : "Producto eliminado",
+
+                    // Lógica visual: Si es compra, mostramos la Razón Social. Si es otra cosa, mostramos "-"
+                    Proveedor = m.Proveedor != null ? m.Proveedor.RazonSocial : "-",
+
                     m.Cantidad,
                     m.TipoMovimiento,
+                    m.PrecioUnitario,
+                    m.LoteProveedor,
                     m.Observacion
                 })
                 .ToListAsync();

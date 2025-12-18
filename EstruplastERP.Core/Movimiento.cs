@@ -12,7 +12,6 @@ namespace EstruplastERP.Core
         [ForeignKey("ProductoId")]
         public Producto? Producto { get; set; }
 
-        // ¿Cuánto? (Positivo = Entrada, Negativo = Salida)
         [Column(TypeName = "decimal(18,2)")]
         public decimal Cantidad { get; set; }
 
@@ -31,8 +30,23 @@ namespace EstruplastERP.Core
         [ForeignKey("EmpleadoId")]
         public Empleado? Empleado { get; set; }
 
-        public int? ClienteId { get; set; } // Opcional, porque una compra de insumos no tiene cliente
+        public int? ClienteId { get; set; }
         [ForeignKey("ClienteId")]
         public Cliente? Cliente { get; set; }
+        public int? ProveedorId { get; set; }
+
+        [ForeignKey("ProveedorId")]
+        public Proveedor? Proveedor { get; set; }
+
+        [MaxLength(50)]
+        public string? NumeroRemito { get; set; }
+        [MaxLength(50)]
+        public string? LoteProveedor { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal PrecioUnitario { get; set; } = 0;
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal PrecioTotal { get; set; } = 0;
     }
 }

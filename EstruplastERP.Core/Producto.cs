@@ -31,6 +31,8 @@ namespace EstruplastERP.Core
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal Espesor { get; set; } // Ej: 2,5
+        public decimal? EspesorMinimo { get; set; }
+        public decimal? EspesorMaximo { get; set; }
 
         [Column(TypeName = "decimal(18,4)")]
         public decimal PesoEspecifico { get; set; }

@@ -44,7 +44,9 @@ namespace EstruplastERP.Api.Controllers
                     Producto = o.Producto.Nombre,
                     Lote = "L-" + o.Id.ToString(),
                     o.Cantidad,
-                    Kilos = o.KilosEstimados
+                    Kilos = o.KilosEstimados,
+                    estado = (int)o.Estado
+                    
                 })
                 .ToListAsync();
 
@@ -66,33 +68,24 @@ namespace EstruplastERP.Api.Controllers
             return orden;
         }
 
-        // POST: api/Ordenes (Crear Planificación Compleja)
         [HttpPost]
         public async Task<ActionResult<OrdenProduccion>> PostOrden(CrearOrdenDto dto)
         {
-            // 1. Validaciones
             if (dto.Kilos <= 0) return BadRequest("Los kilos totales deben ser mayores a 0.");
-
-            // 2. Mapeo DTO -> Entidad
             var nuevaOrden = new OrdenProduccion
             {
-                ProductoId = dto.ProductoTerminadoId, // Mapeamos el ID que viene del front
+                ProductoId = dto.ProductoTerminadoId,
                 ClienteId = dto.ClienteId,
                 Cantidad = dto.Cantidad,
-
-                // Datos nuevos del formulario avanzado
                 EmpleadoId = dto.EmpleadoId,
                 Turno = dto.Turno,
                 Observacion = dto.Observacion,
                 KilosEstimados = dto.Kilos,
-
-                // Configuración automática
                 Estado = EstadoOrden.Pendiente,
                 FechaCreacion = DateTime.Now,
                 FechaFin = null
             };
 
-            // 3. Guardar los Consumos (La Receta calculada)
             if (dto.Consumos != null && dto.Consumos.Count > 0)
             {
                 foreach (var consumoDto in dto.Consumos)
@@ -102,21 +95,29 @@ namespace EstruplastERP.Api.Controllers
                         MateriaPrimaId = consumoDto.MateriaPrimaId,
                         CantidadKilos = consumoDto.CantidadKilos
                     });
+
+                    var insumoDb = await _context.Productos.FindAsync(consumoDto.MateriaPrimaId);
+
+                    if (insumoDb != null)
+                    {
+                        // Restamos la cantidad consumida al stock actual
+                        insumoDb.StockActual -= consumoDto.CantidadKilos;
+                        if (insumoDb.StockActual < 0) return BadRequest($"Stock insuficiente de {insumoDb.Nombre}");
+                    }
                 }
             }
 
-            // 4. Guardar en Base de Datos (EF guarda Orden + Consumos en una sola transacción)
             _context.Ordenes.Add(nuevaOrden);
             await _context.SaveChangesAsync();
+
             var resultadoSeguro = new
             {
                 nuevaOrden.Id,
                 nuevaOrden.FechaCreacion,
                 nuevaOrden.Cantidad,
-                mensaje = "Orden creada exitosamente"
+                mensaje = "Orden creada exitosamente y stock descontado."
             };
 
-            // Devolvemos 'resultadoSeguro' en vez de 'nuevaOrden'
             return CreatedAtAction("GetOrden", new { id = nuevaOrden.Id }, resultadoSeguro);
         }
 
@@ -124,33 +125,28 @@ namespace EstruplastERP.Api.Controllers
         [HttpPost("finalizar/{id}")]
         public async Task<IActionResult> FinalizarOrden(int id)
         {
+            // 1. Buscamos la orden
             var orden = await _context.Ordenes
-                .Include(o => o.Producto)
+                .Include(o => o.Producto) // Importante para sumar el stock
                 .FirstOrDefaultAsync(o => o.Id == id);
 
             if (orden == null) return NotFound("Orden no encontrada.");
 
-            // Validaciones de Estado (Usando el Enum)
+            // 2. Validamos que no esté ya finalizada
             if (orden.Estado == EstadoOrden.Finalizada)
-                return BadRequest("Esta orden ya fue finalizada anteriormente.");
+                return BadRequest("Esta orden ya fue finalizada.");
 
-            if (orden.Estado == EstadoOrden.Cancelada)
-                return BadRequest("No puedes finalizar una orden cancelada.");
-
-            // Actualizar Estado
+            // 3. Cambios de Estado
             orden.Estado = EstadoOrden.Finalizada;
             orden.FechaFin = DateTime.Now;
 
-            // IMPACTO EN STOCK PRODUCTO TERMINADO
+            // 4. ACTUALIZAMOS STOCK (Aquí ocurre la magia)
             if (orden.Producto != null)
             {
-                orden.Producto.StockActual += orden.Cantidad;
+                orden.Producto.StockActual += orden.Cantidad; // Sumamos la cantidad fabricada
             }
 
-            // OJO: Aquí deberíamos descontar el stock de Materia Prima?
-            // Si quieres hacerlo automático, avísame y agregamos esa lógica aquí.
-            // Por ahora solo suma el producto terminado.
-
+            // 5. Guardamos cambios
             await _context.SaveChangesAsync();
 
             return Ok(new { mensaje = "Orden finalizada y stock actualizado." });

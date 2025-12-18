@@ -2,31 +2,41 @@
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 
-// --- 1. INTERFACES (Tipado Estricto) ---
+// --- 1. INTERFACES ---
 interface Insumo {
     id: number;
     nombre: string;
     stockActual: number;
-    // Agrega otras propiedades si las necesitas
+}
+
+interface Proveedor {
+    id: number;
+    razonSocial: string;
 }
 
 interface Movimiento {
     id: number;
     fecha: string;
-    producto: string; // Nombre del producto
+    producto: string;
     cantidad: number;
+    proveedor: string; 
+    precioUnitario: number;
+    loteProveedor: string;
     tipoMovimiento: string;
 }
 
 // --- ESTADO ---
 const listaInsumos = ref<Insumo[]>([])
+const listaProveedores = ref<Proveedor[]>([]) 
 const listaUltimosMovimientos = ref<Movimiento[]>([]) 
 
 const form = ref({
-  productoId: '' as number | '', // Puede estar vacío al inicio
+  productoId: '' as number | '', 
+  proveedorId: '' as number | '', 
   cantidad: 0,
-  proveedor: '',
-  costoTotalFactura: 0
+  precioUnitario: 0, // <--- CAMBIO: Ahora el usuario ingresa esto
+  numeroRemito: '',
+  lote: '' 
 })
 
 const mensaje = ref('')
@@ -40,78 +50,83 @@ const getAuthConfig = () => {
     return { headers: { Authorization: `Bearer ${token}` } };
 };
 
-// Calculamos el unitario automáticamente
-const precioUnitarioCalculado = computed(() => {
-    if (form.value.cantidad > 0 && form.value.costoTotalFactura > 0) {
-        return (form.value.costoTotalFactura / form.value.cantidad).toFixed(2)
+// CAMBIO: Calculamos el TOTAL DE FACTURA (Solo visual)
+const totalEstimadoFactura = computed(() => {
+    if (form.value.cantidad > 0 && form.value.precioUnitario > 0) {
+        return (form.value.cantidad * form.value.precioUnitario).toFixed(2)
     }
     return "0.00"
 })
 
 onMounted(async () => {
   await cargarInsumos();
+  await cargarProveedores();
   await cargarHistorialReciente(); 
 })
 
 // --- CARGA DE DATOS ---
 async function cargarInsumos() {
     try {
-        const res = await axios.get(`${apiUrl}/Stock/materias-primas`, getAuthConfig())
+        const res = await axios.get(`${apiUrl}/Productos/materias-primas`, getAuthConfig())
         listaInsumos.value = res.data
     } catch (e: any) { 
-        console.error("Error cargando insumos:", e)
-        if (e.response?.status === 401) error.value = "Sesión expirada."
+        console.error("Error cargando insumos", e)
+    }
+}
+
+async function cargarProveedores() {
+    try {
+        const res = await axios.get(`${apiUrl}/Proveedores`, getAuthConfig())
+        listaProveedores.value = res.data
+    } catch (e: any) {
+        console.error("Error cargando proveedores", e)
+        error.value = "No se pudieron cargar los proveedores."
     }
 }
 
 async function cargarHistorialReciente() {
     try {
         const res = await axios.get(`${apiUrl}/Movimientos`, getAuthConfig())
-        const todos: Movimiento[] = res.data
-        
-        // Filtramos solo ENTRADAS y mostramos las ultimas 5
-        // TypeScript ahora sabe que 'm' es un Movimiento
-        listaUltimosMovimientos.value = todos
-            .filter(m => m.tipoMovimiento.toUpperCase().includes("ENTRADA") || m.tipoMovimiento.toUpperCase().includes("INGRESO"))
+        listaUltimosMovimientos.value = res.data
+            .filter((m: Movimiento) => m.tipoMovimiento === 'COMPRA' || m.tipoMovimiento.includes('ENTRADA'))
             .slice(0, 5) 
             
     } catch (e) { console.error("Error cargando historial", e) }
 }
 
-// --- REGISTRAR INGRESO ---
-async function registrarIngreso() {
+// --- REGISTRAR INGRESO (COMPRA) ---
+async function registrarCompra() {
   mensaje.value = ''
   error.value = ''
 
-  if (!form.value.productoId || form.value.cantidad <= 0) {
-    error.value = "Seleccione un producto y una cantidad válida."
-    return
-  }
+  // Validaciones
+  if (!form.value.productoId) { error.value = "Seleccione un producto."; return; }
+  if (!form.value.proveedorId) { error.value = "Seleccione un proveedor."; return; }
+  if (form.value.cantidad <= 0) { error.value = "La cantidad debe ser mayor a 0."; return; }
+  // Validación extra opcional:
+  if (form.value.precioUnitario < 0) { error.value = "El precio no puede ser negativo."; return; }
 
-  let precioUnitarioParaEnviar = 0
-  if (form.value.costoTotalFactura > 0) {
-      precioUnitarioParaEnviar = form.value.costoTotalFactura / form.value.cantidad
-  }
-
+  // Payload directo (Ya no calculamos nada aquí)
   const payload = {
-      productoId: Number(form.value.productoId), // Aseguramos que sea número
+      productoId: Number(form.value.productoId),
+      proveedorId: Number(form.value.proveedorId),
       cantidad: form.value.cantidad,
-      proveedor: form.value.proveedor,
-      nuevoPrecio: precioUnitarioParaEnviar 
+      precioUnitario: form.value.precioUnitario, // Enviamos directo lo que escribió el usuario
+      numeroRemito: form.value.numeroRemito,
+      lote: form.value.lote,
+      observacion: `Ingreso Web - ${new Date().toLocaleDateString()}`
   }
 
   try {
-    await axios.post(`${apiUrl}/Stock/ingresar`, payload, getAuthConfig())
+    await axios.post(`${apiUrl}/Compras`, payload, getAuthConfig())
 
-    mensaje.value = `✅ Ingreso guardado. Stock actualizado.`
+    mensaje.value = `✅ Compra registrada. Stock y costos actualizados.`
     
-    // Limpiamos form
+    // Limpieza
     form.value.cantidad = 0
-    form.value.costoTotalFactura = 0
-    form.value.proveedor = ''
-    // Nota: No limpiamos el productoId por si quiere cargar otro lote del mismo
+    form.value.precioUnitario = 0 // Reseteamos precio
+    form.value.lote = ''
     
-    // Recargamos datos para ver cambios al instante
     await cargarInsumos()
     await cargarHistorialReciente()
 
@@ -122,19 +137,17 @@ async function registrarIngreso() {
   }
 }
 
-// --- ELIMINAR (DESHACER) ---
+// --- ELIMINAR ---
 async function eliminarMovimiento(id: number) {
-    if(!confirm("⚠️ ¿Te equivocaste? \nAl eliminar este ingreso, se descontará el stock automáticamente.")) return;
+    if(!confirm("⚠️ ¿Eliminar este registro? Se revertirá el stock.")) return;
 
     try {
         await axios.delete(`${apiUrl}/Movimientos/eliminar/${id}`, getAuthConfig());
-        
-        alert("✅ Ingreso eliminado correctamente.");
-        await cargarHistorialReciente(); // Refrescar lista
-        await cargarInsumos(); // Refrescar stock en el select
-
+        alert("✅ Eliminado correctamente.");
+        await cargarHistorialReciente();
+        await cargarInsumos();
     } catch (e: any) { 
-        alert("Error al eliminar: " + (e.response?.data?.mensaje || e.message)); 
+        alert("Error: " + (e.response?.data?.mensaje || e.message)); 
     }
 }
 </script>
@@ -143,69 +156,91 @@ async function eliminarMovimiento(id: number) {
   <div class="contenedor-ingresos">
       
       <div class="hoja-stock">
-        <h3>🚚 Ingreso de Mercadería (Compras)</h3>
+        <h3>🏭 Registro de Compras (Ingreso)</h3>
         
         <div class="campo">
-          <label>Materia Prima:</label>
-          <select v-model="form.productoId">
-            <option value="" disabled>Seleccione Insumo...</option>
-            <option v-for="p in listaInsumos" :key="p.id" :value="p.id">
-                {{ p.nombre }} (Stock actual: {{ p.stockActual }})
+          <label>Proveedor:</label>
+          <select v-model="form.proveedorId" :class="{'input-vacio': !form.proveedorId}">
+            <option value="" disabled>-- Seleccione Proveedor --</option>
+            <option v-for="prov in listaProveedores" :key="prov.id" :value="prov.id">
+                {{ prov.razonSocial }}
             </option>
           </select>
         </div>
 
-        <div class="campo">
-          <label>Cantidad (Kg/Uni):</label>
-          <input type="number" v-model="form.cantidad" placeholder="0" min="0" step="0.1" />
+        <div class="fila-doble">
+             <div class="campo mitad">
+                <label>N° Remito / Factura:</label>
+                <input type="text" v-model="form.numeroRemito" placeholder="Ej: 0001-000452" />
+            </div>
+             <div class="campo mitad">
+                <label>Lote Proveedor:</label>
+                <input type="text" v-model="form.lote" placeholder="Ej: L-2024-X" />
+            </div>
         </div>
 
+        <hr class="separador">
+
         <div class="campo">
-          <label>Total de la Factura ($):</label>
-          <div style="display: flex; gap: 5px; align-items: center;">
-              <input type="number" v-model="form.costoTotalFactura" placeholder="Monto total pagado" min="0" step="0.01" />
-          </div>
+          <label>Materia Prima:</label>
+          <select v-model="form.productoId">
+            <option value="" disabled>-- Seleccione Material --</option>
+            <option v-for="p in listaInsumos" :key="p.id" :value="p.id">
+                {{ p.nombre }} (Stock: {{ p.stockActual }})
+            </option>
+          </select>
+        </div>
+
+        <div class="fila-doble">
+            <div class="campo mitad">
+                <label>Cantidad (Kg):</label>
+                <input type="number" v-model="form.cantidad" placeholder="0" min="0" step="0.1" />
+            </div>
+
+            <div class="campo mitad">
+                <label>Precio Unitario ($ / Kg):</label>
+                <input type="number" v-model="form.precioUnitario" placeholder="$0.00" min="0" step="0.01" />
+            </div>
+        </div>
           
-          <small v-if="form.costoTotalFactura > 0" style="color: #27ae60; font-weight: bold;">
-              ℹ️ Costo Unitario resultante: ${{ precioUnitarioCalculado }} / kg
-          </small>
+        <div class="info-costo" v-if="form.cantidad > 0 && form.precioUnitario > 0">
+              💰 Total Estimado Factura: <strong>${{ totalEstimadoFactura }}</strong>
         </div>
 
-        <div class="campo">
-          <label>Remito / Proveedor:</label>
-          <input type="text" v-model="form.proveedor" placeholder="Ej: Dow Chemical - Remito 999" />
-        </div>
-
-        <button class="btn-ingreso" @click="registrarIngreso">📥 INGRESAR AL DEPÓSITO</button>
+        <button class="btn-ingreso" @click="registrarCompra">📥 REGISTRAR COMPRA</button>
 
         <p v-if="mensaje" class="exito">{{ mensaje }}</p>
         <p v-if="error" class="error">{{ error }}</p>
       </div>
 
       <div class="historial-rapido">
-          <h4>🕒 Últimos Ingresos Cargados</h4>
+          <h4>📋 Últimas Compras</h4>
           <table class="tabla-mini">
               <thead>
                   <tr>
                       <th>Fecha</th>
+                      <th>Proveedor</th>
                       <th>Producto</th>
+                      <th>Lote</th>
                       <th>Cant.</th>
-                      <th>Acción</th>
+                      <th>$ Unit.</th>
+                      <th></th>
                   </tr>
               </thead>
               <tbody>
                   <tr v-for="mov in listaUltimosMovimientos" :key="mov.id">
-                      <td>{{ mov.fecha?.split(' ')[0] || '-' }}</td> 
+                      <td>{{ mov.fecha?.split(' ')[0] }}</td> 
+                      <td>{{ mov.proveedor || '-' }}</td> 
                       <td>{{ mov.producto }}</td>
-                      <td style="font-weight:bold; color:green;">+{{ mov.cantidad }}</td>
+                      <td style="font-size: 0.8em; color:#666;">{{ mov.loteProveedor || '-' }}</td>
+                      <td style="font-weight:bold; color:green;">{{ mov.cantidad }}</td>
+                      <td>${{ mov.precioUnitario }}</td>
                       <td>
-                          <button @click="eliminarMovimiento(mov.id)" class="btn-undo" title="Deshacer ingreso">
-                              ↩️ Deshacer
-                          </button>
+                          <button @click="eliminarMovimiento(mov.id)" class="btn-undo">✖</button>
                       </td>
                   </tr>
                   <tr v-if="listaUltimosMovimientos.length === 0">
-                      <td colspan="4" style="text-align:center; color:#888;">No hay cargas recientes.</td>
+                      <td colspan="7" style="text-align:center; padding: 20px;">Sin movimientos recientes.</td>
                   </tr>
               </tbody>
           </table>
@@ -215,49 +250,57 @@ async function eliminarMovimiento(id: number) {
 </template>
 
 <style scoped>
-.contenedor-ingresos {
-    max-width: 600px;
-    margin: 0 auto;
-}
+/* Tus estilos se mantienen exactamente igual */
+.contenedor-ingresos { max-width: 700px; margin: 0 auto; font-family: 'Segoe UI', sans-serif; }
 
 .hoja-stock { 
-    background: #f0fdf4; /* Verde muy clarito */
-    padding: 20px; 
-    border: 1px solid #4ade80; 
-    border-radius: 8px; 
-    margin-bottom: 20px;
+    background: #ffffff; 
+    padding: 25px; 
+    border: 1px solid #d1d5db; 
+    border-radius: 12px; 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    margin-bottom: 25px;
 }
+
+h3 { color: #1f2937; border-bottom: 2px solid #16a34a; padding-bottom: 10px; margin-top: 0;}
 
 .campo { margin-bottom: 15px; text-align: left; }
-.campo label { display: block; font-weight: bold; margin-bottom: 5px; }
-.campo select, .campo input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
-.btn-ingreso { background: #16a34a; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; }
+.campo label { display: block; font-weight: 600; margin-bottom: 5px; color: #374151; font-size: 0.9rem;}
+.campo select, .campo input { 
+    width: 100%; padding: 10px; 
+    border: 1px solid #d1d5db; border-radius: 6px; 
+    box-sizing: border-box; font-size: 1rem;
+    transition: border-color 0.2s;
+}
+.campo select:focus, .campo input:focus { outline: none; border-color: #16a34a; ring: 2px solid #16a34a;}
+
+.fila-doble { display: flex; gap: 15px; }
+.mitad { flex: 1; }
+
+.separador { border: 0; border-top: 1px dashed #e5e7eb; margin: 20px 0; }
+
+.info-costo {
+    background-color: #ecfdf5; color: #065f46;
+    padding: 10px; border-radius: 6px; margin-bottom: 15px;
+    font-size: 0.9rem; text-align: center; border: 1px solid #a7f3d0;
+}
+
+.btn-ingreso { 
+    background: #16a34a; color: white; 
+    padding: 12px; border: none; border-radius: 6px; 
+    cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; 
+    transition: background 0.2s;
+}
 .btn-ingreso:hover { background: #15803d; }
-.exito { color: green; font-weight: bold; margin-top: 10px; }
-.error { color: red; font-weight: bold; margin-top: 10px; }
 
-/* Estilos Historial Rápido */
-.historial-rapido {
-    background: white;
-    padding: 15px;
-    border-radius: 8px;
-    border: 1px solid #eee;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-.historial-rapido h4 { margin-top: 0; color: #555; border-bottom: 1px solid #eee; padding-bottom: 5px;}
+.exito { background: #dcfce7; color: #166534; padding: 10px; border-radius: 5px; margin-top: 10px; text-align: center;}
+.error { background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 5px; margin-top: 10px; text-align: center;}
 
-.tabla-mini { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.tabla-mini th { text-align: left; color: #666; border-bottom: 1px solid #ddd; padding: 5px; }
-.tabla-mini td { border-bottom: 1px solid #eee; padding: 8px 5px; }
-
-.btn-undo {
-    background: white;
-    border: 1px solid #e74c3c;
-    color: #e74c3c;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    padding: 2px 6px;
-}
-.btn-undo:hover { background: #e74c3c; color: white; }
+.historial-rapido { background: white; padding: 0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eee; }
+.historial-rapido h4 { background: #f9fafb; padding: 15px; margin: 0; border-bottom: 1px solid #eee; color: #374151; }
+.tabla-mini { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.tabla-mini th { background: #f3f4f6; text-align: left; padding: 10px; font-weight: 600; color: #4b5563; }
+.tabla-mini td { border-bottom: 1px solid #f3f4f6; padding: 10px; color: #1f2937; }
+.btn-undo { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 1.1rem; }
+.btn-undo:hover { color: #b91c1c; transform: scale(1.1); }
 </style>
