@@ -1,175 +1,184 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
 
 // --- INTERFAZ ---
 interface Entidad {
-    id: number;
-    nombreCompleto?: string; // Empleados
-    dni?: string;            // Empleados
-    puesto?: string;         // Empleados
-    
-    razonSocial?: string;    // Clientes y Proveedores
-    cuit?: string;           // Clientes y Proveedores
-    
-    // Específico Proveedores
-    contactoNombre?: string; 
-    email?: string;
-    telefono?: string;
-    direccion?: string;
+  id: number;
+  nombreCompleto?: string; // Empleados
+  dni?: string;            // Empleados
+  puesto?: string;         // Empleados
+  
+  razonSocial?: string;    // Clientes y Proveedores
+  cuit?: string;           // Clientes y Proveedores
+  
+  // Específico Proveedores
+  contactoNombre?: string; 
+  email?: string;
+  telefono?: string;
+  direccion?: string;
 
-    activo: boolean;
+  activo: boolean;
 }
 
 // --- ESTADO ---
 const pestana = ref<'empleados' | 'clientes' | 'proveedores'>('empleados')
 const lista = ref<Entidad[]>([]) 
 const cargando = ref(false)
-const cargandoFazon = ref<number | null>(null)
+const cargandoFazon = ref<number | null>(null) // ID del cliente procesando
 
 const listaPuestos = ['Operario General', 'Logística', 'Extrusor', 'Impresor', 'Supervisor', 'Mantenimiento', 'Administración', 'Gerencia', 'Chofer']
 
 const itemForm = ref({
-    id: 0,
-    nombre: '', // Se usa para NombreCompleto o RazonSocial
-    identificacion: '', // Se usa para DNI o CUIT
-    puesto: 'Operario General',
-    contacto: '',
-    email: '',
-    telefono: '',
-    direccion: '',
-    activo: true
+  id: 0,
+  nombre: '', 
+  identificacion: '', 
+  puesto: 'Operario General',
+  contacto: '',
+  email: '',
+  telefono: '',
+  direccion: '',
+  activo: true
 })
 
 const modoEdicion = ref(false)
 const apiUrl = 'https://localhost:7244/api';  
 
 const getAuthConfig = () => {
-    const token = localStorage.getItem('token');
-    return { headers: { Authorization: `Bearer ${token}` } };
+  const token = localStorage.getItem('token');
+  return { headers: { Authorization: `Bearer ${token}` } };
 };
 
 // --- CRUD ---
 
 // 1. Cargar Datos
 async function cargarDatos() {
-    cargando.value = true;
-    lista.value = [];
-    
-    // Mapeo simple de pestaña a endpoint
-    const endpoints = {
-        empleados: 'Empleados',
-        clientes: 'Clientes',
-        proveedores: 'Proveedores'
-    };
-    
-    try {
-        const res = await axios.get(`${apiUrl}/${endpoints[pestana.value]}`, getAuthConfig());
-        lista.value = res.data;
-    } catch (error) {
-        console.error("Error cargando datos:", error);
-    } finally {
-        cargando.value = false;
-    }
+  cargando.value = true;
+  lista.value = [];
+  
+  const endpoints = {
+    empleados: 'Empleados',
+    clientes: 'Clientes',
+    proveedores: 'Proveedores'
+  };
+  
+  try {
+    const res = await axios.get(`${apiUrl}/${endpoints[pestana.value]}`, getAuthConfig());
+    lista.value = res.data;
+  } catch (error) {
+    console.error("Error cargando datos:", error);
+  } finally {
+    cargando.value = false;
+  }
 }
 
 // 2. Guardar
 async function guardar() {
-    if (!itemForm.value.nombre) {
-        alert("El Nombre / Razón Social es obligatorio.");
-        return;
+  if (!itemForm.value.nombre) {
+    alert("El Nombre / Razón Social es obligatorio.");
+    return;
+  }
+
+  const endpoints = {
+    empleados: 'Empleados',
+    clientes: 'Clientes',
+    proveedores: 'Proveedores'
+  };
+  const endpoint = endpoints[pestana.value];
+
+  // Payload Base
+  let payload: any = {
+    id: itemForm.value.id,
+    activo: itemForm.value.activo
+  };
+
+  if (pestana.value === 'empleados') {
+    payload.nombreCompleto = itemForm.value.nombre;
+    payload.dni = itemForm.value.identificacion;
+    payload.puesto = itemForm.value.puesto;
+  } else {
+    payload.razonSocial = itemForm.value.nombre;
+    payload.cuit = itemForm.value.identificacion;
+
+    if (pestana.value === 'proveedores') {
+      payload.contactoNombre = itemForm.value.contacto;
+      payload.email = itemForm.value.email;
+      payload.telefono = itemForm.value.telefono;
+      payload.direccion = itemForm.value.direccion;
     }
+  }
 
-    const endpoints = {
-        empleados: 'Empleados',
-        clientes: 'Clientes',
-        proveedores: 'Proveedores'
-    };
-    const endpoint = endpoints[pestana.value];
-
-    // Payload Base
-    let payload: any = {
-        id: itemForm.value.id,
-        activo: itemForm.value.activo
-    };
-
-    // Mapeo específico según tipo
-    if (pestana.value === 'empleados') {
-        payload.nombreCompleto = itemForm.value.nombre;
-        payload.dni = itemForm.value.identificacion;
-        payload.puesto = itemForm.value.puesto;
+  try {
+    if (modoEdicion.value) {
+      await axios.put(`${apiUrl}/${endpoint}/${itemForm.value.id}`, payload, getAuthConfig());
+      alert("Editado correctamente");
     } else {
-        // Clientes y Proveedores comparten RazonSocial y CUIT
-        payload.razonSocial = itemForm.value.nombre;
-        payload.cuit = itemForm.value.identificacion;
-
-        if (pestana.value === 'proveedores') {
-            payload.contactoNombre = itemForm.value.contacto;
-            payload.email = itemForm.value.email;
-            payload.telefono = itemForm.value.telefono;
-            payload.direccion = itemForm.value.direccion;
-        }
+      payload.id = 0; 
+      await axios.post(`${apiUrl}/${endpoint}`, payload, getAuthConfig());
+      alert("Creado correctamente");
     }
-
-    try {
-        if (modoEdicion.value) {
-            await axios.put(`${apiUrl}/${endpoint}/${itemForm.value.id}`, payload, getAuthConfig());
-            alert("Editado correctamente");
-        } else {
-            payload.id = 0; 
-            await axios.post(`${apiUrl}/${endpoint}`, payload, getAuthConfig());
-            alert("Creado correctamente");
-        }
-        limpiarForm();
-        cargarDatos();
-    } catch (error: any) {
-        console.error(error);
-        alert("Error: " + (error.response?.data || error.message));
-    }
+    limpiarForm();
+    cargarDatos();
+  } catch (error: any) {
+    console.error(error);
+    alert("Error: " + (error.response?.data || error.message));
+  }
 }
 
 // 3. Editar
 function editar(item: Entidad) {
-    modoEdicion.value = true;
-    
-    // Mapeo Inverso
-    itemForm.value = {
-        id: item.id,
-        nombre: item.razonSocial || item.nombreCompleto || '',
-        identificacion: item.cuit || item.dni || '',
-        puesto: item.puesto || 'Operario General',
-        contacto: item.contactoNombre || '',
-        email: item.email || '',
-        telefono: item.telefono || '',
-        direccion: item.direccion || '',
-        activo: item.activo
-    };
+  modoEdicion.value = true;
+  
+  itemForm.value = {
+    id: item.id,
+    nombre: item.razonSocial || item.nombreCompleto || '',
+    identificacion: item.cuit || item.dni || '',
+    puesto: item.puesto || 'Operario General',
+    contacto: item.contactoNombre || '',
+    email: item.email || '',
+    telefono: item.telefono || '',
+    direccion: item.direccion || '',
+    activo: item.activo
+  };
 }
 
 // 4. Eliminar
 async function eliminar(id: number) {
-    if (!confirm("¿Estás seguro de eliminar/desactivar este registro?")) return;
-    const endpoints = { empleados: 'Empleados', clientes: 'Clientes', proveedores: 'Proveedores' };
-    
-    try {
-        await axios.delete(`${apiUrl}/${endpoints[pestana.value]}/${id}`, getAuthConfig());
-        alert("Eliminado correctamente");
-        cargarDatos();
-    } catch (error: any) {
-        alert("Error: " + (error.response?.data?.mensaje || error.message));
-    }
+  if (!confirm("¿Estás seguro de eliminar/desactivar este registro?")) return;
+  const endpoints = { empleados: 'Empleados', clientes: 'Clientes', proveedores: 'Proveedores' };
+  
+  try {
+    await axios.delete(`${apiUrl}/${endpoints[pestana.value]}/${id}`, getAuthConfig());
+    alert("Eliminado correctamente");
+    cargarDatos();
+  } catch (error: any) {
+    alert("Error: " + (error.response?.data?.mensaje || error.message));
+  }
 }
 
 function limpiarForm() {
-    modoEdicion.value = false;
-    itemForm.value = {
-        id: 0, nombre: '', identificacion: '', puesto: 'Operario General',
-        contacto: '', email: '', telefono: '', direccion: '', activo: true
-    };
+  modoEdicion.value = false;
+  itemForm.value = {
+    id: 0, nombre: '', identificacion: '', puesto: 'Operario General',
+    contacto: '', email: '', telefono: '', direccion: '', activo: true
+  };
 }
 
-// Funciones extra (Fazon) se mantienen igual...
-async function habilitarFazon(cliente: Entidad) { /* ... tu codigo anterior ... */ }
+// 🔥 LÓGICA DE FAZÓN (NUEVA)
+const habilitarFazon = async (cliente: Entidad) => {
+    if(!confirm(`¿Generar productos de Fazón (AI, ABS, PP, PEAD) para ${cliente.razonSocial}? Esto permitirá cargarles stock.`)) return;
+
+    cargandoFazon.value = cliente.id;
+    try {
+        await axios.post(`${apiUrl}/Clientes/habilitar-fazon/${cliente.id}`, {}, getAuthConfig());
+        alert(`✅ Materiales habilitados para ${cliente.razonSocial}. Ahora puede ingresar stock.`);
+    } catch (e: any) {
+        console.error(e);
+        alert("❌ Error: " + (e.response?.data?.mensaje || e.message));
+    } finally {
+        cargandoFazon.value = null;
+    }
+};
 
 onMounted(() => cargarDatos())
 </script>
@@ -241,7 +250,8 @@ onMounted(() => cargarDatos())
                         <th>Nombre</th>
                         <th v-if="pestana==='empleados'">Puesto</th> 
                         <th v-if="pestana!=='empleados'">CUIT</th>
-                        <th v-if="pestana==='proveedores'">Contacto</th> <th>Estado</th>
+                        <th v-if="pestana==='proveedores'">Contacto</th> 
+                        <th>Estado</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -268,9 +278,20 @@ onMounted(() => cargarDatos())
                             </span>
                         </td>
                         <td>
-                            <button @click="editar(item)" class="btn-small">✏️</button>
-                            <button @click="eliminar(item.id)" class="btn-small btn-del">🗑️</button>
-                            </td>
+                            <button @click="editar(item)" class="btn-small" title="Editar">✏️</button>
+                            
+                            <button 
+                                v-if="pestana==='clientes'" 
+                                @click="habilitarFazon(item)" 
+                                class="btn-small btn-fazon" 
+                                title="Crear materiales para stock de terceros"
+                                :disabled="cargandoFazon === item.id">
+                                <span v-if="cargandoFazon === item.id">⏳</span>
+                                <span v-else>🏭</span>
+                            </button>
+
+                            <button @click="eliminar(item.id)" class="btn-small btn-del" title="Eliminar">🗑️</button>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -346,7 +367,6 @@ h3 {
     align-items: start;
 }
 
-/* En pantallas chicas, poner uno abajo del otro */
 @media (max-width: 900px) {
     .contenido-abm {
         grid-template-columns: 1fr;
@@ -363,7 +383,7 @@ h3 {
     box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     border: 1px solid #e1e1e1;
     position: sticky;
-    top: 20px; /* Para que te siga al scrollear si la tabla es larga */
+    top: 20px; 
 }
 
 .card-form label {
@@ -392,7 +412,6 @@ h3 {
     box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
-/* Checkbox estilo moderno */
 .check-box {
     margin: 10px 0 20px 0;
     display: flex;
@@ -409,7 +428,6 @@ h3 {
     cursor: pointer;
 }
 
-/* Clases auxiliares para layout dentro del form */
 .fila-doble {
     display: flex;
     gap: 10px;
@@ -418,7 +436,6 @@ h3 {
     flex: 1;
 }
 
-/* Bloque especial para Proveedores */
 .campos-extra {
     background: #f0f7ff;
     padding: 12px;
@@ -430,7 +447,6 @@ h3 {
     color: #1c5b99;
 }
 
-/* Botones del Formulario */
 .btn-group {
     display: flex;
     gap: 10px;
@@ -467,7 +483,7 @@ h3 {
 .tabla-container {
     background: white;
     border-radius: 8px;
-    overflow-x: auto; /* Scroll horizontal si es necesario */
+    overflow-x: auto; 
     box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     border: 1px solid #e1e1e1;
 }
@@ -574,9 +590,11 @@ tr:last-child td {
     color: #c0392b;
 }
 
+/* 🔥 ESTILO BOTÓN FAZÓN */
 .btn-fazon {
     background-color: #f3e5f5;
     color: #8e44ad;
+    border: 1px solid #e1bee7;
 }
 .btn-fazon:hover {
     background-color: #e1bee7;

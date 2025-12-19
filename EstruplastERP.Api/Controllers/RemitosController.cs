@@ -26,10 +26,6 @@ namespace EstruplastERP.Api.Controllers
         [HttpPost]
         public async Task<ActionResult> PostRemito(NuevoRemitoDto dto)
         {
-            // A. VALIDACIONES PREVIAS
-            // -------------------------------------------------------------
-            // Recorremos los items antes de hacer nada para verificar stock.
-            // Si falta uno, no se hace nada.
             foreach (var itemDto in dto.Items)
             {
                 var producto = await _context.Productos.FindAsync(itemDto.ProductoId);
@@ -45,48 +41,40 @@ namespace EstruplastERP.Api.Controllers
 
             var cliente = await _context.Clientes.FindAsync(dto.ClienteId);
             if (cliente == null) return BadRequest("El cliente seleccionado no existe.");
-
-            // B. CREAR LA CABECERA DEL REMITO
-            // -------------------------------------------------------------
             var nuevoRemito = new Remito
             {
                 ClienteId = dto.ClienteId,
                 NumeroRemito = dto.NumeroRemito,
-                // Si la fecha viene vacía (default), usamos Ahora.
                 Fecha = dto.Fecha != default ? dto.Fecha : DateTime.Now,
                 Observacion = dto.Observacion,
 
-                // GUARDAMOS EL NOMBRE COMO TEXTO (Plan B por si borran el cliente)
                 ClienteNombre = cliente.RazonSocial,
 
                 Detalles = new List<RemitoDetalle>()
             };
 
-            // C. PROCESAR ITEMS (DESCUENTO Y MOVIMIENTOS)
-            // -------------------------------------------------------------
             foreach (var itemDto in dto.Items)
             {
                 var producto = await _context.Productos.FindAsync(itemDto.ProductoId);
 
-                // 1. Descontar Stock Físico
+                
                 producto.StockActual -= itemDto.Cantidad;
 
-                // 2. Agregar al detalle del Remito
+               
                 nuevoRemito.Detalles.Add(new RemitoDetalle
                 {
                     ProductoId = itemDto.ProductoId,
                     Cantidad = itemDto.Cantidad,
-                    Detalle = itemDto.Detalle, // Ej: "Color Rojo"
-                    PrecioUnitarioSnapshot = 0 // Si tuvieras lista de precios, iría aquí
+                    Detalle = itemDto.Detalle, 
+                    PrecioUnitarioSnapshot = 0 
                 });
 
-                // 3. Registrar en el Historial de Movimientos (Kardex)
                 _context.Movimientos.Add(new Movimiento
                 {
                     Fecha = DateTime.Now,
                     ProductoId = producto.Id,
-                    Cantidad = itemDto.Cantidad, // Cantidad involucrada
-                    TipoMovimiento = "SALIDA_REMITO", // String identificador
+                    Cantidad = itemDto.Cantidad, 
+                    TipoMovimiento = "SALIDA_REMITO", 
                     Observacion = $"Remito #{dto.NumeroRemito} -> {cliente.RazonSocial}. ({itemDto.Detalle})",
                     ClienteId = cliente.Id,
                     Turno = "Despacho",
@@ -100,21 +88,17 @@ namespace EstruplastERP.Api.Controllers
             return Ok(new { mensaje = "Remito generado con éxito", id = nuevoRemito.Id });
         }
 
-        // ================================================================
-        // 2. GET: HISTORIAL COMPLETO
-        // ================================================================
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetHistorial()
         {
             var remitos = await _context.Remitos
-                .Include(r => r.Cliente)               // Cargar datos del cliente
-                .Include(r => r.Detalles)              // Cargar lista de items
-                    .ThenInclude(d => d.Producto)      // Cargar nombres de productos
+                .Include(r => r.Cliente)              
+                .Include(r => r.Detalles)             
+                    .ThenInclude(d => d.Producto)      
                 .OrderByDescending(r => r.Fecha)
                 .ThenByDescending(r => r.Id)
                 .ToListAsync();
 
-            // Proyección (Mapeo) de datos para el Frontend
             var resultado = remitos.Select(r => new
             {
                 r.Id,
@@ -130,8 +114,8 @@ namespace EstruplastERP.Api.Controllers
                 {
                     r.Cliente.Id,
                     r.Cliente.RazonSocial,
-                    r.Cliente.Cuit,       // <--- Para el PDF
-                    r.Cliente.Direccion   // <--- Para el PDF
+                    r.Cliente.Cuit,       
+                    r.Cliente.Direccion   
                 },
 
                 Items = r.Detalles.Select(d => new {
@@ -139,7 +123,7 @@ namespace EstruplastERP.Api.Controllers
                     ProductoNombre = d.Producto != null ? d.Producto.Nombre : "Producto Eliminado",
                     Sku = d.Producto != null ? d.Producto.CodigoSku : "-",
                     d.Cantidad,
-                    d.Detalle // El comentario específico (ej: "Bobina 40 micrones")
+                    d.Detalle 
                 }).ToList()
             });
 

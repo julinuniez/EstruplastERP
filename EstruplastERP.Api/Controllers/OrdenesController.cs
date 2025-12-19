@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using EstruplastERP.Data;
 using EstruplastERP.Core;
-using EstruplastERP.Api.Dtos; // Asegúrate de que este namespace exista
+using EstruplastERP.Api.Dtos;
 
 namespace EstruplastERP.Api.Controllers
 {
@@ -17,12 +17,89 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
-        // GET: api/Ordenes
+        private (string Codigo, string Nombre) DeterminarTipoMaterial(int productoTerminadoId)
+        {
+            switch (productoTerminadoId)
+            {
+                // --- A.I. (ALTO IMPACTO) ---
+                case 900: // Fino
+                case 901: // Grueso
+                case 902: // Fino Color
+                case 903: // Grueso Color
+                case 904: // Bicapa
+                case 905: // Tricapa
+                case 906: // Tutti Fino
+                case 907: // Tutti Grueso
+                    return ("AI", "ALTO IMPACTO (A.I.)");
+
+                // --- ABS ---
+                case 908: // ABS Grueso
+                case 200:
+                case 201:
+                case 202: // Por si usas IDs viejos de ABS
+                    return ("ABS", "ABS");
+
+                // --- POLIPROPILENO / POLIETILENO ---
+                case 909: // Poli Fino
+                case 910: // Poli Grueso
+                case 300:
+                case 301: // IDs viejos PP
+                    return ("POLI", "PEAD/PP/BIO");
+
+                // --- PEAD BICAPA ---
+                case 911:
+                case 402:
+                    return ("PEAD", "PEAD");
+
+                // --- DEFAULT (ERROR: Cae aquí si el ID es nuevo) ---
+                default:
+                    return ("GEN-ERROR", "MATERIAL S/D (REVISAR ID)");
+            }
+        }
+
+        private async Task<int> ObtenerMaterialClienteAsync(int clienteId, string nombreCliente, int productoTerminadoId)
+        {
+            var tipoMaterial = DeterminarTipoMaterial(productoTerminadoId);
+            string codigoSku = $"MP-CLI-{clienteId}-{tipoMaterial.Codigo}";
+
+            var productoCliente = await _context.Productos
+                .FirstOrDefaultAsync(p => p.CodigoSku == codigoSku);
+
+            if (productoCliente != null)
+            {
+                return productoCliente.Id;
+            }
+
+            var nuevoMaterial = new Producto
+            {
+                Nombre = $"MP {tipoMaterial.Nombre} - PROPIEDAD DE {nombreCliente.ToUpper()}",
+                CodigoSku = codigoSku,
+                EsMateriaPrima = true,
+                EsProductoTerminado = false,
+                EsGenerico = false,
+                EsFazon = false,
+                PesoEspecifico = 1.05m,
+                StockActual = 0,
+                StockMinimo = 0,
+                PrecioCosto = 0,
+                Activo = true,
+                FechaCreacion = DateTime.Now,
+                ClienteId = clienteId
+            };
+
+            _context.Productos.Add(nuevoMaterial);
+            await _context.SaveChangesAsync();
+
+            return nuevoMaterial.Id;
+        }
+
         [HttpGet]
         public async Task<ActionResult<IEnumerable<OrdenProduccion>>> GetOrdenes()
         {
             return await _context.Ordenes
-                .Include(o => o.Producto) // Para mostrar el nombre del producto
+                .Include(o => o.Producto)
+                .Include(o => o.Cliente)
+                .Include(o => o.Empleado)
                 .OrderByDescending(o => o.FechaCreacion)
                 .ToListAsync();
         }
@@ -33,6 +110,8 @@ namespace EstruplastERP.Api.Controllers
             DateTime hastaFinDia = hasta.Date.AddDays(1).AddTicks(-1);
 
             var lista = await _context.Ordenes
+                .Include(o => o.Empleado)
+                .Include(o => o.Producto)
                 .Where(o => o.FechaCreacion >= desde && o.FechaCreacion <= hastaFinDia)
                 .OrderByDescending(o => o.FechaCreacion)
                 .Select(o => new
@@ -46,21 +125,19 @@ namespace EstruplastERP.Api.Controllers
                     o.Cantidad,
                     Kilos = o.KilosEstimados,
                     estado = (int)o.Estado
-                    
                 })
                 .ToListAsync();
 
             return Ok(lista);
         }
 
-        // GET: api/Ordenes/5
         [HttpGet("{id}")]
         public async Task<ActionResult<OrdenProduccion>> GetOrden(int id)
         {
             var orden = await _context.Ordenes
                 .Include(o => o.Producto)
-                .Include(o => o.Consumos) // Incluimos la receta usada
-                    .ThenInclude(c => c.MateriaPrima) // Y los nombres de las materias primas
+                .Include(o => o.Consumos)
+                    .ThenInclude(c => c.MateriaPrima)
                 .FirstOrDefaultAsync(o => o.Id == id);
 
             if (orden == null) return NotFound();
@@ -72,6 +149,7 @@ namespace EstruplastERP.Api.Controllers
         public async Task<ActionResult<OrdenProduccion>> PostOrden(CrearOrdenDto dto)
         {
             if (dto.Kilos <= 0) return BadRequest("Los kilos totales deben ser mayores a 0.");
+
             var nuevaOrden = new OrdenProduccion
             {
                 ProductoId = dto.ProductoTerminadoId,
@@ -86,23 +164,37 @@ namespace EstruplastERP.Api.Controllers
                 FechaFin = null
             };
 
+            Cliente? clienteOrden = null;
+            if (dto.ClienteId.HasValue)
+            {
+                clienteOrden = await _context.Clientes.FindAsync(dto.ClienteId.Value);
+            }
+
             if (dto.Consumos != null && dto.Consumos.Count > 0)
             {
                 foreach (var consumoDto in dto.Consumos)
                 {
+                    int idFinalMateriaPrima = consumoDto.MateriaPrimaId;
+
+                    if (consumoDto.MateriaPrimaId == 999 && clienteOrden != null)
+                    {
+                        idFinalMateriaPrima = await ObtenerMaterialClienteAsync(
+                            clienteOrden.Id,
+                            clienteOrden.RazonSocial,
+                            dto.ProductoTerminadoId
+                        );
+                    }
+
                     nuevaOrden.Consumos.Add(new ConsumoOrden
                     {
-                        MateriaPrimaId = consumoDto.MateriaPrimaId,
+                        MateriaPrimaId = idFinalMateriaPrima,
                         CantidadKilos = consumoDto.CantidadKilos
                     });
 
-                    var insumoDb = await _context.Productos.FindAsync(consumoDto.MateriaPrimaId);
-
+                    var insumoDb = await _context.Productos.FindAsync(idFinalMateriaPrima);
                     if (insumoDb != null)
                     {
-                        // Restamos la cantidad consumida al stock actual
                         insumoDb.StockActual -= consumoDto.CantidadKilos;
-                        if (insumoDb.StockActual < 0) return BadRequest($"Stock insuficiente de {insumoDb.Nombre}");
                     }
                 }
             }
@@ -121,51 +213,98 @@ namespace EstruplastERP.Api.Controllers
             return CreatedAtAction("GetOrden", new { id = nuevaOrden.Id }, resultadoSeguro);
         }
 
-        // POST: api/Ordenes/finalizar/5
         [HttpPost("finalizar/{id}")]
-        public async Task<IActionResult> FinalizarOrden(int id)
+        public async Task<IActionResult> FinalizarOrden(int id, [FromBody] FinalizarOrdenDto request)
         {
-            // 1. Buscamos la orden
             var orden = await _context.Ordenes
-                .Include(o => o.Producto) // Importante para sumar el stock
+                .Include(o => o.Producto)
+                .Include(o => o.Cliente)
                 .FirstOrDefaultAsync(o => o.Id == id);
 
             if (orden == null) return NotFound("Orden no encontrada.");
+            if (orden.Estado == EstadoOrden.Finalizada) return BadRequest("Orden ya finalizada.");
 
-            // 2. Validamos que no esté ya finalizada
-            if (orden.Estado == EstadoOrden.Finalizada)
-                return BadRequest("Esta orden ya fue finalizada.");
+            if (request.Adiciones != null && request.Adiciones.Count > 0)
+            {
+                foreach (var item in request.Adiciones)
+                {
+                    int idInsumoReal = item.MateriaPrimaId;
 
-            // 3. Cambios de Estado
+                    if (item.MateriaPrimaId == 999 && orden.Cliente != null)
+                    {
+                        idInsumoReal = await ObtenerMaterialClienteAsync(
+                            orden.Cliente.Id,
+                            orden.Cliente.RazonSocial,
+                            orden.ProductoId
+                        );
+                    }
+
+                    var insumo = await _context.Productos.FindAsync(idInsumoReal);
+
+                    if (insumo != null)
+                    {
+                        if (insumo.StockActual < item.Cantidad)
+                        {
+                            return BadRequest($"Stock insuficiente: '{insumo.Nombre}'. Tienes {insumo.StockActual}, necesitas {item.Cantidad}.");
+                        }
+
+                        insumo.StockActual -= item.Cantidad;
+
+                        var movAjuste = new Movimiento
+                        {
+                            Fecha = DateTime.Now,
+                            ProductoId = idInsumoReal,
+                            Cantidad = -item.Cantidad,
+                            TipoMovimiento = "Ajuste Producción",
+                            Turno = orden.Turno,
+                            EmpleadoId = orden.EmpleadoId,
+                            ClienteId = orden.ClienteId,
+                            Observacion = $"Ajuste Cierre OP#{id}: {item.Motivo}",
+                            PrecioUnitario = 0,
+                            PrecioTotal = 0
+                        };
+                        _context.Movimientos.Add(movAjuste);
+                    }
+                }
+            }
+
+            if (request.Desperdicio > 0)
+            {
+                string textoDesperdicio = $" | ⚠️ Scrap: {request.Desperdicio} Kg";
+                if (string.IsNullOrEmpty(orden.Observacion)) orden.Observacion = textoDesperdicio;
+                else orden.Observacion += textoDesperdicio;
+            }
+
             orden.Estado = EstadoOrden.Finalizada;
             orden.FechaFin = DateTime.Now;
 
-            // 4. ACTUALIZAMOS STOCK (Aquí ocurre la magia)
-            if (orden.Producto != null)
+            if (!string.IsNullOrEmpty(request.Observacion))
             {
-                orden.Producto.StockActual += orden.Cantidad; // Sumamos la cantidad fabricada
+                orden.Observacion += $" | Cierre: {request.Observacion}";
             }
 
-            // 5. Guardamos cambios
+            if (orden.Producto != null)
+            {
+                orden.Producto.StockActual += orden.Cantidad;
+
+                var movIngreso = new Movimiento
+                {
+                    Fecha = DateTime.Now,
+                    ProductoId = orden.ProductoId,
+                    Cantidad = orden.Cantidad,
+                    TipoMovimiento = "Producción",
+                    Turno = orden.Turno,
+                    EmpleadoId = orden.EmpleadoId,
+                    ClienteId = orden.ClienteId,
+                    Observacion = $"Ingreso OP #{id}",
+                    PrecioUnitario = 0,
+                    PrecioTotal = 0
+                };
+                _context.Movimientos.Add(movIngreso);
+            }
+
             await _context.SaveChangesAsync();
-
-            return Ok(new { mensaje = "Orden finalizada y stock actualizado." });
-        }
-
-        // POST: api/Ordenes/cancelar/5
-        [HttpPost("cancelar/{id}")]
-        public async Task<IActionResult> CancelarOrden(int id)
-        {
-            var orden = await _context.Ordenes.FindAsync(id);
-            if (orden == null) return NotFound();
-
-            if (orden.Estado == EstadoOrden.Finalizada)
-                return BadRequest("No puedes cancelar una orden que ya se fabricó.");
-
-            orden.Estado = EstadoOrden.Cancelada;
-
-            await _context.SaveChangesAsync();
-            return Ok(new { mensaje = "Orden cancelada." });
+            return Ok(new { mensaje = "Orden finalizada correctamente." });
         }
     }
 }

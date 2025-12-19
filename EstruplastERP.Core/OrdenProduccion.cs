@@ -20,6 +20,8 @@ namespace EstruplastERP.Core
 
             // --- NUEVOS CAMPOS (Estos son los que te faltan) ---
             public int? ClienteId { get; set; }
+        [ForeignKey("ClienteId")]
+        public Cliente? Cliente { get; set; }
         public int? EmpleadoId { get; set; } // Puede ser nulo si nadie la tomó aún
         [ForeignKey("EmpleadoId")]
         public virtual Empleado Empleado { get; set; }

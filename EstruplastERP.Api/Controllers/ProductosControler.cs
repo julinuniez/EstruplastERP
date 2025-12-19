@@ -17,13 +17,12 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
-        // ==========================================
-        // 1. GET: INVENTARIO (Optimizado)
-        // ==========================================
         [HttpGet("inventario-completo")]
         public async Task<ActionResult<IEnumerable<object>>> GetInventarioCompleto()
         {
             var productos = await _context.Productos
+                .Where(p => p.Activo) 
+                .OrderBy(p => p.Nombre)
                 .Select(p => new
                 {
                     p.Id,
@@ -31,10 +30,10 @@ namespace EstruplastERP.Api.Controllers
                     p.CodigoSku,
                     p.StockActual,
                     p.StockMinimo,
-                    p.PrecioCosto,
-                    p.EsProductoTerminado,
-                    p.EsGenerico, 
-                    p.Color
+                    p.PesoEspecifico,
+                    p.EsMateriaPrima,       
+                    p.EsProductoTerminado,  
+                    p.EsFazon              
                 })
                 .ToListAsync();
 

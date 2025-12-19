@@ -12,7 +12,7 @@ namespace EstruplastERP.Data
 
         public DbSet<Producto> Productos { get; set; }
         public DbSet<Formula> Formulas { get; set; }
-        public DbSet<Movimiento> Movimientos { get; set; } 
+        public DbSet<Movimiento> Movimientos { get; set; }
         public DbSet<Empleado> Empleados { get; set; }
         public DbSet<Cliente> Clientes { get; set; }
         public DbSet<Produccion> Producciones { get; set; }
@@ -37,8 +37,6 @@ namespace EstruplastERP.Data
             modelBuilder.Entity<Producto>().Property(p => p.Largo).HasPrecision(18, 2);
             modelBuilder.Entity<Producto>().Property(p => p.Ancho).HasPrecision(18, 2);
             modelBuilder.Entity<Producto>().Property(p => p.Espesor).HasPrecision(18, 2);
-            
-            // NUEVO: Precisión para los rangos de validación técnica
             modelBuilder.Entity<Producto>().Property(p => p.EspesorMinimo).HasPrecision(18, 2);
             modelBuilder.Entity<Producto>().Property(p => p.EspesorMaximo).HasPrecision(18, 2);
 
@@ -63,110 +61,143 @@ namespace EstruplastERP.Data
                 .HasOne(p => p.ProductoPadre).WithMany().HasForeignKey(p => p.ProductoPadreId).OnDelete(DeleteBehavior.NoAction);
 
             modelBuilder.Entity<Producto>()
-                .HasOne(p => p.Cliente)
-                .WithMany()
-                .HasForeignKey(p => p.ClienteId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .HasOne(p => p.Cliente).WithMany().HasForeignKey(p => p.ClienteId).OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<ConsumoOrden>(entity =>
             {
-                entity.HasOne(c => c.MateriaPrima)
-                      .WithMany()
-                      .HasForeignKey(c => c.MateriaPrimaId)
-                      .OnDelete(DeleteBehavior.NoAction);
+                entity.HasOne(c => c.MateriaPrima).WithMany().HasForeignKey(c => c.MateriaPrimaId).OnDelete(DeleteBehavior.NoAction);
             });
 
             // =============================================================================
-            // SEED DATA
+            // SEED DATA - CATÁLOGO ACTUALIZADO
             // =============================================================================
+
+            // -----------------------------------------------------------------------------
+            // 1. MATERIAS PRIMAS (BASE)
+            // -----------------------------------------------------------------------------
             modelBuilder.Entity<Producto>().HasData(
-                // 1. MATERIAS PRIMAS
-                new Producto { Id = 1, Nombre = "Poliestireno Alto Impacto (AI/PAI)", CodigoSku = "MP-PAI", EsMateriaPrima = true, EsProductoTerminado = false, EsGenerico = false, PesoEspecifico = 1.1m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 2, Nombre = "ABS (Acrilonitrilo Butadieno Estireno)", CodigoSku = "MP-ABS", EsMateriaPrima = true, EsProductoTerminado = false, EsGenerico = false, PesoEspecifico = 1.1M, StockActual = 1000, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 3, Nombre = "Polipropileno (PP)", CodigoSku = "MP-PP", EsMateriaPrima = true, EsProductoTerminado = false, EsGenerico = false, PesoEspecifico = 1m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 4, Nombre = "Polietileno Alta Densidad (PEAD)", CodigoSku = "MP-PEAD", EsMateriaPrima = true, EsProductoTerminado = false, EsGenerico = false, PesoEspecifico = 1m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 5, Nombre = "Polietileno Baja Densidad (PEBD)", CodigoSku = "MP-PEBD", EsMateriaPrima = true, EsProductoTerminado = false, EsGenerico = false, PesoEspecifico = 1m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                
-                // NUEVOS: TUTI (RECUPERADO) SEGÚN LISTA DE PRECIOS
-                // Fino: 0.40mm - 0.90mm
-                new Producto { Id = 6, Nombre = "Tuti Fino (0.40 - 0.90)", CodigoSku = "MP-TUTI-FINO", EsMateriaPrima = true, EsGenerico = false, PesoEspecifico = 1.1m, StockActual = 0, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m },
-                // Grueso: > 0.90mm
-                new Producto { Id = 15, Nombre = "Tuti Grueso", CodigoSku = "MP-TUTI-GRUESO", EsMateriaPrima = true, EsGenerico = false, PesoEspecifico = 1.1m, StockActual = 0, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now, EspesorMinimo = 0.91m, EspesorMaximo = 5.00m },
+                new Producto { Id = 1, Nombre = "Poliestireno Alto Impacto (AI/PAI)", CodigoSku = "MP-PAI", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 2, Nombre = "ABS", CodigoSku = "MP-ABS", EsMateriaPrima = true, PesoEspecifico = 1.05M, StockActual = 1000, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 3, Nombre = "Polipropileno (PP)", CodigoSku = "MP-PP", EsMateriaPrima = true, PesoEspecifico = 0.91m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 4, Nombre = "Polietileno Alta Densidad (PEAD)", CodigoSku = "MP-PEAD", EsMateriaPrima = true, PesoEspecifico = 0.96m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 5, Nombre = "Polietileno Baja Densidad (PEBD)", CodigoSku = "MP-PEBD", EsMateriaPrima = true, PesoEspecifico = 0.92m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 6, Nombre = "Bioplástico", CodigoSku = "MP-BIO", EsMateriaPrima = true, PesoEspecifico = 1.25m, StockActual = 0, StockMinimo = 200, Activo = true, FechaCreacion = DateTime.Now },
 
-                new Producto { Id = 7, Nombre = "Bioplástico Compostable (Biolam)", CodigoSku = "MP-BIO", EsMateriaPrima = true, EsProductoTerminado = false, EsGenerico = false, PesoEspecifico = 1.25m, StockActual = 0, StockMinimo = 200, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 8, Nombre = "Masterbatch Blanco (Titanio)", CodigoSku = "MP-MST-BLA", EsMateriaPrima = true, EsProductoTerminado = false, EsGenerico = false, PesoEspecifico = 1.80m, StockActual = 500, StockMinimo = 100, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 9, Nombre = "Masterbatch Negro", CodigoSku = "MP-MST-NEG", EsMateriaPrima = true, EsProductoTerminado = false, EsGenerico = false, PesoEspecifico = 1.20m, StockActual = 500, StockMinimo = 100, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 10, Nombre = "Aditivo Genérico", CodigoSku = "MP-ADITIVO-GEN", EsMateriaPrima = true, EsProductoTerminado = false, EsGenerico = false, PesoEspecifico = 0.95m, StockActual = 0, StockMinimo = 50, Activo = true, FechaCreacion = DateTime.Now },
+                // TUTI (Recuperado)
+                new Producto { Id = 7, Nombre = "Tuti Fino", CodigoSku = "MP-TUTI-FINO", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 8, Nombre = "Tuti Grueso", CodigoSku = "MP-TUTI-GRUESO", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, EspesorMinimo = 0.91m, EspesorMaximo = 5.00m, Activo = true, FechaCreacion = DateTime.Now },
 
-                // COLORES
-                new Producto { Id = 11, Nombre = "Masterbatch Rojo", CodigoSku = "MP-MST-ROJ", EsMateriaPrima = true, EsGenerico = false, PesoEspecifico = 1.20m, StockActual = 100, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 12, Nombre = "Masterbatch Azul", CodigoSku = "MP-MST-AZU", EsMateriaPrima = true, EsGenerico = false, PesoEspecifico = 1.20m, StockActual = 100, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 13, Nombre = "Masterbatch Verde", CodigoSku = "MP-MST-VER", EsMateriaPrima = true, EsGenerico = false, PesoEspecifico = 1.20m, StockActual = 100, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 14, Nombre = "Masterbatch Amarillo", CodigoSku = "MP-MST-AMA", EsMateriaPrima = true, EsGenerico = false, PesoEspecifico = 1.20m, StockActual = 100, Activo = true, FechaCreacion = DateTime.Now },
+                // MASTERBATCHES Y ADITIVOS
+                new Producto { Id = 20, Nombre = "Masterbatch Blanco", CodigoSku = "MP-MB-BLA", EsMateriaPrima = true, PesoEspecifico = 1.80m, StockActual = 200, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 21, Nombre = "Masterbatch Negro", CodigoSku = "MP-MB-NEG", EsMateriaPrima = true, PesoEspecifico = 1.20m, StockActual = 200, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 22, Nombre = "Masterbatch Color (Varios)", CodigoSku = "MP-MB-COL", EsMateriaPrima = true, PesoEspecifico = 1.20m, StockActual = 200, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 23, Nombre = "Carga Mineral", CodigoSku = "MP-CARGA", EsMateriaPrima = true, PesoEspecifico = 1.80m, StockActual = 1000, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 24, Nombre = "Aditivo UV", CodigoSku = "MP-UV", EsMateriaPrima = true, PesoEspecifico = 0.95m, StockActual = 100, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 25, Nombre = "Aditivo Caucho", CodigoSku = "MP-CAUCHO", EsMateriaPrima = true, PesoEspecifico = 0.94m, StockActual = 100, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 26, Nombre = "Estearato", CodigoSku = "MP-ESTEARATO", EsMateriaPrima = true, PesoEspecifico = 0.35m, StockActual = 50, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 27, Nombre = "Brillo", CodigoSku = "MP-BRILLO", EsMateriaPrima = true, PesoEspecifico = 1.00m, StockActual = 50, Activo = true, FechaCreacion = DateTime.Now },
 
-                // ADITIVOS DE PRODUCCIÓN
-                new Producto { Id = 30, Nombre = "Aditivo Brillo", CodigoSku = "MP-BRILLO", EsMateriaPrima = true, EsGenerico = false, StockActual = 500, PesoEspecifico = 1m, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 31, Nombre = "Estearato de Zinc", CodigoSku = "MP-ESTEARATO", EsMateriaPrima = true, EsGenerico = false, StockActual = 200, PesoEspecifico = 0.35m, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 32, Nombre = "Carga Mineral (Carbonato)", CodigoSku = "MP-CARGA", EsMateriaPrima = true, EsGenerico = false, StockActual = 2000, PesoEspecifico = 1.80m, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 33, Nombre = "Aditivo UV", CodigoSku = "MP-UV", EsMateriaPrima = true, EsGenerico = false, StockActual = 200, PesoEspecifico = 0.95m, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 34, Nombre = "Aditivo Caucho", CodigoSku = "MP-CAUCHO", EsMateriaPrima = true, EsGenerico = false, StockActual = 200, PesoEspecifico = 0.94m, Activo = true, FechaCreacion = DateTime.Now },
-
-                // 2. PRODUCTOS GENÉRICOS (PADRES)
-                new Producto { Id = 50, Nombre = "Material PAI Blanco", CodigoSku = "MAT-PAI-B", EsProductoTerminado = true, EsMateriaPrima = false, EsGenerico = true, PesoEspecifico = 0, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 51, Nombre = "Material PAI Negro", CodigoSku = "MAT-PAI-N", EsProductoTerminado = true, EsMateriaPrima = false, EsGenerico = true, PesoEspecifico = 0, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 52, Nombre = "Material PAI Color", CodigoSku = "MAT-PAI-C", EsProductoTerminado = true, EsMateriaPrima = false, EsGenerico = true, PesoEspecifico = 0, StockMinimo = 200, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 53, Nombre = "Material PAI Bicapa", CodigoSku = "MAT-PAI-BIC", EsProductoTerminado = true, EsMateriaPrima = false, EsGenerico = true, PesoEspecifico = 0, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 54, Nombre = "Material PAI Tricapa", CodigoSku = "MAT-PAI-TRI", EsProductoTerminado = true, EsMateriaPrima = false, EsGenerico = true, PesoEspecifico = 0, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now },
-
-                new Producto { Id = 60, Nombre = "Material ABS Blanco", CodigoSku = "MAT-ABS-B", EsProductoTerminado = true, EsGenerico = true, StockMinimo = 300, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 61, Nombre = "Material ABS Negro/Color", CodigoSku = "MAT-ABS-C", EsProductoTerminado = true, EsGenerico = true, StockMinimo = 300, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 70, Nombre = "Material PP", CodigoSku = "MAT-PP", EsProductoTerminado = true, EsGenerico = true, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 80, Nombre = "Material PEAD", CodigoSku = "MAT-PEAD", EsProductoTerminado = true, EsGenerico = true, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 81, Nombre = "Material PEBD", CodigoSku = "MAT-PEBD", EsProductoTerminado = true, EsGenerico = true, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 90, Nombre = "Material Biolam", CodigoSku = "MAT-BIO", EsProductoTerminado = true, EsGenerico = true, StockMinimo = 200, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 99, Nombre = "Lámina PET (Reventa)", CodigoSku = "REV-PET", EsProductoTerminado = true, EsGenerico = true, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now },
-
-                // 3. PRODUCTOS ESTÁNDAR
-                new Producto { Id = 100, ProductoPadreId = 50, Nombre = "Lámina PAI Blanco 1000x2000x0.5 mm", CodigoSku = "STD-PAI-1000-05", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 0.5m },
-                new Producto { Id = 101, ProductoPadreId = 50, Nombre = "Lámina PAI Blanco 1000x2000x1.0 mm", CodigoSku = "STD-PAI-1000-10", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 1.0m },
-                new Producto { Id = 102, ProductoPadreId = 50, Nombre = "Lámina PAI Blanco 1000x2000x1.5 mm", CodigoSku = "STD-PAI-1000-15", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 1.5m },
-
-                new Producto { Id = 103, ProductoPadreId = 50, Nombre = "Lámina PAI Blanco 1220x2440x0.5 mm", CodigoSku = "STD-PAI-1220-05", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2440, Ancho = 1220, Espesor = 0.5m },
-                new Producto { Id = 104, ProductoPadreId = 50, Nombre = "Lámina PAI Blanco 1220x2440x1.0 mm", CodigoSku = "STD-PAI-1220-10", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2440, Ancho = 1220, Espesor = 1.0m },
-                new Producto { Id = 105, ProductoPadreId = 50, Nombre = "Lámina PAI Blanco 1220x2440x1.5 mm", CodigoSku = "STD-PAI-1220-15", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2440, Ancho = 1220, Espesor = 1.5m },
-
-                // PAI BICAPA
-                new Producto { Id = 110, ProductoPadreId = 53, Nombre = "Lámina PAI Bicapa 1000x2000x1.0 mm", CodigoSku = "STD-BIC-1000-10", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 1.0m },
-                new Producto { Id = 111, ProductoPadreId = 53, Nombre = "Lámina PAI Bicapa 1000x2000x1.5 mm", CodigoSku = "STD-BIC-1000-15", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 1.5m },
-                new Producto { Id = 112, ProductoPadreId = 53, Nombre = "Lámina PAI Bicapa 1220x2440x1.0 mm", CodigoSku = "STD-BIC-1220-10", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2440, Ancho = 1220, Espesor = 1.0m },
-                new Producto { Id = 113, ProductoPadreId = 53, Nombre = "Lámina PAI Bicapa 1220x2440x1.5 mm", CodigoSku = "STD-BIC-1220-15", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2440, Ancho = 1220, Espesor = 1.5m },
-
-                // PAI TRICAPA
-                new Producto { Id = 120, ProductoPadreId = 54, Nombre = "Lámina PAI Tricapa 1000x2000x1.0 mm", CodigoSku = "STD-TRI-1000-10", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 1.0m },
-                new Producto { Id = 121, ProductoPadreId = 54, Nombre = "Lámina PAI Tricapa 1000x2000x1.5 mm", CodigoSku = "STD-TRI-1000-15", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 1.5m },
-                new Producto { Id = 122, ProductoPadreId = 54, Nombre = "Lámina PAI Tricapa 1220x2440x1.0 mm", CodigoSku = "STD-TRI-1220-10", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2440, Ancho = 1220, Espesor = 1.0m },
-                new Producto { Id = 123, ProductoPadreId = 54, Nombre = "Lámina PAI Tricapa 1220x2440x1.5 mm", CodigoSku = "STD-TRI-1220-15", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.05m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2440, Ancho = 1220, Espesor = 1.5m },
-
-                // PET
-                new Producto { Id = 130, ProductoPadreId = 99, Nombre = "Lámina PET 1000x2000x0.50 mm", CodigoSku = "STD-PET-050", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.38m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 0.50m },
-                new Producto { Id = 131, ProductoPadreId = 99, Nombre = "Lámina PET 1000x2000x0.80 mm", CodigoSku = "STD-PET-080", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.38m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 0.80m },
-                new Producto { Id = 132, ProductoPadreId = 99, Nombre = "Lámina PET 1000x2000x1.00 mm", CodigoSku = "STD-PET-100", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.38m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 1.00m },
-
-                // BIOLAM
-                new Producto { Id = 140, ProductoPadreId = 90, Nombre = "Lámina BIOLAM 1000x2000x0.50 mm", CodigoSku = "STD-BIO-050", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.25m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 0.50m },
-                new Producto { Id = 141, ProductoPadreId = 90, Nombre = "Lámina BIOLAM 1000x2000x0.70 mm", CodigoSku = "STD-BIO-070", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.25m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 0.70m },
-                new Producto { Id = 142, ProductoPadreId = 90, Nombre = "Lámina BIOLAM 1000x2000x1.00 mm", CodigoSku = "STD-BIO-100", EsProductoTerminado = true, EsGenerico = false, PesoEspecifico = 1.25m, Activo = true, StockActual = 0, FechaCreacion = DateTime.Now, Largo = 2000, Ancho = 1000, Espesor = 1.00m }
+                // *** COMODÍN DE FAZÓN (NECESARIO PARA DB) ***
+                // Visualmente en el Front se mostrará como "Fazón de [Cliente]", pero internamente usa este ID.
+                new Producto { Id = 999, Nombre = "MATERIAL DE CLIENTE (FAZÓN)", CodigoSku = "MP-FAZON-GEN", EsMateriaPrima = true, PesoEspecifico = 1.00m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now }
             );
 
-            // RECETAS TÍPICAS
+            // -----------------------------------------------------------------------------
+            // 2. PRODUCTOS TERMINADOS (CATÁLOGO A MEDIDA - NO ESTÁNDAR)
+            // -----------------------------------------------------------------------------
+            modelBuilder.Entity<Producto>().HasData(
+                // --- SECCIÓN: A.I. (ALTO IMPACTO) ---
+                new Producto { Id = 100, Nombre = "A.I. FINO (0.40 - 0.90 mm)", CodigoSku = "AI-FINO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 101, Nombre = "A.I. GRUESO", CodigoSku = "AI-GRUESO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.91m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 102, Nombre = "A.I. FINO COLOR (0.40 - 0.90 mm)", CodigoSku = "AI-FINO-COL", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Color = "A Elección", Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 103, Nombre = "A.I. GRUESO COLOR", CodigoSku = "AI-GRUESO-COL", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.91m, Color = "A Elección", Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 104, Nombre = "A.I. BICAPA", CodigoSku = "AI-BICAPA", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 105, Nombre = "A.I. TRICAPA", CodigoSku = "AI-TRICAPA", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 106, Nombre = "A.I. TUTTI FINO (0.40 - 0.90 mm)", CodigoSku = "AI-TUTTI-FINO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 107, Nombre = "A.I. TUTTI GRUESO", CodigoSku = "AI-TUTTI-GRUESO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.91m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 108, Nombre = "A.I. RESISTENTE AL FREON", CodigoSku = "AI-FREON", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 109, Nombre = "A.I. RESISTENTE AL FREON COLOR", CodigoSku = "AI-FREON-COL", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Color = "A Elección", Activo = true, FechaCreacion = DateTime.Now },
+
+                // --- SECCIÓN: ABS ---
+                new Producto { Id = 200, Nombre = "ABS BLANCO", CodigoSku = "ABS-BLA", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Color = "Blanco", Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 201, Nombre = "ABS COLOR", CodigoSku = "ABS-COL", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Color = "A Elección", Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 202, Nombre = "ABS GRUESO", CodigoSku = "ABS-GRUESO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 1.00m, Activo = true, FechaCreacion = DateTime.Now },
+
+                // --- SECCIÓN: PP ---
+                new Producto { Id = 300, Nombre = "PP (POLIPROPILENO)", CodigoSku = "PP-STD", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.91m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 301, Nombre = "PP (POLIPROPILENO) COLOR", CodigoSku = "PP-COL", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.91m, Color = "A Elección", Activo = true, FechaCreacion = DateTime.Now },
+
+                // --- SECCIÓN: PEAD / PEBD ---
+                new Producto { Id = 400, Nombre = "PEAD / PEBD", CodigoSku = "PE-MIX", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.94m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 401, Nombre = "PEBD GOFRADO", CodigoSku = "PEBD-GOF", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.92m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 402, Nombre = "PEAD BICAPA", CodigoSku = "PEAD-BIC", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.96m, Activo = true, FechaCreacion = DateTime.Now },
+
+                // --- SECCIÓN: BIOPLASTICO ---
+                new Producto { Id = 500, Nombre = "BIOPLASTICO", CodigoSku = "BIO-LAM", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.25m, Activo = true, FechaCreacion = DateTime.Now },
+
+                // -----------------------------------------------------------------------------
+                // 3. SECCIÓN: FAZÓN (SERVICIO DE LAMINADO) - LISTA ESPECÍFICA
+                // -----------------------------------------------------------------------------
+
+                new Producto { Id = 900, Nombre = "LAMINADO A FAZON - A.I. FINO", CodigoSku = "FAZ-AI-FIN", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 901, Nombre = "LAMINADO A FAZON - A.I. GRUESO", CodigoSku = "FAZ-AI-GRU", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 902, Nombre = "LAMINADO A FAZON - A.I. BICAPA", CodigoSku = "FAZ-AI-BIC", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 903, Nombre = "LAMINADO A FAZON - A.I. TRICAPA", CodigoSku = "FAZ-AI-TRI", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 904, Nombre = "LAMINADO A FAZON - ABS GRUESO", CodigoSku = "FAZ-ABS-GRU", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 905, Nombre = "LAMINADO A FAZON - PEAD/PP/BIO FINO", CodigoSku = "FAZ-POLI-FIN", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.95m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 906, Nombre = "LAMINADO A FAZON - PEAD/PP/BIO GRUESO", CodigoSku = "FAZ-POLI-GRU", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.95m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 907, Nombre = "LAMINADO A FAZON - PEAD BICAPA", CodigoSku = "FAZ-PEAD-BIC", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.96m, Activo = true, FechaCreacion = DateTime.Now }
+            );
+
+            // -----------------------------------------------------------------------------
+            // 4. RECETAS SUGERIDAS
+            // -----------------------------------------------------------------------------
+            // Los fazones NO tienen receta fija aquí, el Frontend la generará dinámica.
+
             modelBuilder.Entity<Formula>().HasData(
-                new Formula { Id = 200, ProductoTerminadoId = 50, MateriaPrimaId = 1, Cantidad = 98 },
-                new Formula { Id = 201, ProductoTerminadoId = 50, MateriaPrimaId = 8, Cantidad = 2 },
-                new Formula { Id = 202, ProductoTerminadoId = 51, MateriaPrimaId = 1, Cantidad = 98 },
-                new Formula { Id = 203, ProductoTerminadoId = 51, MateriaPrimaId = 9, Cantidad = 2 },
-                new Formula { Id = 204, ProductoTerminadoId = 52, MateriaPrimaId = 1, Cantidad = 100 },
-                new Formula { Id = 205, ProductoTerminadoId = 70, MateriaPrimaId = 3, Cantidad = 100 }
-                //new Formula { Id = 206, ProductoTerminadoId = 53, MateriaPrimaId = , Cantidad = }
+                new Formula { Id = 1, ProductoTerminadoId = 100, MateriaPrimaId = 1, Cantidad = 96 },
+                new Formula { Id = 2, ProductoTerminadoId = 100, MateriaPrimaId = 20, Cantidad = 4 },
+
+                new Formula { Id = 3, ProductoTerminadoId = 102, MateriaPrimaId = 1, Cantidad = 98 },
+                new Formula { Id = 4, ProductoTerminadoId = 102, MateriaPrimaId = 22, Cantidad = 2 },
+
+                new Formula { Id = 5, ProductoTerminadoId = 200, MateriaPrimaId = 2, Cantidad = 98 },
+                new Formula { Id = 6, ProductoTerminadoId = 200, MateriaPrimaId = 20, Cantidad = 2 },
+
+                new Formula { Id = 7, ProductoTerminadoId = 300, MateriaPrimaId = 3, Cantidad = 100 },
+
+                new Formula { Id = 8, ProductoTerminadoId = 400, MateriaPrimaId = 4, Cantidad = 100 },
+
+                new Formula { Id = 9, ProductoTerminadoId = 106, MateriaPrimaId = 7, Cantidad = 100 },
+
+                // 1. Fazón A.I. FINO (ID 900) -> 100% Material Cliente
+                new Formula { Id = 50, ProductoTerminadoId = 900, MateriaPrimaId = 999, Cantidad = 100 },
+
+                // 2. Fazón A.I. GRUESO (ID 901) -> 100% Material Cliente
+                new Formula { Id = 51, ProductoTerminadoId = 901, MateriaPrimaId = 999, Cantidad = 100 },
+
+                // 3. Fazón A.I. FINO COLOR (ID 902) 
+                // Nota: Aquí ponemos 98% material cliente y 2% Masterbatch (Genérico ID 22)
+                // El cliente trae el material base, pero quizás tú pones el color. 
+                // Si el cliente trae TODO (incluso el color mezclado), ponle 100% al ID 999.
+                new Formula { Id = 52, ProductoTerminadoId = 902, MateriaPrimaId = 999, Cantidad = 98 },
+                new Formula { Id = 53, ProductoTerminadoId = 902, MateriaPrimaId = 22, Cantidad = 2 }, // Masterbatch Color
+
+                // 4. Fazón A.I. GRUESO COLOR (ID 903)
+                new Formula { Id = 54, ProductoTerminadoId = 903, MateriaPrimaId = 999, Cantidad = 98 },
+                new Formula { Id = 55, ProductoTerminadoId = 903, MateriaPrimaId = 22, Cantidad = 2 },
+
+                // 5. Fazón A.I. BICAPA (ID 904) -> 100% Material Cliente
+                new Formula { Id = 56, ProductoTerminadoId = 904, MateriaPrimaId = 999, Cantidad = 100 },
+
+                // 6. Fazón A.I. TRICAPA (ID 905) -> 100% Material Cliente
+                new Formula { Id = 57, ProductoTerminadoId = 905, MateriaPrimaId = 999, Cantidad = 100 },
+
+                // 7. Fazón A.I. TUTTI FINO (ID 906) -> 100% Material Cliente
+                new Formula { Id = 58, ProductoTerminadoId = 906, MateriaPrimaId = 999, Cantidad = 100 },
+
+                // 8. Fazón A.I. TUTTI GRUESO (ID 907) -> 100% Material Cliente
+                new Formula { Id = 59, ProductoTerminadoId = 907, MateriaPrimaId = 999, Cantidad = 100 }
             );
         }
     }

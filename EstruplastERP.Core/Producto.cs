@@ -22,6 +22,7 @@ namespace EstruplastERP.Core
         public string? CodigoBarras { get; set; }
         [MaxLength(50)]
         public string? Color { get; set; } // Ej: "Gris Goff"
+        public bool EsFazon { get; set; } = false;
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal Largo { get; set; } // Ej: 1550
