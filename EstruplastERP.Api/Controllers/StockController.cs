@@ -47,30 +47,85 @@ namespace EstruplastERP.Api.Controllers
             return Ok(new { mensaje = "Stock actualizado", nuevoStock = producto.StockActual });
         }
 
-        // 2. AJUSTE DE STOCK
         [HttpPost("ajuste")]
         public async Task<IActionResult> AjustarStock([FromBody] AjusteDto ajuste)
         {
+            Console.WriteLine($"--> 1. INICIO: ID={ajuste.ProductoId}, PrecioNuevo={ajuste.NuevoPrecio}");
+
             var producto = await _context.Productos.FindAsync(ajuste.ProductoId);
             if (producto == null) return NotFound("Producto no encontrado");
 
-            decimal diferencia = ajuste.CantidadReal - producto.StockActual;
-            if (diferencia == 0) return Ok(new { mensaje = "Stock sin cambios." });
+            // Imprimimos el precio viejo para comparar
+            Console.WriteLine($"--> 2. PRECIO ACTUAL DB: {producto.PrecioCosto}");
 
-            producto.StockActual = ajuste.CantidadReal;
+            bool huboCambios = false;
 
-            _context.Movimientos.Add(new Movimiento
+            // ---------------------------------------------------------
+            // 1. ACTUALIZAR PRECIO (FORZADO)
+            // ---------------------------------------------------------
+            if (ajuste.NuevoPrecio.HasValue && ajuste.NuevoPrecio.Value >= 0)
             {
-                Fecha = DateTime.Now,
-                ProductoId = ajuste.ProductoId,
-                Cantidad = diferencia,
-                TipoMovimiento = "AJUSTE_INVENTARIO",
-                Observacion = $"Ajuste Manual: {ajuste.Motivo}",
-                Turno = "Administracion"
-            });
+                // Asignamos el valor directamente
+                producto.PrecioCosto = ajuste.NuevoPrecio.Value;
 
-            await _context.SaveChangesAsync();
-            return Ok(new { mensaje = "Inventario corregido." });
+                // 🔥 ESTA LÍNEA ES LA CLAVE: OBLIGAMOS A LA BD A MARCARLO COMO SUCIO
+                _context.Entry(producto).Property(p => p.PrecioCosto).IsModified = true;
+
+                huboCambios = true;
+                Console.WriteLine($"--> 3. CAMBIO PRECIO APLICADO: {producto.PrecioCosto}");
+            }
+
+            // ---------------------------------------------------------
+            // 2. ACTUALIZAR STOCK
+            // ---------------------------------------------------------
+            decimal diferencia = ajuste.CantidadReal - producto.StockActual;
+
+            if (diferencia != 0)
+            {
+                _context.Movimientos.Add(new Movimiento
+                {
+                    Fecha = DateTime.Now,
+                    ProductoId = ajuste.ProductoId,
+                    Cantidad = diferencia,
+                    TipoMovimiento = "AJUSTE_INVENTARIO",
+                    Observacion = $"Ajuste: {ajuste.Motivo}",
+                    Turno = "Administracion",
+                    PrecioUnitario = producto.PrecioCosto,
+                    PrecioTotal = producto.PrecioCosto * Math.Abs(diferencia)
+                });
+
+                producto.StockActual = ajuste.CantidadReal;
+                _context.Entry(producto).Property(p => p.StockActual).IsModified = true; // Forzamos también el stock
+                huboCambios = true;
+            }
+
+            // ---------------------------------------------------------
+            // 3. GUARDAR CAMBIOS (CON DEBUG)
+            // ---------------------------------------------------------
+            if (huboCambios)
+            {
+                try
+                {
+                    // Guardamos y capturamos cuántas filas se tocaron
+                    int filasAfectadas = await _context.SaveChangesAsync();
+
+                    Console.WriteLine($"--> 4. EXITOSO: Se modificaron {filasAfectadas} registros en la BD.");
+
+                    return Ok(new { mensaje = "Datos actualizados correctamente." });
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"--> ERROR BD: {ex.Message}");
+                    if (ex.InnerException != null) Console.WriteLine($"--> INNER: {ex.InnerException.Message}");
+
+                    return StatusCode(500, "Error al guardar en base de datos: " + ex.Message);
+                }
+            }
+            else
+            {
+                Console.WriteLine("--> SIN CAMBIOS: El sistema no detectó diferencias.");
+                return Ok(new { mensaje = "No se detectaron cambios necesarios." });
+            }
         }
 
         // MÉTODOS GET
@@ -101,5 +156,4 @@ namespace EstruplastERP.Api.Controllers
                 .ToListAsync();
         }
     }
-    // ❌ AQUÍ YA NO HAY CLASES DEFINIDAS, SE USAN LAS DE LA CARPETA DTOS
 }

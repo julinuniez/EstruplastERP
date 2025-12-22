@@ -5,188 +5,172 @@ import axios from 'axios'
 import html2pdf from 'html2pdf.js'
 import HojaImpresion from './HojaImpresion.vue'
 
-// --- 1. CONFIGURACIÓN ---
 const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
 const PESO_LATA_KG = 0.35; 
 const KILOS_BASE_LATA = 500;
 
-// --- 2. INTERFACES ---
-interface Producto {
-  id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean; esGenerico: boolean; 
-  esFazon?: boolean; 
-  largo: number; ancho: number; espesor: number; pesoEspecifico: number; color?: string;
-  receta?: any[]; 
-}
-interface Empleado { id: number; nombreCompleto: string; }
-interface Cliente { id: number; razonSocial: string; }
-interface ItemReceta { 
-  id: number | string; cantidad: number; nombreInsumo: string; densidad: number; materiaPrimaId: number; 
-  esColor?: boolean; esCarga?: boolean; esBase?: boolean; esBrillo?: boolean; esEstearato?: boolean; esUv?: boolean; esCaucho?: boolean;
-  esFazonInput?: boolean; 
-  materialBase?: string; // Propiedad auxiliar para guardar el tipo (ABS, AI, etc.)
+interface Producto { 
+    id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean; 
+    esGenerico: boolean; esFazon?: boolean; largo: number; ancho: number; 
+    espesor: number; pesoEspecifico: number; color?: string; receta?: any[];
+    espesorMinimo?: number; espesorMaximo?: number; EspesorMinimo?: number; EspesorMaximo?: number;
 }
 
-// --- 3. ESTADO ---
+interface Empleado { id: number; nombreCompleto: string; }
+interface Cliente { id: number; razonSocial: string; }
+interface ItemReceta { id: number | string; cantidad: number; nombreInsumo: string; densidad: number; materiaPrimaId: number; esColor?: boolean; esCarga?: boolean; esBase?: boolean; esBrillo?: boolean; esEstearato?: boolean; esUv?: boolean; esCaucho?: boolean; esFazonInput?: boolean; materialBase?: string; }
+
 const productos = ref<Producto[]>([])
+const listaInventarioCompleto = ref<any[]>([]) 
 const listaMasterbatches = ref<any[]>([]) 
 const listaTodasMateriasPrimas = ref<any[]>([]) 
 const empleados = ref<Empleado[]>([])
 const clientes = ref<Cliente[]>([])
 const recetaDinamica = ref<ItemReceta[]>([]) 
+const stockFazonDetectado = ref<number | null>(null);
+
+// VARIABLES DE LÍMITES EXPLÍCITAS
+const limiteMinimo = ref(0);
+const limiteMaximo = ref(0);
 
 const emit = defineEmits(['guardado'])
 
-const form = ref({
-  productoTerminadoId: '' as string | number,
-  clienteId: '' as string | number, 
-  cantidad: 1, 
-  empleadoId: '' as string | number,
-  observacion: '',
-  turno: 'Mañana',
-  largo: 0, ancho: 0, espesor: 0,
-  conBrillo: false, porcBrillo: 2.00, 
-  llevaFilm: false, tipoCorona: 'Ninguno', 
-  conEstearato: false, 
-  esProductoColor: false, masterbatchId: '' as string | number, colorTexto: '', 
-  aditivoUV: false, porcentajeUv: 1.00, 
-  aditivoCaucho: false, porcentajeCaucho: 1.00,
-  aditivoCarga: 0, kilosTotales: 0 
+const form = ref({ 
+    productoTerminadoId: '' as string | number, clienteId: '' as string | number, 
+    cantidad: 1, empleadoId: '' as string | number, observacion: '', turno: 'Mañana', 
+    largo: 0, ancho: 0, espesor: 0, 
+    conBrillo: false, porcBrillo: 2.00, llevaFilm: false, tipoCorona: 'Ninguno', 
+    conEstearato: false, esProductoColor: false, masterbatchId: '' as string | number, colorTexto: '', 
+    aditivoUV: false, porcentajeUv: 1.00, aditivoCaucho: false, porcentajeCaucho: 1.00, 
+    aditivoCarga: 0, 
+    merma: 8,
+    kilosTotales: 0 
 })
 
-// Variables UI
-const mensaje = ref('')
-const error = ref('')
-const idProduccionGenerada = ref(false)
-const ocultarFormula = ref(false)
+const mensaje = ref(''); const error = ref(''); const idProduccionGenerada = ref(false); const ocultarFormula = ref(false)
+const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
 
-const getAuthConfig = () => {
-  const token = localStorage.getItem('token');
-  return { headers: { Authorization: `Bearer ${token}` } };
-};
-
-// --- 4. COMPUTADOS ---
 const productoSeleccionado = computed(() => productos.value.find(p => p.id === form.value.productoTerminadoId) || null);
 const empleadoSeleccionado = computed(() => empleados.value.find(e => e.id === form.value.empleadoId) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === form.value.clienteId) || null);
+const medidasBloqueadas = computed(() => !productoSeleccionado.value || !productoSeleccionado.value.esGenerico);
+const totalPorcentajeReceta = computed(() => parseFloat(recetaDinamica.value.reduce((acc, item) => acc + (parseFloat(item.cantidad.toString()) || 0), 0).toFixed(2)));
 
-const medidasBloqueadas = computed(() => {
-  if (!productoSeleccionado.value) return true; 
-  return !productoSeleccionado.value.esGenerico;
+const clienteTieneFazonHabilitado = computed(() => {
+    if (!form.value.clienteId) return false;
+    const prefijo = `MP-CLI-${form.value.clienteId}-`;
+    return listaInventarioCompleto.value.some(p => p.codigoSku && p.codigoSku.startsWith(prefijo));
 });
 
-const totalPorcentajeReceta = computed(() => {
-  const suma = recetaDinamica.value.reduce((acc, item) => acc + (parseFloat(item.cantidad.toString()) || 0), 0);
-  return parseFloat(suma.toFixed(2));
+const listaProductosDisponibles = computed(() => {
+    return productos.value.filter(p => {
+        const esTipoFazon = p.esFazon || p.nombre.toUpperCase().includes('FAZON') || p.nombre.toUpperCase().includes('SERVICIO');
+        if (esTipoFazon) return clienteTieneFazonHabilitado.value;
+        return true;
+    });
 });
 
 const colorFinalParaPDF = computed(() => {
   if (!form.value.esProductoColor) return form.value.colorTexto || '-';
   if (!form.value.masterbatchId) return 'A DEFINIR';
   const mb = listaMasterbatches.value.find(m => m.id === form.value.masterbatchId);
-  if (mb) {
-    const palabras = mb.nombre.split(' ');
-    return palabras.length > 1 ? palabras.slice(1).join(' ') : mb.nombre;
-  }
-  return '-';
+  return mb ? (mb.nombre.split(' ').length > 1 ? mb.nombre.split(' ').slice(1).join(' ') : mb.nombre) : '-';
 });
 
 const densidadMezcla = computed(() => {
   if (recetaDinamica.value.length === 0) return productoSeleccionado.value?.pesoEspecifico || 0.92;
   let dTotal = 0, pTotal = 0;
-  recetaDinamica.value.forEach(item => {
-    const porc = parseFloat(item.cantidad.toString()) || 0;
-    const dens = item.densidad || 0.92; 
-    dTotal += (porc * dens);
-    pTotal += porc;
-  });
+  recetaDinamica.value.forEach(item => { const porc = parseFloat(item.cantidad.toString()) || 0; dTotal += (porc * (item.densidad || 0.92)); pTotal += porc; });
   return pTotal === 0 ? 0.92 : parseFloat((dTotal / pTotal).toFixed(4));
 });
 
 const kilosCalculados = computed(() => {
   if (!productoSeleccionado.value) return 0;
-  const L_m = (parseFloat(form.value.largo.toString()) || 0) / 1000;
-  const A_m = (parseFloat(form.value.ancho.toString()) || 0) / 1000;
-  const E_mm = parseFloat(form.value.espesor.toString()) || 0;
-  const Cant = parseFloat(form.value.cantidad.toString()) || 1;
-  const D = densidadMezcla.value; 
-  const peso = L_m * A_m * E_mm * D;
-  return parseFloat((peso * Cant).toFixed(2));
+  const L = (parseFloat(form.value.largo.toString()) || 0) / 1000, A = (parseFloat(form.value.ancho.toString()) || 0) / 1000, E = parseFloat(form.value.espesor.toString()) || 0, C = parseFloat(form.value.cantidad.toString()) || 1;
+  return parseFloat((L * A * E * densidadMezcla.value * C).toFixed(2));
 });
+
+const factorMerma = computed(() => 1 + (form.value.merma / 100));
 
 const insumosSinStock = computed(() => {
   if (form.value.kilosTotales <= 0) return [];
   const faltantes: any[] = [];
-  recetaDinamica.value.forEach(item => {
-    if(item.materiaPrimaId === 999) return; 
+  const kilosBase = form.value.kilosTotales * factorMerma.value;
 
-    const porcentaje = parseFloat(item.cantidad.toString()) || 0;
-    const consumoNecesario = (form.value.kilosTotales * porcentaje) / 100;
-    const mpEnStock = listaTodasMateriasPrimas.value.find(m => m.id === item.materiaPrimaId);
-    if (mpEnStock) {
-      const stockDisponible = mpEnStock.stockActual || 0;
-      if (stockDisponible < consumoNecesario) {
-        faltantes.push({ nombre: item.nombreInsumo, necesario: consumoNecesario, disponible: stockDisponible, diferencia: consumoNecesario - stockDisponible });
-      }
+  recetaDinamica.value.forEach(item => {
+    const consumo = (kilosBase * parseFloat(item.cantidad.toString()) || 0) / 100;
+    
+    if (item.materiaPrimaId === 999) {
+        if (stockFazonDetectado.value !== null && stockFazonDetectado.value < consumo) {
+            faltantes.push({ nombre: item.nombreInsumo, necesario: consumo, disponible: stockFazonDetectado.value, diferencia: consumo - stockFazonDetectado.value });
+        }
+    } else {
+        const mp = listaTodasMateriasPrimas.value.find(m => m.id === item.materiaPrimaId);
+        if (mp && mp.stockActual < consumo) {
+            faltantes.push({ nombre: item.nombreInsumo, necesario: consumo, disponible: mp.stockActual, diferencia: consumo - mp.stockActual });
+        }
     }
   });
   return faltantes;
 });
-
 const hayBloqueoDeStock = computed(() => insumosSinStock.value.length > 0);
 
-const listaIngredientesDisponibles = computed(() => {
-  const mps = listaTodasMateriasPrimas.value.filter(mp => {
-    const nombre = mp.nombre.toUpperCase();
-    return !(nombre.includes('BRILLO') || nombre.includes('ESTEARATO') || nombre.includes('CAUCHO') || nombre.includes('CARGA MINERAL') || nombre.includes('UV'));
-  }).map(mp => ({ 
-    id: mp.id, 
-    nombre: mp.nombre, 
-    tipo: 'MP', 
-    densidad: mp.pesoEspecifico 
-  }));
+function getMaterialCodeFromId(id: number): string {
+    switch(id) {
+        case 900: case 902: case 906: return "AI-FIN"; 
+        case 901: case 903: case 907: return "AI-GRU"; 
+        case 904: return "AI-BIC"; 
+        case 905: return "AI-TRI"; 
+        case 908: return "ABS-GRU"; 
+        case 909: return "POLI-FIN"; 
+        case 910: return "POLI-GRU"; 
+        case 911: return "PEAD-BIC"; 
+        default: return "GEN"; 
+    }
+}
+function getMaterialNameFromId(id: number): string {
+    const code = getMaterialCodeFromId(id);
+    if(code === "AI-FIN") return "A.I. FINO";
+    if(code === "AI-GRU") return "A.I. GRUESO";
+    if(code === "AI-BIC") return "A.I. BICAPA"; 
+    if(code === "AI-TRI") return "A.I. TRICAPA";
+    if(code === "ABS-GRU") return "ABS";
+    if(code.includes("POLI")) return "POLIPROPILENO";
+    if(code.includes("PEAD")) return "PEAD";
+    return "MATERIAL";
+}
 
-  const prods = productos.value.map(p => ({ 
-    id: p.id, 
-    nombre: p.nombre, 
-    tipo: 'PROD', 
-    densidad: p.pesoEspecifico 
-  }));
-  
-  return [...mps, ...prods].sort((a, b) => a.nombre.localeCompare(b.nombre));
-});
+function quitarInsumoManual(index: number) {
+    if (index >= 0 && index < recetaDinamica.value.length) {
+        recetaDinamica.value.splice(index, 1);
+    }
+}
 
-// --- 5. FUNCIONES ---
-
-const agregarInsumoDesdeHijo = (datos: { id: number, porcentaje: number }) => {
-  const item = listaIngredientesDisponibles.value.find(m => m.id === datos.id);
-  if (!item) return;
-  recetaDinamica.value.push({
-    id: Date.now(),
-    materiaPrimaId: item.id,
-    nombreInsumo: item.nombre,
-    cantidad: datos.porcentaje,
-    densidad: item.densidad || 0.92,
-    esBase: false 
-  });
-  recalcularFormulaAutomatica();
-};
-
-const quitarInsumoManual = (index: number) => {
-  recetaDinamica.value.splice(index, 1);
-  recalcularFormulaAutomatica();
-};
+function agregarInsumoDesdeHijo(item: { id: number, porcentaje: number }) {
+    const mp = listaTodasMateriasPrimas.value.find(m => m.id === item.id);
+    if(mp) {
+        recetaDinamica.value.push({
+            id: Date.now(),
+            materiaPrimaId: mp.id,
+            nombreInsumo: mp.nombre,
+            cantidad: item.porcentaje,
+            densidad: mp.pesoEspecifico || 1,
+            esBase: false
+        });
+    }
+}
 
 async function CargarProductosFiltrados(clienteId: number | string = '') {
   try {
-    let url = `${apiUrl}/Productos`;
-    if (clienteId) url += `?clienteId=${clienteId}`;
-    const res = await axios.get(url, getAuthConfig());
-    const todosLosProductos = res.data;
-    productos.value = todosLosProductos.filter((p: any) => p.esProductoTerminado);
+    const res = await axios.get(`${apiUrl}/Productos?clienteId=${clienteId}`, getAuthConfig());
+    productos.value = res.data.filter((p: any) => p.esProductoTerminado);
     
     if (form.value.productoTerminadoId) {
-       const aunExiste = productos.value.find(p => p.id === form.value.productoTerminadoId);
-       if (!aunExiste) { form.value.productoTerminadoId = ''; recetaDinamica.value = []; }
+       const prodActual = productos.value.find(p => p.id === form.value.productoTerminadoId);
+       if (!prodActual || (prodActual.esFazon && !clienteTieneFazonHabilitado.value)) {
+           form.value.productoTerminadoId = ''; 
+           recetaDinamica.value = [];
+       }
     }
   } catch (e) { console.error(e); }
 }
@@ -195,180 +179,167 @@ async function CargarDatosProductos(id: number) {
   if (!id) return;
   try {
     const res = await axios.get(`${apiUrl}/Productos/${id}`, getAuthConfig());
-    const productoDto = res.data;
+    const prod = res.data;
+    
+    if (!prod.esGenerico) { form.value.largo = prod.largo; form.value.ancho = prod.ancho; form.value.espesor = prod.espesor; if(!form.value.observacion) form.value.observacion = "Producción Stock"; } 
+    else { form.value.largo = prod.largo || 0; form.value.ancho = prod.ancho || 0; form.value.espesor = prod.espesor || 0; }
+    
+    // 🔥 LÓGICA HÍBRIDA DE LÍMITES (VARIABLES)
+    // 1. Intentar leer de la BD
+    limiteMinimo.value = prod.espesorMinimo ?? prod.EspesorMinimo ?? 0;
+    limiteMaximo.value = prod.espesorMaximo ?? prod.EspesorMaximo ?? 0;
 
-    if (!productoDto.esGenerico) {
-      form.value.largo = productoDto.largo; form.value.ancho = productoDto.ancho; form.value.espesor = productoDto.espesor;
-      if(!form.value.observacion) form.value.observacion = "Producción Estándar de Stock";
-    } else {
-      form.value.largo = productoDto.largo || 0; form.value.ancho = productoDto.ancho || 0; form.value.espesor = productoDto.espesor || 0;
+    // 2. Fallback: Si la BD trajo 0, usar lógica por Nombre
+    if (limiteMinimo.value === 0 && limiteMaximo.value === 0) {
+        const nombre = (prod.nombre || '').toUpperCase();
+        if (nombre.includes("FINO")) {
+            limiteMinimo.value = 0.40;
+            limiteMaximo.value = 0.90;
+        } else if (nombre.includes("GRUESO")) {
+            limiteMinimo.value = 0.90; // Default grueso
+            if (nombre.includes("ABS")) limiteMinimo.value = 1.00; // ABS es más grueso
+        }
     }
 
-    form.value.esProductoColor = productoDto.nombre.toUpperCase().includes('COLOR') || productoDto.nombre.toUpperCase().includes('VARIOS');
-    form.value.colorTexto = productoDto.color || '';
-    
+    form.value.esProductoColor = prod.nombre.toUpperCase().includes('COLOR'); form.value.colorTexto = prod.color || '';
     form.value.masterbatchId = ''; form.value.aditivoCarga = 0; form.value.aditivoUV = false; form.value.aditivoCaucho = false;
 
-    if (productoDto.esFazon) {
-        
-        const n = productoDto.nombre.toUpperCase();
-        let nombreMaterialBase = "MATERIAL GENÉRICO";
-
-        if (n.includes("ABS")) {
-            nombreMaterialBase = "ABS";
-        } 
-        else if (n.includes("PEAD") || n.includes("POLIETILENO")) {
-            nombreMaterialBase = "PEAD";
-        }
-        else if (n.includes("PP") || n.includes("POLIPROPILENO") || n.includes("BIO")) {
-            nombreMaterialBase = "POLIPROPILENO/BIO";
-        }
-        else if (n.includes("A.I.") || n.includes("PAI") || n.includes("ALTO IMPACTO")) {
-            nombreMaterialBase = "A.I. (ALTO IMPACTO)";
-        }
-
-        const nombreCliente = clienteSeleccionado.value 
-            ? clienteSeleccionado.value.razonSocial.toUpperCase() 
-            : '___ (SELECCIONE CLIENTE)';
-
-        recetaDinamica.value = [{
-            id: Date.now(),
-            materiaPrimaId: 999,
-            materialBase: nombreMaterialBase, 
-            nombreInsumo: `MP ${nombreMaterialBase} - PROPIEDAD DE ${nombreCliente}`,
-            cantidad: 100,
-            densidad: productoDto.pesoEspecifico,
-            esBase: true,
-            esFazonInput: true 
+    if (prod.esFazon) {
+        const nombreMatBase = getMaterialNameFromId(id);
+        const nombreCli = clienteSeleccionado.value ? clienteSeleccionado.value.razonSocial.toUpperCase() : '___';
+        recetaDinamica.value = [{ 
+            id: Date.now(), materiaPrimaId: 999, materialBase: nombreMatBase, 
+            nombreInsumo: `MP ${nombreMatBase} - PROPIEDAD DE ${nombreCli}`, 
+            cantidad: 100, densidad: prod.pesoEspecifico, esBase: true, esFazonInput: true 
         }];
-
-    } else if (productoDto.receta && productoDto.receta.length > 0) {
-        recetaDinamica.value = productoDto.receta.map((r: any) => ({
-            id: Date.now() + Math.random(),
-            materiaPrimaId: r.materiaPrimaId,
-            nombreInsumo: r.nombreInsumo || 'Insumo',
-            cantidad: r.cantidad,
-            densidad: 0.92, 
-            esColor: false, esCarga: false, esBrillo: false, esEstearato: false,
-            esBase: r.cantidad > 50 
-        }));
+        if (form.value.clienteId) consultarStockFazon(form.value.clienteId, id);
+    } else if (prod.receta?.length > 0) {
+        // 🔥 DETECCIÓN DE MASTERBATCHES PARA PODER REEMPLAZARLOS LUEGO
+        recetaDinamica.value = prod.receta.map((r: any) => {
+            const nombre = (r.nombreInsumo || '').toUpperCase();
+            // Identificamos cualquier cosa que parezca un color
+            const esMb = r.materiaPrimaId === 22 || nombre.includes('MASTER') || nombre.includes('PIGMENTO') || nombre.includes('COLOR') || nombre.includes('VARIOS');
+            return { 
+                id: Date.now()+Math.random(), 
+                materiaPrimaId: r.materiaPrimaId, 
+                nombreInsumo: r.nombreInsumo||'Insumo', 
+                cantidad: r.cantidad, 
+                densidad: 0.92, 
+                esBase: r.cantidad > 50,
+                esColor: !r.cantidad > 50 && esMb 
+            };
+        });
         recalcularFormulaAutomatica();
-    } else { 
-        recetaDinamica.value = []; 
-    }
-
+        stockFazonDetectado.value = null;
+    } else { recetaDinamica.value = []; stockFazonDetectado.value = null; }
   } catch (e) { console.error(e); recetaDinamica.value = []; }
 }
 
+async function consultarStockFazon(clienteId: string | number, productoId: number) {
+    if(!clienteId || !productoId) return;
+    stockFazonDetectado.value = null;
+    const codigoMaterial = getMaterialCodeFromId(productoId);
+    const skuStart = `MP-CLI-${clienteId}-${codigoMaterial}`;
+    const prodEncontrado = listaInventarioCompleto.value.find((p: any) => p.codigoSku === skuStart);
+    stockFazonDetectado.value = prodEncontrado ? prodEncontrado.stockActual : 0;
+}
+
 function recalcularFormulaAutomatica() {
-  let nuevaReceta = [...recetaDinamica.value];
-  if(nuevaReceta.length === 0) return;
-
-  nuevaReceta = nuevaReceta.filter(r => !r.esColor && !r.esCarga && !r.esBrillo && !r.esEstearato && !r.esUv && !r.esCaucho);
+  const borrar = ['esCarga','esBrillo','esEstearato','esUv','esCaucho'];
   
-  if (form.value.conBrillo && form.value.porcBrillo > 0) {
-    const mat = listaTodasMateriasPrimas.value.find(m => m.nombre.toUpperCase().includes('BRILLO'));
-    if (mat) nuevaReceta.push({ id: 'brillo', cantidad: form.value.porcBrillo, nombreInsumo: mat.nombre, densidad: mat.pesoEspecifico || 0.92, materiaPrimaId: mat.id, esBrillo: true });
-  }
-  if (form.value.conEstearato) { 
-    const mat = listaTodasMateriasPrimas.value.find(m => m.nombre.toUpperCase().includes('ESTEARATO'));
-    if (mat) nuevaReceta.push({ id: 'estearato', cantidad: parseFloat(((PESO_LATA_KG / KILOS_BASE_LATA) * 100).toFixed(4)), nombreInsumo: mat.nombre, densidad: mat.pesoEspecifico || 0.92, materiaPrimaId: mat.id, esEstearato: true });
-  }
-  if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
-    const mat = listaTodasMateriasPrimas.value.find(m => m.nombre.toUpperCase().includes('UV'));
-    if (mat) nuevaReceta.push({ id: 'uv', cantidad: form.value.porcentajeUv, nombreInsumo: mat.nombre, densidad: mat.pesoEspecifico || 0.92, materiaPrimaId: mat.id, esUv: true });
-  }
-  if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
-    const mat = listaTodasMateriasPrimas.value.find(m => m.nombre.toUpperCase().includes('CAUCHO'));
-    if (mat) nuevaReceta.push({ id: 'caucho', cantidad: form.value.porcentajeCaucho, nombreInsumo: mat.nombre, densidad: mat.pesoEspecifico || 0.92, materiaPrimaId: mat.id, esCaucho: true });
-  }
   if (form.value.esProductoColor && form.value.masterbatchId) {
-    const mb = listaMasterbatches.value.find(m => m.id === form.value.masterbatchId);
-    if (mb) nuevaReceta.push({ id: 'color', cantidad: 2, nombreInsumo: mb.nombre, densidad: mb.pesoEspecifico, esColor: true, materiaPrimaId: mb.id });
-  }
-  if (form.value.aditivoCarga > 0) {
-    const mat = listaTodasMateriasPrimas.value.find(m => m.nombre.toUpperCase().includes('CARGA') || m.nombre.toUpperCase().includes('CARBONATO'));
-    nuevaReceta.push({ id: 'carga', cantidad: form.value.aditivoCarga, nombreInsumo: mat ? mat.nombre : 'CARGA MINERAL', densidad: 1.8, materiaPrimaId: mat ? mat.id : 0, esCarga: true });
+      borrar.push('esColor'); // Esto borrará el "Masterbatch Varios" original
   }
 
-  let itemBase = nuevaReceta.find(r => r.esBase);
-  if (!itemBase && nuevaReceta.length > 0) {
-    const candidatos = nuevaReceta.filter(r => !r.esColor && !r.esCarga && !r.esBrillo && !r.esEstearato && !r.esUv && !r.esCaucho);
-    if (candidatos.length > 0) { itemBase = candidatos.reduce((prev, current) => (prev.cantidad > current.cantidad) ? prev : current); itemBase.esBase = true; }
+  let nueva = recetaDinamica.value.filter(r => {
+      for (const flag of borrar) {
+          if (r[flag as keyof ItemReceta]) return false;
+      }
+      return true;
+  });
+
+  if(nueva.length === 0) return;
+
+  const add = (nom:string, cant:number, tipo:string) => {
+      const m = listaTodasMateriasPrimas.value.find(x => x.nombre.toUpperCase().includes(nom));
+      if(m) nueva.push({ id: tipo, cantidad: cant, nombreInsumo: m.nombre, densidad: m.pesoEspecifico||0.92, materiaPrimaId: m.id, [tipo]: true });
+  };
+
+  if(form.value.conBrillo) add('BRILLO', form.value.porcBrillo, 'esBrillo');
+  if(form.value.conEstearato) add('ESTEARATO', parseFloat(((PESO_LATA_KG/KILOS_BASE_LATA)*100).toFixed(4)), 'esEstearato');
+  if(form.value.aditivoUV) add('UV', form.value.porcentajeUv, 'esUv');
+  if(form.value.aditivoCaucho) add('CAUCHO', form.value.porcentajeCaucho, 'esCaucho');
+  
+  if(form.value.esProductoColor && form.value.masterbatchId) {
+      const mb = listaMasterbatches.value.find(m => m.id === form.value.masterbatchId);
+      if(mb) nueva.push({ id: 'color', cantidad: 2, nombreInsumo: mb.nombre, densidad: mb.pesoEspecifico, materiaPrimaId: mb.id, esColor: true });
   }
-  if (itemBase) {
-    const sumaOtros = nuevaReceta.reduce((sum, item) => item.esBase ? sum : sum + parseFloat(item.cantidad.toString()), 0);
-    itemBase.cantidad = parseFloat((100 - sumaOtros).toFixed(2));
-    if (itemBase.cantidad < 0) itemBase.cantidad = 0;
+  
+  if(form.value.aditivoCarga > 0) {
+      const m = listaTodasMateriasPrimas.value.find(x => x.nombre.toUpperCase().includes('CARGA') || x.nombre.toUpperCase().includes('CARBONATO'));
+      nueva.push({ id: 'carga', cantidad: form.value.aditivoCarga, nombreInsumo: m?m.nombre:'CARGA', densidad: 1.8, materiaPrimaId: m?m.id:0, esCarga: true });
   }
-  recetaDinamica.value = nuevaReceta;
+
+  let base = nueva.find(r => r.esBase);
+  if(!base && nueva.length>0) { base = nueva[0]; base.esBase = true; }
+  if(base) {
+      const suma = nueva.reduce((s, i) => i.esBase ? s : s + parseFloat(i.cantidad.toString()), 0);
+      base.cantidad = parseFloat((100 - suma).toFixed(2));
+      if(base.cantidad < 0) base.cantidad = 0;
+  }
+  recetaDinamica.value = nueva;
 }
 
 async function registrarProduccion() {
   mensaje.value = ''; error.value = '';
-  if (!form.value.empleadoId || form.value.kilosTotales <= 0) { error.value = "Faltan datos obligatorios."; return; }
-  
-  if (productoSeleccionado.value?.esFazon && !form.value.clienteId) {
-      error.value = "Para productos a Fazón, es OBLIGATORIO seleccionar un Cliente.";
-      return;
+  if (!form.value.empleadoId || form.value.kilosTotales <= 0) return error.value = "Faltan datos."; 
+  if (productoSeleccionado.value?.esFazon && !form.value.clienteId) return error.value = "Seleccione Cliente.";
+  if (hayBloqueoDeStock.value) return error.value = "STOCK INSUFICIENTE (Considere el desperdicio).";
+
+  // 🔥 VALIDACIÓN DE ESPESOR USANDO LAS VARIABLES
+  const min = limiteMinimo.value;
+  const max = limiteMaximo.value;
+  const val = Number(form.value.espesor);
+
+  if (min > 0 && val < min) {
+      return error.value = `⚠️ Espesor inválido. Debe ser mayor a ${min.toFixed(2)} mm.`;
+  }
+  if (max > 0 && val > max) {
+      return error.value = `⚠️ Espesor inválido. Debe ser menor a ${max.toFixed(2)} mm.`;
   }
 
-  if (!medidasBloqueadas.value && (form.value.largo <= 0 || form.value.ancho <= 0 || form.value.espesor <= 0)) { error.value = "Datos de medidas incompletos"; return; }
-  if (Math.abs(totalPorcentajeReceta.value - 100) > 0.5) { error.value = `Error en receta: suma ${totalPorcentajeReceta.value}%`; return; }
-
-  let techDetails = ` | ${form.value.largo}x${form.value.ancho}x${form.value.espesor}mm | Color: ${colorFinalParaPDF.value} | Corona: ${form.value.tipoCorona} | Brillo: ${form.value.conBrillo ? 'SI' : 'NO'}`;
-  if(form.value.aditivoUV) techDetails += ` | UV: ${form.value.porcentajeUv}%`;
-  if(form.value.aditivoCaucho) techDetails += ` | Caucho: ${form.value.porcentajeCaucho}%`;
-  if(form.value.aditivoCarga > 0) techDetails += ` | Carga: ${form.value.aditivoCarga}%`;
-
-  const consumos = recetaDinamica.value.map(item => ({ materiaPrimaId: item.materiaPrimaId, cantidadKilos: Number(((form.value.kilosTotales * parseFloat(item.cantidad.toString())) / 100).toFixed(3)) }));
-
-  const payload = {
-    productoTerminadoId: form.value.productoTerminadoId,
-    clienteId: form.value.clienteId || null,
-    cantidad: form.value.cantidad,
-    empleadoId: form.value.empleadoId,
-    turno: form.value.turno,
-    observacion: (form.value.observacion || '') + techDetails,
-    kilos: form.value.kilosTotales,
-    consumos: consumos 
-  }
+  const consumos = recetaDinamica.value.map(i => ({ 
+      materiaPrimaId: i.materiaPrimaId, 
+      cantidadKilos: Number(((form.value.kilosTotales * parseFloat(i.cantidad.toString()) / 100) * factorMerma.value).toFixed(3)) 
+  }));
   
   try {
-    await axios.post(`${apiUrl}/Ordenes`, payload, getAuthConfig())
-    mensaje.value = `✅ Orden Generada Correctamente.`
-    idProduccionGenerada.value = true 
-    emit('guardado') 
+    await axios.post(`${apiUrl}/Ordenes`, {
+        productoTerminadoId: form.value.productoTerminadoId, clienteId: form.value.clienteId||null,
+        cantidad: form.value.cantidad, empleadoId: form.value.empleadoId, turno: form.value.turno,
+        observacion: (form.value.observacion||'') + ` | ${form.value.largo}x${form.value.ancho}x${form.value.espesor}`,
+        kilos: form.value.kilosTotales, 
+        consumos: consumos 
+    }, getAuthConfig());
+    mensaje.value = `✅ Orden Generada.`; idProduccionGenerada.value = true; emit('guardado');
   } catch (e: any) { error.value = '❌ ' + (e.response?.data?.mensaje || e.message); }
 }
 
-async function generarPDF(tipo: 'orden' | 'carga') {
-  ocultarFormula.value = (tipo === 'orden');
-  await nextTick();
-  const elemento = document.getElementById('hoja-de-impresion');
-  const nombreArchivo = tipo === 'orden' ? `Orden_${Date.now()}.pdf` : `HojaCarga_${Date.now()}.pdf`;
-  const opt = { margin: 0, filename: nombreArchivo, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
-  await html2pdf().set(opt).from(elemento).save();
-  ocultarFormula.value = false; 
+async function generarPDF(tipo: 'orden'|'carga') {
+  ocultarFormula.value = (tipo==='orden'); await nextTick();
+  await html2pdf().set({ margin: 0, filename: `Doc_${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4' } }).from(document.getElementById('hoja-de-impresion')).save();
+  ocultarFormula.value = false;
 }
 
-watch(() => form.value.clienteId, (newId) => {
-    CargarProductosFiltrados(newId);
-    
+watch(() => form.value.clienteId, (v) => { 
+    CargarProductosFiltrados(v); 
     if (recetaDinamica.value.some(r => r.esFazonInput)) {
-        const cliente = clientes.value.find(c => c.id === newId);
-        const nombreCliente = cliente ? cliente.razonSocial.toUpperCase() : 'CLIENTE';
-        
-        recetaDinamica.value.forEach(r => {
-            if (r.esFazonInput) {
-                const tipoMaterial = r.materialBase || "MATERIAL"; 
-                r.nombreInsumo = `MP ${tipoMaterial} - PROPIEDAD DE ${nombreCliente}`;
-            }
-        });
+        const cli = clientes.value.find(c => c.id === v);
+        recetaDinamica.value.forEach(r => r.nombreInsumo = `MP ${r.materialBase || 'MATERIAL'} - PROPIEDAD DE ${cli ? cli.razonSocial.toUpperCase() : '___'}`);
+        if(form.value.productoTerminadoId) consultarStockFazon(v, Number(form.value.productoTerminadoId));
     }
 });
-
-watch(() => form.value.productoTerminadoId, (v) => v ? CargarDatosProductos(Number(v)) : (recetaDinamica.value = []));
+watch(() => form.value.productoTerminadoId, (v) => v ? CargarDatosProductos(Number(v)) : (recetaDinamica.value=[]));
 watch(() => [form.value.masterbatchId, form.value.aditivoCarga, form.value.porcBrillo, form.value.conEstearato, form.value.aditivoUV, form.value.porcentajeUv, form.value.aditivoCaucho, form.value.porcentajeCaucho], recalcularFormulaAutomatica);
 watch(() => form.value.espesor, (v) => { if (v < 1) form.value.conBrillo = false; });
 watch(() => form.value.conBrillo, (v) => { if (!v) form.value.llevaFilm = false; recalcularFormulaAutomatica(); });
@@ -376,36 +347,26 @@ watch(kilosCalculados, (v) => form.value.kilosTotales = v);
 
 onMounted(async () => {
     try {
-        const config = getAuthConfig();
-        const [resEmp, resCli, resMat] = await Promise.all([ axios.get(`${apiUrl}/Empleados`, config), axios.get(`${apiUrl}/Clientes`, config), axios.get(`${apiUrl}/Productos/materias-primas`, config) ]);
-        await CargarProductosFiltrados(); 
-        listaTodasMateriasPrimas.value = resMat.data;
-        listaMasterbatches.value = resMat.data.filter((m: any) => m.nombre && (m.nombre.toUpperCase().includes('MASTERBATCH') || m.nombre.toUpperCase().includes('PIGMENTO')));
-        empleados.value = resEmp.data;
-        clientes.value = resCli.data;
-    } catch (e) { error.value = 'Error de conexión.'; }
+        const cfg = getAuthConfig();
+        const [re, rc, rm, ri] = await Promise.all([
+            axios.get(`${apiUrl}/Empleados`, cfg), 
+            axios.get(`${apiUrl}/Clientes`, cfg), 
+            axios.get(`${apiUrl}/Productos/materias-primas`, cfg),
+            axios.get(`${apiUrl}/Productos/inventario-completo`, cfg)
+        ]);
+        empleados.value = re.data; clientes.value = rc.data; listaTodasMateriasPrimas.value = rm.data;
+        listaInventarioCompleto.value = ri.data;
+        listaMasterbatches.value = rm.data.filter((m:any) => m.nombre && (m.nombre.toUpperCase().includes('MASTER') || m.nombre.toUpperCase().includes('PIGMENTO')));
+        await CargarProductosFiltrados();
+    } catch (e) { error.value = 'Error conexión'; }
 });
 </script>
 
 <template>
   <div class="layout-global">
-    
     <div class="panel-izquierdo">
         <div class="hoja-contenedor">
-            <HojaImpresion 
-                :form="form"
-                :producto="productoSeleccionado"
-                :cliente="clienteSeleccionado"
-                :empleado="empleadoSeleccionado"
-                :receta="recetaDinamica"
-                :colorFinal="colorFinalParaPDF"
-                :densidad="densidadMezcla"
-                :totalPorcentaje="totalPorcentajeReceta"
-                :materiasPrimas="listaTodasMateriasPrimas"
-                :ocultarFormula="ocultarFormula"
-                @add-insumo="agregarInsumoDesdeHijo"
-                @remove-insumo="quitarInsumoManual"
-            />
+            <HojaImpresion :form="form" :producto="productoSeleccionado" :cliente="clienteSeleccionado" :empleado="empleadoSeleccionado" :receta="recetaDinamica" :colorFinal="colorFinalParaPDF" :densidad="densidadMezcla" :totalPorcentaje="totalPorcentajeReceta" :materiasPrimas="listaTodasMateriasPrimas" :ocultarFormula="ocultarFormula" @add-insumo="agregarInsumoDesdeHijo" @remove-insumo="quitarInsumoManual" />
         </div>
     </div>
 
@@ -427,20 +388,15 @@ onMounted(async () => {
             <option v-for="c in clientes" :key="c.id" :value="c.id">{{c.razonSocial}}</option>
         </select>
         
-        <p v-if="productoSeleccionado?.esFazon && !form.clienteId" style="color:red; font-size:12px; font-weight:bold; margin-bottom:5px;">
-            ⚠️ Seleccione un cliente para asignar el material.
-        </p>
-
         <select v-model="form.productoTerminadoId">
             <option disabled value="">Seleccionar Producto...</option>
-            <option v-for="p in productos" :key="p.id" :value="p.id">
+            <option v-for="p in listaProductosDisponibles" :key="p.id" :value="p.id">
                 {{ p.esFazon ? '★ ' : '' }}{{ p.nombre }} 
                 {{ p.esGenerico ? '(A Medida)' : (p.esFazon ? '(Fazon)' : '(Estándar)') }}
             </option>
         </select>
 
         <div v-if="form.productoTerminadoId" class="seccion-medidas-editables">
-            
             <div v-if="form.esProductoColor" class="box-color">
                 <label style="color: #f39c12;">🎨 Seleccione Color:</label>
                 <select v-model="form.masterbatchId">
@@ -450,15 +406,38 @@ onMounted(async () => {
             </div>
 
             <label class="lbl-sep">
-                Medidas: <span v-if="medidasBloqueadas" style="color:#e74c3c">(FIJAS)</span><span v-else style="color:#2ecc71">(EDITABLES)</span>
+                Medidas: 
+                <span v-if="medidasBloqueadas" style="color:#e74c3c">(FIJAS)</span>
+                <span v-else style="color:#2ecc71">(EDITABLES)</span>
             </label>
+            
+            <div style="font-size:11px; color:#bbb; margin-top:-5px; margin-bottom:5px;">
+                <span v-if="limiteMaximo > 0">Rango: {{ limiteMinimo }} - {{ limiteMaximo }} mm</span>
+                <span v-else-if="limiteMinimo > 0">Mínimo: {{ limiteMinimo }} mm (Sin tope)</span>
+            </div>
+
             <div class="fila-input">
                 <div><label>Largo</label><input type="number" v-model="form.largo" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}"></div>
                 <div><label>Ancho</label><input type="number" v-model="form.ancho" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}"></div>
             </div>
             <div class="fila-input">
-                <div><label>Espesor</label><input type="number" v-model="form.espesor" step="0.1" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}"></div>
+                <div>
+                    <label>Espesor</label>
+                    <input type="number" v-model="form.espesor" step="0.01" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}">
+                </div>
                 <div><label>Cant.</label><input type="number" v-model="form.cantidad" min="1"></div>
+            </div>
+            
+            <div class="fila-input" style="margin-top:10px; border-top:1px dashed #7f8c8d; padding-top:10px;">
+                <div style="flex:1">
+                    <label style="color:#e67e22;">🔥 Desperdicio (%)</label>
+                    <input type="number" v-model="form.merma" min="0" max="50" style="color:#e67e22; font-weight:bold;">
+                </div>
+            </div>
+
+            <div class="resumen-peso">
+                Peso Final PT: {{ form.kilosTotales }} Kg
+                <small style="color:#bbb; display:block;">(Consumo Real MP +{{ form.merma }}%)</small>
             </div>
             
             <label class="lbl-sep">Aditivos:</label>
@@ -482,8 +461,6 @@ onMounted(async () => {
             
             <label class="lbl-sep">Cargas:</label>
             <div class="fila-input"><div style="flex:1"><label>Carga Mineral (%)</label><input type="number" v-model="form.aditivoCarga"></div></div>
-            
-            <div class="resumen-peso">Peso Calc: {{ form.kilosTotales }} Kg</div>
         </div>
         
         <div class="fila-input" style="margin-top:10px"><div style="width: 100%"><label>Obs:</label><input type="text" v-model="form.observacion" style="width:100%"></div></div>
@@ -491,7 +468,7 @@ onMounted(async () => {
         <div v-if="Math.abs(totalPorcentajeReceta - 100) > 0.5" class="alerta-error">⚠️ Receta suma {{ totalPorcentajeReceta }}%.</div>
         <div v-if="hayBloqueoDeStock" class="alerta-stock">
             <h4>🚫 Stock Insuficiente</h4>
-            <ul><li v-for="(falla, i) in insumosSinStock" :key="i"><strong>{{ falla.nombre }}</strong>: Falta {{ falla.diferencia.toFixed(2) }} kg</li></ul>
+            <ul><li v-for="(falla, i) in insumosSinStock" :key="i"><strong>{{ falla.nombre }}</strong>: Falta {{ falla.diferencia.toFixed(2) }} kg (Disp: {{ falla.disponible }})</li></ul>
         </div>
 
         <button class="btn-guardar" @click="registrarProduccion" :disabled="!form.empleadoId || form.kilosTotales <= 0 || hayBloqueoDeStock">
@@ -510,101 +487,27 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* ESTILO GLOBAL PARA EL CONTENEDOR */
-.layout-global {
-  display: flex;
-  align-items: flex-start;
-  width: 100%;
-  min-height: 100vh;
-  font-family: 'Segoe UI', sans-serif;
-  background-color: #ecf0f1; 
-}
-
-/* PANEL IZQUIERDO (VISOR PDF) */
-.panel-izquierdo {
-  flex: 1; 
-  background-color: #ecf0f1;
-  display: flex;
-  justify-content: center;
-  padding: 30px;
-  border-right: 1px solid #bdc3c7; 
-}
-
-.hoja-contenedor {
-  background: white;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-  min-height: 1000px;
-  width: 100%;
-  max-width: 800px;
-  margin-bottom: 50px; 
-}
-
-/* PANEL DERECHO (FORMULARIO) */
-.panel-derecho {
-  width: 320px;
-  min-width: 320px;
-  background-color: #2c3e50;
-  color: white;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-  box-shadow: -5px 0 15px rgba(0,0,0,0.2);
-  z-index: 10;
-  border-left: 1px solid #34495e;
-  min-height: 100vh; 
-  height: 100%; 
-}
-
-.header-control h3 {
-  margin-top: 0;
-  border-bottom: 2px solid #3498db;
-  padding-bottom: 10px;
-  color: #ecf0f1;
-  font-size: 1.1rem;
-}
-
-/* INPUTS */
+.layout-global { display: flex; width: 100%; min-height: 100vh; font-family: 'Segoe UI', sans-serif; background-color: #ecf0f1; }
+.panel-izquierdo { flex: 1; background-color: #ecf0f1; display: flex; justify-content: center; padding: 30px; border-right: 1px solid #bdc3c7; }
+.hoja-contenedor { background: white; box-shadow: 0 4px 15px rgba(0,0,0,0.15); min-height: 1000px; width: 100%; max-width: 800px; margin-bottom: 50px; }
+.panel-derecho { width: 320px; min-width: 320px; background-color: #2c3e50; color: white; display: flex; flex-direction: column; padding: 20px; box-shadow: -5px 0 15px rgba(0,0,0,0.2); z-index: 10; border-left: 1px solid #34495e; min-height: 100vh; }
+.header-control h3 { margin-top: 0; border-bottom: 2px solid #3498db; padding-bottom: 10px; color: #ecf0f1; font-size: 1.1rem; }
 label { display: block; margin-top: 8px; font-size: 13px; color: #bdc3c7; font-weight: 600; }
-select, input { 
-    width: 100%; 
-    padding: 8px; 
-    margin-top: 2px; 
-    border-radius: 4px; 
-    border: none; 
-    font-size: 13px; 
-    box-sizing: border-box; 
-    background: #ecf0f1;
-    color: #2c3e50;
-}
+select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; border: none; font-size: 13px; box-sizing: border-box; background: #ecf0f1; color: #2c3e50; }
 .fila-input { display: flex; gap: 8px; margin-bottom: 5px; }
-
-/* SECCIONES INTERNAS */
-.seccion-medidas-editables { 
-    background: #34495e; 
-    padding: 12px; 
-    border-radius: 6px; 
-    margin-top: 15px; 
-    border: 1px solid #4e6475; 
-}
+.seccion-medidas-editables { background: #34495e; padding: 12px; border-radius: 6px; margin-top: 15px; border: 1px solid #4e6475; }
 .box-color { margin-bottom: 15px; border: 1px dashed #f39c12; padding: 5px; border-radius: 4px; }
-
 .lbl-sep { color: #f1c40f !important; font-weight: bold; border-bottom: 1px dashed #7f8c8d; padding-bottom: 3px; margin-top: 15px !important; margin-bottom: 5px; }
 .resumen-peso { font-weight: bold; color: #2ecc71; text-align: right; margin-top: 10px; font-size: 14px; border-top: 1px solid #7f8c8d; padding-top: 5px; }
-
-/* CHECKBOXES */
 .check-container { display: flex; align-items: center; cursor: pointer; color: #ecf0f1; font-weight: bold; font-size: 13px; margin-top: 8px !important; }
 .check-container input { width: auto; margin-right: 8px; }
 .check-container.disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* ALERTAS Y BOTONES */
 .alerta-error { background: #c0392b; color: white; padding: 10px; border-radius: 5px; margin-top: 15px; font-weight: bold; text-align: center; font-size: 12px; }
 .btn-guardar { background: #27ae60; color: white; margin-top: 20px; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 1em; font-weight: bold; width: 100%; transition: background 0.3s; }
 .btn-guardar:hover { background: #2ecc71; }
 .btn-guardar:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.7; }
 .success { color: #2ecc71; text-align: center; font-weight: bold; margin-top: 10px; font-size: 13px; }
 .error { color: #e74c3c; text-align: center; font-weight: bold; margin-top: 10px; font-size: 13px; }
-
-/* ADITIVOS */
 .fila-control-aditivo { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
 .input-porcentaje { display: flex; align-items: center; background: #ecf0f1; border-radius: 4px; padding-right: 5px; color: #333; }
 .input-porcentaje input { width: 45px !important; margin: 0 !important; text-align: right; background: transparent; color: #333; }
@@ -615,11 +518,5 @@ select, input {
 .btn-imprimir { flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; color: white; }
 .btn-orden { background: #34495e; border: 1px solid #7f8c8d; } .btn-orden:hover { background: #2980b9; }
 .btn-carga { background: #8e44ad; border: 1px solid #9b59b6; } .btn-carga:hover { background: #9b59b6; }
-
-@media (max-width: 1000px) {
-  .layout-global { flex-direction: column; height: auto; }
-  .panel-izquierdo { width: 100%; border-right: none; border-bottom: 1px solid #bdc3c7; }
-  .panel-derecho { width: 100%; min-width: auto; min-height: auto; }
-  .hoja-contenedor { transform: scale(0.95); margin-bottom: 20px; transform-origin: top center; }
-}
+@media (max-width: 1000px) { .layout-global { flex-direction: column; height: auto; } .panel-izquierdo { width: 100%; border-right: none; border-bottom: 1px solid #bdc3c7; } .panel-derecho { width: 100%; min-width: auto; min-height: auto; } .hoja-contenedor { transform: scale(0.95); margin-bottom: 20px; transform-origin: top center; } }
 </style>

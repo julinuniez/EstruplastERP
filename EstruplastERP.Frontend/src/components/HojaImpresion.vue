@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps<{
   form: any;
@@ -18,6 +18,14 @@ const emit = defineEmits(['add-insumo', 'remove-insumo']);
 
 const insumoExtraId = ref('');
 const insumoExtraPorc = ref<number | ''>('');
+
+// 🔥 CÁLCULO DEL TOTAL CON DESPERDICIO INCLUIDO
+// Esto asegura que el PDF muestre lo que REALMENTE se debe cargar en la máquina
+const totalKilosConDesperdicio = computed(() => {
+    const kilosNetos = Number(props.form.kilosTotales) || 0;
+    const porcentajeDesperdicio = Number(props.form.merma) || 0; 
+    return kilosNetos * (1 + (porcentajeDesperdicio / 100));
+});
 
 const solicitarAgregar = () => {
     if (!insumoExtraId.value || !insumoExtraPorc.value) return;
@@ -71,10 +79,8 @@ const solicitarQuitar = (index: number) => {
             <div class="dato-box">
                 <span class="label-tech">BRILLO</span>
                 <div v-if="form.conBrillo">
-                    <span class="valor-tech">SÍ ({{ form.porcBrillo }}%)</span>
-                    <span style="font-size: 10px; display:block;">
-                        {{ ((form.kilosTotales * form.porcBrillo) / 100).toFixed(2) }} kg
-                    </span>
+                    <span class="valor-tech">SÍ</span>
+
                 </div>
                 <span v-else class="valor-tech">NO</span>
             </div>
@@ -82,10 +88,8 @@ const solicitarQuitar = (index: number) => {
             <div class="dato-box">
                 <span class="label-tech">UV</span>
                 <div v-if="form.aditivoUV">
-                    <span class="valor-tech">SÍ ({{ form.porcentajeUv }}%)</span>
-                    <span style="font-size: 10px; display:block;">
-                        {{ ((form.kilosTotales * form.porcentajeUv) / 100).toFixed(2) }} kg
-                    </span>
+                    <span class="valor-tech">SÍ</span>
+
                 </div>
                 <span v-else class="valor-tech">NO</span>
             </div>
@@ -93,17 +97,20 @@ const solicitarQuitar = (index: number) => {
             <div class="dato-box">
                 <span class="label-tech">CAUCHO</span>
                 <div v-if="form.aditivoCaucho">
-                    <span class="valor-tech">SÍ ({{ form.porcentajeCaucho }}%)</span>
-                    <span style="font-size: 10px; display:block;">
-                        {{ ((form.kilosTotales * form.porcentajeCaucho) / 100).toFixed(2) }} kg
-                    </span>
+                    <span class="valor-tech">SÍ</span>
+
                 </div>
                 <span v-else class="valor-tech">NO</span>
             </div>
             
+            <div class="dato-box">
+                <span class="label-tech">DESPERDICIO</span>
+                <span class="valor-tech">{{ form.merma || 0 }} %</span>
+            </div>
+
             <div class="dato-box doble-ancho">
-                <span class="label-tech">TOTAL KILOS</span>
-                <span class="valor-tech" style="font-size: 18px;">{{ form.kilosTotales }} kg</span>
+                <span class="label-tech">TOTAL CARGA (CON DESPERDICIO)</span>
+                <span class="valor-tech" style="font-size: 18px;">{{ totalKilosConDesperdicio.toFixed(2) }} kg</span>
             </div>
         </div>
 
@@ -113,7 +120,7 @@ const solicitarQuitar = (index: number) => {
             <div class="dato-box" v-if="form.aditivoCarga > 0"><span class="label-tech">CARGA MINERAL</span><span class="valor-tech">{{ form.aditivoCarga }} %</span></div>
             <div class="dato-box" v-if="form.conEstearato">
                 <span class="label-tech">ESTEARATO</span>
-                <span class="valor-tech" style="font-size: 12px;">{{ (form.kilosTotales / 500).toFixed(1) }} Latas</span>
+                <span class="valor-tech" style="font-size: 12px;">{{ (totalKilosConDesperdicio / 500).toFixed(1) }} Latas</span>
             </div>
         </div>
 
@@ -136,7 +143,7 @@ const solicitarQuitar = (index: number) => {
                             </div>
                         </td>
                         <td style="text-align:right">
-                            <strong>{{ ((form.kilosTotales * (parseFloat(r.cantidad.toString()) || 0)) / 100).toFixed(3) }} kg</strong>
+                            <strong>{{ ((totalKilosConDesperdicio * (parseFloat(r.cantidad.toString()) || 0)) / 100).toFixed(3) }} kg</strong>
                         </td>
                         <td data-html2canvas-ignore="true">
                             <button @click="solicitarQuitar(i)" style="background:none; border:none; color:red; cursor:pointer; font-weight:bold;">X</button>
@@ -180,7 +187,6 @@ const solicitarQuitar = (index: number) => {
     font-family: Arial, sans-serif;
     overflow: hidden; 
     position: relative;
-    /* Sombras para que se vea lindo si activamos el preview */
     box-shadow: 0 0 10px rgba(0,0,0,0.3);
 }
 

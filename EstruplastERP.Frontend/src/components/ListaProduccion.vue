@@ -36,7 +36,7 @@ const filtros = ref({
     hasta: fechaHoy.toISOString().split('T')[0]
 })
 
-const apiUrl = 'https://localhost:7244/api' 
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
 
 const obtenerTextoEstado = (estado: number | undefined) => estado === 2 ? 'FINALIZADO' : 'PENDIENTE';
 const obtenerClaseEstado = (estado: number | undefined) => estado === 2 ? 'badge-finalizado' : 'badge-pendiente';

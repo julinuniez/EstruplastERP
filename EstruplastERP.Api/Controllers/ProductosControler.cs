@@ -33,7 +33,8 @@ namespace EstruplastERP.Api.Controllers
                     p.PesoEspecifico,
                     p.EsMateriaPrima,       
                     p.EsProductoTerminado,  
-                    p.EsFazon              
+                    p.EsFazon,
+                    p.PrecioCosto
                 })
                 .ToListAsync();
 

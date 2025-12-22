@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace EstruplastERP.Api.Dtos
 {
@@ -33,6 +34,9 @@ namespace EstruplastERP.Api.Dtos
     {
         public int ProductoId { get; set; }
         public decimal CantidadReal { get; set; }
+
+        [JsonPropertyName("nuevoPrecio")]
+        public decimal? NuevoPrecio { get; set; }
         public string Motivo { get; set; }
     }
 }
