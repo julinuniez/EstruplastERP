@@ -62,4 +62,17 @@ namespace EstruplastERP.Api.Dtos
         public string? NombreInsumo { get; set; }
         public decimal Cantidad { get; set; }
     }
+
+    // 6. PARA CONFIGURACIÓN TÉCNICA (Peso, Tipo, etc.)
+    public class ProductoConfigDto
+    {
+        public decimal StockMinimo { get; set; }
+        public decimal PesoEspecifico { get; set; }
+        public bool EsMateriaPrima { get; set; }
+        public bool EsProductoTerminado { get; set; }
+        public bool EsFazon { get; set; }
+
+        // 🔥 AGREGADO: La lista de ingredientes para guardar
+        public List<IngredienteDto>? Receta { get; set; }
+    }
 }

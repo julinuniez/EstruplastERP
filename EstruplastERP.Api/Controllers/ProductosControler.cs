@@ -354,5 +354,58 @@ namespace EstruplastERP.Api.Controllers
                 return StatusCode(500, new { mensaje = "Error crítico al eliminar." });
             }
         }
+
+        // ==========================================
+        // 8. PUT: CONFIGURACIÓN TÉCNICA (Peso, Tipos)
+        // ==========================================
+        [HttpPut("configurar/{id}")]
+        public async Task<IActionResult> ConfigurarProducto(int id, [FromBody] ProductoConfigDto dto)
+        {
+            var producto = await _context.Productos.FindAsync(id);
+            if (producto == null) return NotFound("Producto no encontrado");
+
+            // 1. Actualizar Datos Técnicos
+            producto.StockMinimo = dto.StockMinimo;
+            producto.PesoEspecifico = dto.PesoEspecifico;
+            producto.EsMateriaPrima = dto.EsMateriaPrima;
+            producto.EsProductoTerminado = dto.EsProductoTerminado;
+            producto.EsFazon = dto.EsFazon;
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // 2. ACTUALIZAR RECETA (Borrar vieja e insertar nueva)
+                if (dto.Receta != null)
+                {
+                    // A. Borramos los ingredientes actuales de este producto
+                    var formulasViejas = await _context.Formulas
+                        .Where(f => f.ProductoTerminadoId == id)
+                        .ToListAsync();
+
+                    _context.Formulas.RemoveRange(formulasViejas);
+
+                    // B. Insertamos los nuevos
+                    foreach (var item in dto.Receta)
+                    {
+                        _context.Formulas.Add(new Formula
+                        {
+                            ProductoTerminadoId = id,
+                            MateriaPrimaId = item.MateriaPrimaId,
+                            Cantidad = item.Cantidad
+                        });
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync(); // Confirmar todo
+
+                return Ok(new { mensaje = "✅ Configuración y Receta guardadas." });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, "Error al guardar: " + ex.Message);
+            }
+        }
     }
 }

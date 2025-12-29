@@ -36,7 +36,7 @@ namespace EstruplastERP.Core
         public decimal? EspesorMaximo { get; set; }
 
         [Column(TypeName = "decimal(18,4)")]
-        public decimal PesoEspecifico { get; set; }
+        public decimal PesoEspecifico { get; set; } = 1;
 
         public int? ProductoPadreId { get; set; }
 
@@ -47,7 +47,7 @@ namespace EstruplastERP.Core
         public decimal StockActual { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
-        public decimal StockMinimo { get; set; }
+        public decimal StockMinimo { get; set; } = 0;
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal PrecioCosto { get; set; }

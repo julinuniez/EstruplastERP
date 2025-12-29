@@ -17,72 +17,18 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
-        // 🔥 CORRECCIÓN CLAVE: SEPARAMOS LOS CÓDIGOS
-        private (string Codigo, string Nombre) DeterminarTipoMaterial(int productoTerminadoId)
+        // Método auxiliar simplificado para buscar el material del cliente
+        private async Task<int> ObtenerMaterialClienteAsync(int clienteId, int productoTerminadoId)
         {
-            switch (productoTerminadoId)
-            {
-                // --- A.I. FINO ---
-                case 900: // Fazón AI Fino
-                case 902: // Fazón AI Fino Color
-                case 906: // Fazón AI Tutti Fino
-                    return ("AI-FIN", "A.I. FINO (FAZÓN)");
+            // Lógica: Buscar cualquier materia prima que pertenezca a este cliente.
+            // Asumimos que cada cliente de fazón tiene UN material asignado (su "bolsa").
+            // Si en el futuro tienen varios, aquí habría que filtrar por tipo de material también.
+            var material = await _context.Productos
+                .Where(p => p.EsMateriaPrima && p.ClienteId == clienteId)
+                .FirstOrDefaultAsync();
 
-                // --- A.I. GRUESO ---
-                case 901: // Fazón AI Grueso
-                case 903: // Fazón AI Grueso Color
-                case 907: // Fazón AI Tutti Grueso
-                    return ("AI-GRU", "A.I. GRUESO (FAZÓN)");
-
-                // --- A.I. ESPECIALES ---
-                case 904: return ("AI-BIC", "A.I. BICAPA (FAZÓN)");
-                case 905: return ("AI-TRI", "A.I. TRICAPA (FAZÓN)");
-
-                // --- ABS ---
-                case 908: return ("ABS-GRU", "ABS GRUESO (FAZÓN)");
-
-                // --- POLI / PP ---
-                case 909: return ("POLI-FIN", "PEAD/PP/BIO FINO (FAZÓN)");
-                case 910: return ("POLI-GRU", "PEAD/PP/BIO GRUESO (FAZÓN)");
-
-                // --- PEAD ---
-                case 911: return ("PEAD-BIC", "PEAD BICAPA (FAZÓN)");
-
-                default: return ("GEN", "GENÉRICO");
-            }
-        }
-
-        private async Task<int> ObtenerMaterialClienteAsync(int clienteId, string nombreCliente, int productoTerminadoId)
-        {
-            var tipo = DeterminarTipoMaterial(productoTerminadoId);
-
-            // SKU Único: MP-CLI-{ID}-{CODIGO} (Ej: MP-CLI-10-AI-BIC)
-            string sku = $"MP-CLI-{clienteId}-{tipo.Codigo}";
-
-            var prod = await _context.Productos.FirstOrDefaultAsync(p => p.CodigoSku == sku);
-
-            if (prod != null) return prod.Id;
-
-            // Creación automática si no existe
-            var nuevo = new Producto
-            {
-                Nombre = $"MP {tipo.Nombre} - PROPIEDAD DE {nombreCliente.ToUpper()}",
-                CodigoSku = sku,
-                EsMateriaPrima = true,
-                EsFazon = false,
-                EsProductoTerminado = false,
-                EsGenerico = false,
-                PesoEspecifico = 1.05m,
-                StockActual = 0,
-                StockMinimo = 0,
-                PrecioCosto = 0,
-                Activo = true,
-                FechaCreacion = DateTime.Now,
-                ClienteId = clienteId
-            };
-            _context.Productos.Add(nuevo);
-            await _context.SaveChangesAsync();
-            return nuevo.Id;
+            if (material != null) return material.Id;
+            return 999;
         }
 
         [HttpGet]
@@ -108,7 +54,6 @@ namespace EstruplastERP.Api.Controllers
         [HttpGet("rango")]
         public async Task<ActionResult> GetProduccionPorRango(DateTime desde, DateTime hasta)
         {
-            // Ajustamos 'hasta' para que incluya todo el día (23:59:59)
             DateTime hastaFinDia = hasta.Date.AddDays(1).AddTicks(-1);
 
             var lista = await _context.Ordenes
@@ -116,13 +61,11 @@ namespace EstruplastERP.Api.Controllers
                 .Include(o => o.Producto)
                 .Where(o => o.FechaCreacion >= desde && o.FechaCreacion <= hastaFinDia)
                 .OrderByDescending(o => o.FechaCreacion)
-                // 🔥 PROYECCIÓN ANÓNIMA (DTO) PARA EVITAR CICLOS JSON
                 .Select(o => new
                 {
                     o.Id,
                     Fecha = o.FechaCreacion,
                     o.Turno,
-                    // Validamos nulos para que no rompa
                     Operario = o.Empleado != null ? o.Empleado.NombreCompleto : "Sin Asignar",
                     Producto = o.Producto != null ? o.Producto.Nombre : "Producto Eliminado",
                     Lote = "L-" + o.Id.ToString(),
@@ -140,6 +83,12 @@ namespace EstruplastERP.Api.Controllers
         {
             if (dto.Kilos <= 0) return BadRequest("Los kilos deben ser mayores a 0.");
 
+            // 🔥 VALIDACIÓN DE SEGURIDAD (MASTERBATCH GENÉRICO ID 22)
+            if (dto.Consumos != null && dto.Consumos.Any(c => c.MateriaPrimaId == 22))
+            {
+                return BadRequest("⛔ ERROR DE CALIDAD: La orden contiene 'Masterbatch Color Genérico' (ID 22). Debe especificar el color real (Ej: MB Rojo, MB Azul) antes de confirmar.");
+            }
+
             var orden = new OrdenProduccion
             {
                 ProductoId = dto.ProductoTerminadoId,
@@ -150,7 +99,8 @@ namespace EstruplastERP.Api.Controllers
                 Observacion = dto.Observacion,
                 KilosEstimados = dto.Kilos,
                 Estado = EstadoOrden.Pendiente,
-                FechaCreacion = DateTime.Now
+                FechaCreacion = DateTime.Now,
+                Consumos = new List<ConsumoOrden>()
             };
 
             Cliente? cliente = null;
@@ -163,10 +113,10 @@ namespace EstruplastERP.Api.Controllers
                 {
                     int idReal = c.MateriaPrimaId;
 
-                    // Lógica Fazón
+                    // 🔥 Lógica Fazón: Si es el genérico (999) y hay cliente, buscamos su material
                     if (c.MateriaPrimaId == 999 && cliente != null)
                     {
-                        idReal = await ObtenerMaterialClienteAsync(cliente.Id, cliente.RazonSocial, dto.ProductoTerminadoId);
+                        idReal = await ObtenerMaterialClienteAsync(cliente.Id, dto.ProductoTerminadoId);
                     }
 
                     // Validación de Stock
@@ -189,8 +139,6 @@ namespace EstruplastERP.Api.Controllers
             _context.Ordenes.Add(orden);
             await _context.SaveChangesAsync();
 
-            // 🔥 CORRECCIÓN DEL ERROR DE CICLO 🔥
-            // En lugar de devolver 'orden' (que tiene ciclos), creamos una respuesta limpia y segura.
             var respuestaSegura = new
             {
                 orden.Id,
@@ -211,21 +159,26 @@ namespace EstruplastERP.Api.Controllers
             if (orden == null) return NotFound("No existe la orden.");
             if (orden.Estado == EstadoOrden.Finalizada) return BadRequest("Ya finalizada.");
 
+            // Procesar Adiciones (Ajustes de Stock al finalizar)
             if (request.Adiciones != null)
             {
                 foreach (var item in request.Adiciones)
                 {
                     int idReal = item.MateriaPrimaId;
+
+                    // 🔥 Lógica Fazón también para adiciones
                     if (item.MateriaPrimaId == 999 && orden.Cliente != null)
-                        idReal = await ObtenerMaterialClienteAsync(orden.Cliente.Id, orden.Cliente.RazonSocial, orden.ProductoId);
+                        idReal = await ObtenerMaterialClienteAsync(orden.Cliente.Id, orden.ProductoId);
 
                     var insumo = await _context.Productos.FindAsync(idReal);
                     if (insumo != null)
                     {
                         if (insumo.StockActual < item.Cantidad)
-                            return BadRequest($"No hay stock suficiente de '{insumo.Nombre}' para el ajuste.");
+                            return BadRequest($"No hay stock suficiente de '{insumo.Nombre}' para el ajuste final.");
 
                         insumo.StockActual -= item.Cantidad;
+
+                        // Registramos el movimiento de ajuste
                         _context.Movimientos.Add(new Movimiento
                         {
                             Fecha = DateTime.Now,
@@ -247,6 +200,7 @@ namespace EstruplastERP.Api.Controllers
             orden.Estado = EstadoOrden.Finalizada;
             orden.FechaFin = DateTime.Now;
 
+            // Ingreso del Producto Terminado
             if (orden.Producto != null)
             {
                 orden.Producto.StockActual += orden.Cantidad;

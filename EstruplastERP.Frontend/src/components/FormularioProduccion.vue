@@ -8,6 +8,8 @@ import HojaImpresion from './HojaImpresion.vue'
 const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
 const PESO_LATA_KG = 0.35; 
 const KILOS_BASE_LATA = 500;
+const ID_MASTERBATCH_GENERICO = 22;
+const DENSIDAD_DEFAULT = 1.1;
 
 interface Producto { 
     id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean; 
@@ -29,7 +31,6 @@ const clientes = ref<Cliente[]>([])
 const recetaDinamica = ref<ItemReceta[]>([]) 
 const stockFazonDetectado = ref<number | null>(null);
 
-// VARIABLES DE LÍMITES EXPLÍCITAS
 const limiteMinimo = ref(0);
 const limiteMaximo = ref(0);
 
@@ -58,7 +59,7 @@ const totalPorcentajeReceta = computed(() => parseFloat(recetaDinamica.value.red
 
 const clienteTieneFazonHabilitado = computed(() => {
     if (!form.value.clienteId) return false;
-    const prefijo = `MP-CLI-${form.value.clienteId}-`;
+    const prefijo = `MP-CLI-${form.value.clienteId}`;
     return listaInventarioCompleto.value.some(p => p.codigoSku && p.codigoSku.startsWith(prefijo));
 });
 
@@ -78,10 +79,20 @@ const colorFinalParaPDF = computed(() => {
 });
 
 const densidadMezcla = computed(() => {
-  if (recetaDinamica.value.length === 0) return productoSeleccionado.value?.pesoEspecifico || 0.92;
-  let dTotal = 0, pTotal = 0;
-  recetaDinamica.value.forEach(item => { const porc = parseFloat(item.cantidad.toString()) || 0; dTotal += (porc * (item.densidad || 0.92)); pTotal += porc; });
-  return pTotal === 0 ? 0.92 : parseFloat((dTotal / pTotal).toFixed(4));
+  if (recetaDinamica.value.length === 0) return productoSeleccionado.value?.pesoEspecifico || DENSIDAD_DEFAULT;
+  
+  let masaTotal = 0; 
+  let porcentajeTotal = 0;
+
+  recetaDinamica.value.forEach(item => { 
+      const porc = parseFloat(item.cantidad.toString()) || 0;
+      const dens = parseFloat(item.densidad?.toString()) || DENSIDAD_DEFAULT; 
+      
+      masaTotal += (porc * dens);
+      porcentajeTotal += porc; 
+  });
+
+  return porcentajeTotal === 0 ? DENSIDAD_DEFAULT : parseFloat((masaTotal / porcentajeTotal).toFixed(4));
 });
 
 const kilosCalculados = computed(() => {
@@ -99,13 +110,13 @@ const insumosSinStock = computed(() => {
 
   recetaDinamica.value.forEach(item => {
     const consumo = (kilosBase * parseFloat(item.cantidad.toString()) || 0) / 100;
-    
-    if (item.materiaPrimaId === 999) {
+    if (item.materiaPrimaId === 999 || item.esFazonInput) {
         if (stockFazonDetectado.value !== null && stockFazonDetectado.value < consumo) {
             faltantes.push({ nombre: item.nombreInsumo, necesario: consumo, disponible: stockFazonDetectado.value, diferencia: consumo - stockFazonDetectado.value });
         }
     } else {
-        const mp = listaTodasMateriasPrimas.value.find(m => m.id === item.materiaPrimaId);
+        const mp = listaTodasMateriasPrimas.value.find(m => m.id === item.materiaPrimaId) || 
+                   listaInventarioCompleto.value.find(m => m.id === item.materiaPrimaId);
         if (mp && mp.stockActual < consumo) {
             faltantes.push({ nombre: item.nombreInsumo, necesario: consumo, disponible: mp.stockActual, diferencia: consumo - mp.stockActual });
         }
@@ -143,6 +154,7 @@ function getMaterialNameFromId(id: number): string {
 function quitarInsumoManual(index: number) {
     if (index >= 0 && index < recetaDinamica.value.length) {
         recetaDinamica.value.splice(index, 1);
+        balancearBase(); 
     }
 }
 
@@ -157,12 +169,39 @@ function agregarInsumoDesdeHijo(item: { id: number, porcentaje: number }) {
             densidad: mp.pesoEspecifico || 1,
             esBase: false
         });
+        balancearBase();
+    }
+}
+
+// 🔥 LÓGICA DE BALANCEO ROBUSTA
+function balancearBase() {
+    if (recetaDinamica.value.length === 0) return;
+
+    let base = recetaDinamica.value.find(r => r.esBase);
+    
+    if (!base && recetaDinamica.value.length > 0) {
+        base = recetaDinamica.value.reduce((prev, current) => 
+            (parseFloat(prev.cantidad.toString()) > parseFloat(current.cantidad.toString())) ? prev : current
+        );
+        base.esBase = true; 
+    }
+
+    if (base) {
+        const sumaOtros = recetaDinamica.value.reduce((acc, item) => {
+            if (item === base) return acc;
+            const valor = parseFloat(item.cantidad.toString()) || 0;
+            return acc + valor;
+        }, 0);
+
+        const nuevoPorcentajeBase = 100 - sumaOtros;
+        base.cantidad = parseFloat((nuevoPorcentajeBase < 0 ? 0 : nuevoPorcentajeBase).toFixed(2));
     }
 }
 
 async function CargarProductosFiltrados(clienteId: number | string = '') {
   try {
-    const res = await axios.get(`${apiUrl}/Productos?clienteId=${clienteId}`, getAuthConfig());
+    const cid = clienteId ? clienteId : ''; 
+    const res = await axios.get(`${apiUrl}/Productos?clienteId=${cid}`, getAuthConfig());
     productos.value = res.data.filter((p: any) => p.esProductoTerminado);
     
     if (form.value.productoTerminadoId) {
@@ -184,20 +223,17 @@ async function CargarDatosProductos(id: number) {
     if (!prod.esGenerico) { form.value.largo = prod.largo; form.value.ancho = prod.ancho; form.value.espesor = prod.espesor; if(!form.value.observacion) form.value.observacion = "Producción Stock"; } 
     else { form.value.largo = prod.largo || 0; form.value.ancho = prod.ancho || 0; form.value.espesor = prod.espesor || 0; }
     
-    // 🔥 LÓGICA HÍBRIDA DE LÍMITES (VARIABLES)
-    // 1. Intentar leer de la BD
     limiteMinimo.value = prod.espesorMinimo ?? prod.EspesorMinimo ?? 0;
     limiteMaximo.value = prod.espesorMaximo ?? prod.EspesorMaximo ?? 0;
 
-    // 2. Fallback: Si la BD trajo 0, usar lógica por Nombre
     if (limiteMinimo.value === 0 && limiteMaximo.value === 0) {
         const nombre = (prod.nombre || '').toUpperCase();
         if (nombre.includes("FINO")) {
             limiteMinimo.value = 0.40;
             limiteMaximo.value = 0.90;
         } else if (nombre.includes("GRUESO")) {
-            limiteMinimo.value = 0.90; // Default grueso
-            if (nombre.includes("ABS")) limiteMinimo.value = 1.00; // ABS es más grueso
+            limiteMinimo.value = 0.90; 
+            if (nombre.includes("ABS")) limiteMinimo.value = 1.00; 
         }
     }
 
@@ -214,19 +250,23 @@ async function CargarDatosProductos(id: number) {
         }];
         if (form.value.clienteId) consultarStockFazon(form.value.clienteId, id);
     } else if (prod.receta?.length > 0) {
-        // 🔥 DETECCIÓN DE MASTERBATCHES PARA PODER REEMPLAZARLOS LUEGO
         recetaDinamica.value = prod.receta.map((r: any) => {
             const nombre = (r.nombreInsumo || '').toUpperCase();
-            // Identificamos cualquier cosa que parezca un color
-            const esMb = r.materiaPrimaId === 22 || nombre.includes('MASTER') || nombre.includes('PIGMENTO') || nombre.includes('COLOR') || nombre.includes('VARIOS');
+            const esMb = r.materiaPrimaId === ID_MASTERBATCH_GENERICO || nombre.includes('MASTER') || nombre.includes('PIGMENTO') || nombre.includes('COLOR') || nombre.includes('VARIOS');
+            
+            const mpReal = listaTodasMateriasPrimas.value.find(m => m.id === r.materiaPrimaId) || 
+                           listaInventarioCompleto.value.find(m => m.id === r.materiaPrimaId);
+            
+            const densidadReal = mpReal ? mpReal.pesoEspecifico : DENSIDAD_DEFAULT;
+
             return { 
                 id: Date.now()+Math.random(), 
                 materiaPrimaId: r.materiaPrimaId, 
                 nombreInsumo: r.nombreInsumo||'Insumo', 
                 cantidad: r.cantidad, 
-                densidad: 0.92, 
-                esBase: r.cantidad > 50,
-                esColor: !r.cantidad > 50 && esMb 
+                densidad: densidadReal, 
+                esBase: r.cantidad > 50, 
+                esColor: esMb 
             };
         });
         recalcularFormulaAutomatica();
@@ -238,17 +278,19 @@ async function CargarDatosProductos(id: number) {
 async function consultarStockFazon(clienteId: string | number, productoId: number) {
     if(!clienteId || !productoId) return;
     stockFazonDetectado.value = null;
-    const codigoMaterial = getMaterialCodeFromId(productoId);
-    const skuStart = `MP-CLI-${clienteId}-${codigoMaterial}`;
-    const prodEncontrado = listaInventarioCompleto.value.find((p: any) => p.codigoSku === skuStart);
+    const prodEncontrado = listaInventarioCompleto.value.find((p: any) => p.esMateriaPrima && p.clienteId == clienteId);
     stockFazonDetectado.value = prodEncontrado ? prodEncontrado.stockActual : 0;
 }
 
 function recalcularFormulaAutomatica() {
+  let porcentajeColor = 2.00;
+  const colorExistente = recetaDinamica.value.find(r => r.esColor);
+  if (colorExistente) porcentajeColor = Number(colorExistente.cantidad);
+
   const borrar = ['esCarga','esBrillo','esEstearato','esUv','esCaucho'];
   
   if (form.value.esProductoColor && form.value.masterbatchId) {
-      borrar.push('esColor'); // Esto borrará el "Masterbatch Varios" original
+      borrar.push('esColor'); 
   }
 
   let nueva = recetaDinamica.value.filter(r => {
@@ -258,11 +300,20 @@ function recalcularFormulaAutomatica() {
       return true;
   });
 
-  if(nueva.length === 0) return;
+  const add = (nom:string, cant:number, tipo:string, mpId:number=0, dens:number= DENSIDAD_DEFAULT) => {
+      let m = null;
+      if (mpId === 0) m = listaTodasMateriasPrimas.value.find(x => x.nombre.toUpperCase().includes(nom));
+      else m = listaTodasMateriasPrimas.value.find(x => x.id === mpId); 
 
-  const add = (nom:string, cant:number, tipo:string) => {
-      const m = listaTodasMateriasPrimas.value.find(x => x.nombre.toUpperCase().includes(nom));
-      if(m) nueva.push({ id: tipo, cantidad: cant, nombreInsumo: m.nombre, densidad: m.pesoEspecifico||0.92, materiaPrimaId: m.id, [tipo]: true });
+      nueva.push({ 
+          id: tipo, 
+          cantidad: cant, 
+          nombreInsumo: m ? m.nombre : (nom==='COLOR'?'MASTERBATCH':nom), 
+          densidad: m ? (m.pesoEspecifico||dens) : dens, 
+          materiaPrimaId: m ? m.id : mpId, 
+          [tipo]: true,
+          esColor: tipo === 'esColor' 
+      });
   };
 
   if(form.value.conBrillo) add('BRILLO', form.value.porcBrillo, 'esBrillo');
@@ -272,22 +323,26 @@ function recalcularFormulaAutomatica() {
   
   if(form.value.esProductoColor && form.value.masterbatchId) {
       const mb = listaMasterbatches.value.find(m => m.id === form.value.masterbatchId);
-      if(mb) nueva.push({ id: 'color', cantidad: 2, nombreInsumo: mb.nombre, densidad: mb.pesoEspecifico, materiaPrimaId: mb.id, esColor: true });
+      if(mb) {
+          add('COLOR', porcentajeColor, 'esColor', mb.id, mb.pesoEspecifico);
+      }
   }
   
   if(form.value.aditivoCarga > 0) {
-      const m = listaTodasMateriasPrimas.value.find(x => x.nombre.toUpperCase().includes('CARGA') || x.nombre.toUpperCase().includes('CARBONATO'));
-      nueva.push({ id: 'carga', cantidad: form.value.aditivoCarga, nombreInsumo: m?m.nombre:'CARGA', densidad: 1.8, materiaPrimaId: m?m.id:0, esCarga: true });
+      add('CARGA', form.value.aditivoCarga, 'esCarga');
   }
 
-  let base = nueva.find(r => r.esBase);
-  if(!base && nueva.length>0) { base = nueva[0]; base.esBase = true; }
-  if(base) {
-      const suma = nueva.reduce((s, i) => i.esBase ? s : s + parseFloat(i.cantidad.toString()), 0);
-      base.cantidad = parseFloat((100 - suma).toFixed(2));
-      if(base.cantidad < 0) base.cantidad = 0;
-  }
   recetaDinamica.value = nueva;
+  balancearBase(); 
+}
+
+function validarMasterbatchProhibido(): boolean {
+    const tieneProhibido = recetaDinamica.value.some(r => r.materiaPrimaId === ID_MASTERBATCH_GENERICO);
+    if (tieneProhibido) {
+        error.value = "⛔ ERROR: Debes reemplazar el 'Masterbatch Varios' por un color específico.";
+        return false;
+    }
+    return true;
 }
 
 async function registrarProduccion() {
@@ -295,18 +350,14 @@ async function registrarProduccion() {
   if (!form.value.empleadoId || form.value.kilosTotales <= 0) return error.value = "Faltan datos."; 
   if (productoSeleccionado.value?.esFazon && !form.value.clienteId) return error.value = "Seleccione Cliente.";
   if (hayBloqueoDeStock.value) return error.value = "STOCK INSUFICIENTE (Considere el desperdicio).";
+  if (!validarMasterbatchProhibido()) return; 
 
-  // 🔥 VALIDACIÓN DE ESPESOR USANDO LAS VARIABLES
   const min = limiteMinimo.value;
   const max = limiteMaximo.value;
   const val = Number(form.value.espesor);
 
-  if (min > 0 && val < min) {
-      return error.value = `⚠️ Espesor inválido. Debe ser mayor a ${min.toFixed(2)} mm.`;
-  }
-  if (max > 0 && val > max) {
-      return error.value = `⚠️ Espesor inválido. Debe ser menor a ${max.toFixed(2)} mm.`;
-  }
+  if (min > 0 && val < min) return error.value = `⚠️ Espesor inválido. > ${min.toFixed(2)} mm.`;
+  if (max > 0 && val > max) return error.value = `⚠️ Espesor inválido. < ${max.toFixed(2)} mm.`;
 
   const consumos = recetaDinamica.value.map(i => ({ 
       materiaPrimaId: i.materiaPrimaId, 
@@ -315,7 +366,8 @@ async function registrarProduccion() {
   
   try {
     await axios.post(`${apiUrl}/Ordenes`, {
-        productoTerminadoId: form.value.productoTerminadoId, clienteId: form.value.clienteId||null,
+        productoTerminadoId: form.value.productoTerminadoId, 
+        clienteId: form.value.clienteId || null, 
         cantidad: form.value.cantidad, empleadoId: form.value.empleadoId, turno: form.value.turno,
         observacion: (form.value.observacion||'') + ` | ${form.value.largo}x${form.value.ancho}x${form.value.espesor}`,
         kilos: form.value.kilosTotales, 
@@ -326,7 +378,9 @@ async function registrarProduccion() {
 }
 
 async function generarPDF(tipo: 'orden'|'carga') {
-  ocultarFormula.value = (tipo==='orden'); await nextTick();
+  ocultarFormula.value = (tipo === 'orden'); 
+  await nextTick(); 
+  await new Promise(r => setTimeout(r, 100)); 
   await html2pdf().set({ margin: 0, filename: `Doc_${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4' } }).from(document.getElementById('hoja-de-impresion')).save();
   ocultarFormula.value = false;
 }
@@ -366,7 +420,21 @@ onMounted(async () => {
   <div class="layout-global">
     <div class="panel-izquierdo">
         <div class="hoja-contenedor">
-            <HojaImpresion :form="form" :producto="productoSeleccionado" :cliente="clienteSeleccionado" :empleado="empleadoSeleccionado" :receta="recetaDinamica" :colorFinal="colorFinalParaPDF" :densidad="densidadMezcla" :totalPorcentaje="totalPorcentajeReceta" :materiasPrimas="listaTodasMateriasPrimas" :ocultarFormula="ocultarFormula" @add-insumo="agregarInsumoDesdeHijo" @remove-insumo="quitarInsumoManual" />
+            <HojaImpresion 
+                :form="form" 
+                :producto="productoSeleccionado" 
+                :cliente="clienteSeleccionado" 
+                :empleado="empleadoSeleccionado" 
+                :receta="recetaDinamica" 
+                :colorFinal="colorFinalParaPDF" 
+                :densidad="densidadMezcla" 
+                :totalPorcentaje="totalPorcentajeReceta" 
+                :materiasPrimas="listaTodasMateriasPrimas" 
+                :ocultarFormula="ocultarFormula" 
+                @add-insumo="agregarInsumoDesdeHijo" 
+                @remove-insumo="quitarInsumoManual"
+                @update-receta="balancearBase"  
+            />
         </div>
     </div>
 

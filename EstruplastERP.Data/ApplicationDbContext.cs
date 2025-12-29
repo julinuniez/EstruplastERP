@@ -68,30 +68,34 @@ namespace EstruplastERP.Data
                 entity.HasOne(c => c.MateriaPrima).WithMany().HasForeignKey(c => c.MateriaPrimaId).OnDelete(DeleteBehavior.NoAction);
             });
 
+            // =============================================================================
+            // SEEDING (DATOS INICIALES)
+            // =============================================================================
             modelBuilder.Entity<Producto>().HasData(
-                new Producto { Id = 1, Nombre = "Poliestireno Alto Impacto (AI/PAI)", CodigoSku = "MP-PAI", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 2, Nombre = "ABS", CodigoSku = "MP-ABS", EsMateriaPrima = true, PesoEspecifico = 1.05M, StockActual = 1000, StockMinimo = 500, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 3, Nombre = "Polipropileno (PP)", CodigoSku = "MP-PP", EsMateriaPrima = true, PesoEspecifico = 0.91m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 4, Nombre = "Polietileno Alta Densidad (PEAD)", CodigoSku = "MP-PEAD", EsMateriaPrima = true, PesoEspecifico = 0.96m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 5, Nombre = "Polietileno Baja Densidad (PEBD)", CodigoSku = "MP-PEBD", EsMateriaPrima = true, PesoEspecifico = 0.92m, StockActual = 1000, StockMinimo = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 6, Nombre = "Bioplástico", CodigoSku = "MP-BIO", EsMateriaPrima = true, PesoEspecifico = 1.25m, StockActual = 0, StockMinimo = 200, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 7, Nombre = "Tuti Fino", CodigoSku = "MP-TUTI-FINO", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 8, Nombre = "Tuti Grueso", CodigoSku = "MP-TUTI-GRUESO", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 20, Nombre = "Masterbatch Blanco", CodigoSku = "MP-MB-BLA", EsMateriaPrima = true, PesoEspecifico = 1.80m, StockActual = 200, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 21, Nombre = "Masterbatch Negro", CodigoSku = "MP-MB-NEG", EsMateriaPrima = true, PesoEspecifico = 1.20m, StockActual = 200, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 22, Nombre = "Masterbatch Color (Varios)", CodigoSku = "MP-MB-COL", EsMateriaPrima = true, PesoEspecifico = 1.20m, StockActual = 200, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 23, Nombre = "Carga Mineral", CodigoSku = "MP-CARGA", EsMateriaPrima = true, PesoEspecifico = 1.80m, StockActual = 1000, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 24, Nombre = "Aditivo UV", CodigoSku = "MP-UV", EsMateriaPrima = true, PesoEspecifico = 0.95m, StockActual = 100, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 25, Nombre = "Aditivo Caucho", CodigoSku = "MP-CAUCHO", EsMateriaPrima = true, PesoEspecifico = 0.94m, StockActual = 100, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 26, Nombre = "Estearato", CodigoSku = "MP-ESTEARATO", EsMateriaPrima = true, PesoEspecifico = 0.35m, StockActual = 50, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 27, Nombre = "Brillo", CodigoSku = "MP-BRILLO", EsMateriaPrima = true, PesoEspecifico = 1.00m, StockActual = 50, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 999, Nombre = "MATERIAL DE CLIENTE (FAZÓN)", CodigoSku = "MP-FAZON-GEN", EsMateriaPrima = true, PesoEspecifico = 1.00m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now }
-            );
 
-            // -----------------------------------------------------------------------------
-            // 2. PRODUCTOS TERMINADOS (PROPIOS) - CON LÍMITES
-            // -----------------------------------------------------------------------------
-            modelBuilder.Entity<Producto>().HasData(
+                // 1. MATERIAS PRIMAS ESENCIALES (NO BORRAR)
+                // Necesarias para que funcionen las fórmulas de Fazón
+                new Producto { Id = 999, Nombre = "MATERIAL DE CLIENTE (FAZÓN GENÉRICO)", CodigoSku = "MP-FAZON-GEN", EsMateriaPrima = true, PesoEspecifico = 1.00m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 22, Nombre = "Masterbatch Color (Varios)", CodigoSku = "MP-MB-COL", EsMateriaPrima = true, PesoEspecifico = 1.20m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
+
+                // 5. MATERIAS PRIMAS RECUPERADAS (SCRAP Y TUTTI) - NUEVO
+                // =============================================================================
+                // --- ALTO IMPACTO (PAI) ---
+                new Producto { Id = 600, Nombre = "SCRAP A.I. BLANCO", CodigoSku = "REC-AI-BLA", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 601, Nombre = "SCRAP A.I. NEGRO", CodigoSku = "REC-AI-NEG", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 602, Nombre = "A.I. TUTTI (MEZCLA)", CodigoSku = "REC-AI-TUT", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
+
+                // --- POLIPROPILENO (PP) ---
+                new Producto { Id = 603, Nombre = "SCRAP PP", CodigoSku = "REC-PP", EsMateriaPrima = true, PesoEspecifico = 0.91m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
+
+                // --- POLIETILENO ALTA DENSIDAD (PEAD) ---
+                new Producto { Id = 604, Nombre = "SCRAP PEAD", CodigoSku = "REC-PEAD", EsMateriaPrima = true, PesoEspecifico = 0.96m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
+
+                // --- ABS ---
+                new Producto { Id = 605, Nombre = "SCRAP ABS", CodigoSku = "REC-ABS", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now },
+
+
+                // 2. PRODUCTOS TERMINADOS (PROPIOS)
                 // A.I. FINO (0.40 - 0.90)
                 new Producto { Id = 100, Nombre = "A.I. FINO (0.40 - 0.90 mm)", CodigoSku = "AI-FINO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 102, Nombre = "A.I. FINO COLOR", CodigoSku = "AI-FINO-COL", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Color = "A Elección", Activo = true, FechaCreacion = DateTime.Now },
@@ -119,20 +123,13 @@ namespace EstruplastERP.Data
                 new Producto { Id = 400, Nombre = "PEAD / PEBD", CodigoSku = "PE-MIX", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.94m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 401, Nombre = "PEBD GOFRADO", CodigoSku = "PEBD-GOF", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.92m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 402, Nombre = "PEAD BICAPA", CodigoSku = "PEAD-BIC", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.96m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 500, Nombre = "BIOPLASTICO", CodigoSku = "BIO-LAM", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.25m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now }
-            );
+                new Producto { Id = 500, Nombre = "BIOPLASTICO", CodigoSku = "BIO-LAM", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.25m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
 
-            // -----------------------------------------------------------------------------
-            // 3. SECCIÓN: FAZÓN (SERVICIO) - CON LÍMITES
-            // -----------------------------------------------------------------------------
-            modelBuilder.Entity<Producto>().HasData(
-                // FINOS (0.40 - 0.90)
+                // 3. FAZÓN (SERVICIO)
                 new Producto { Id = 900, Nombre = "LAMINADO A FAZON - A.I. FINO", CodigoSku = "FAZ-AI-FIN", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 902, Nombre = "LAMINADO A FAZON - A.I. FINO COLOR", CodigoSku = "FAZ-AI-FIN-COL", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 906, Nombre = "LAMINADO A FAZON - A.I. TUTTI FINO", CodigoSku = "FAZ-AI-TUT-FIN", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 909, Nombre = "LAMINADO A FAZON - PEAD/PP/BIO FINO", CodigoSku = "FAZ-POLI-FIN", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.95m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
-
-                // GRUESOS (0.90 - Sin Limite)
                 new Producto { Id = 901, Nombre = "LAMINADO A FAZON - A.I. GRUESO", CodigoSku = "FAZ-AI-GRU", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 903, Nombre = "LAMINADO A FAZON - A.I. GRUESO COLOR", CodigoSku = "FAZ-AI-GRU-COL", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 904, Nombre = "LAMINADO A FAZON - A.I. BICAPA", CodigoSku = "FAZ-AI-BIC", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
@@ -143,25 +140,18 @@ namespace EstruplastERP.Data
                 new Producto { Id = 911, Nombre = "LAMINADO A FAZON - PEAD BICAPA", CodigoSku = "FAZ-PEAD-BIC", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.96m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now }
             );
 
-            // ... (Se mantienen las formulas tal cual las tenías) ...
+            // =============================================================================
+            // 4. RESTAURACIÓN DE RECETAS (FÓRMULAS)
+            // =============================================================================
             modelBuilder.Entity<Formula>().HasData(
-                // ... (Copiar tus formulas anteriores aquí) ...
-                new Formula { Id = 1, ProductoTerminadoId = 100, MateriaPrimaId = 1, Cantidad = 96 },
-                new Formula { Id = 2, ProductoTerminadoId = 100, MateriaPrimaId = 20, Cantidad = 4 },
-                new Formula { Id = 3, ProductoTerminadoId = 102, MateriaPrimaId = 1, Cantidad = 98 },
-                new Formula { Id = 4, ProductoTerminadoId = 102, MateriaPrimaId = 22, Cantidad = 2 },
-                new Formula { Id = 5, ProductoTerminadoId = 200, MateriaPrimaId = 2, Cantidad = 98 },
-                new Formula { Id = 6, ProductoTerminadoId = 200, MateriaPrimaId = 20, Cantidad = 2 },
-                new Formula { Id = 7, ProductoTerminadoId = 300, MateriaPrimaId = 3, Cantidad = 100 },
-                new Formula { Id = 8, ProductoTerminadoId = 400, MateriaPrimaId = 4, Cantidad = 100 },
-                new Formula { Id = 9, ProductoTerminadoId = 106, MateriaPrimaId = 7, Cantidad = 100 },
-                // Formulas Fazon (50 en adelante)
+
+                // --- RECETAS FAZÓN (Usan ID 999) ---
                 new Formula { Id = 50, ProductoTerminadoId = 900, MateriaPrimaId = 999, Cantidad = 100 },
                 new Formula { Id = 51, ProductoTerminadoId = 901, MateriaPrimaId = 999, Cantidad = 100 },
                 new Formula { Id = 52, ProductoTerminadoId = 902, MateriaPrimaId = 999, Cantidad = 98 },
-                new Formula { Id = 53, ProductoTerminadoId = 902, MateriaPrimaId = 22, Cantidad = 2 },
+                new Formula { Id = 53, ProductoTerminadoId = 902, MateriaPrimaId = 22, Cantidad = 2 },  // Color
                 new Formula { Id = 54, ProductoTerminadoId = 903, MateriaPrimaId = 999, Cantidad = 98 },
-                new Formula { Id = 55, ProductoTerminadoId = 903, MateriaPrimaId = 22, Cantidad = 2 },
+                new Formula { Id = 55, ProductoTerminadoId = 903, MateriaPrimaId = 22, Cantidad = 2 },  // Color
                 new Formula { Id = 56, ProductoTerminadoId = 904, MateriaPrimaId = 999, Cantidad = 100 },
                 new Formula { Id = 57, ProductoTerminadoId = 905, MateriaPrimaId = 999, Cantidad = 100 },
                 new Formula { Id = 58, ProductoTerminadoId = 906, MateriaPrimaId = 999, Cantidad = 100 },
@@ -169,8 +159,14 @@ namespace EstruplastERP.Data
                 new Formula { Id = 60, ProductoTerminadoId = 908, MateriaPrimaId = 999, Cantidad = 100 },
                 new Formula { Id = 61, ProductoTerminadoId = 909, MateriaPrimaId = 999, Cantidad = 100 },
                 new Formula { Id = 62, ProductoTerminadoId = 910, MateriaPrimaId = 999, Cantidad = 100 },
-                new Formula { Id = 63, ProductoTerminadoId = 911, MateriaPrimaId = 999, Cantidad = 100 }
+                new Formula { Id = 63, ProductoTerminadoId = 911, MateriaPrimaId = 999, Cantidad = 100 },
+
+                // --- RECETAS PROPIAS "TUTTI" (Usan ID 602 - A.I. TUTTI MEZCLA) ---
+                // Para A.I. TUTTI FINO (106) y GRUESO (107)
+                new Formula { Id = 70, ProductoTerminadoId = 106, MateriaPrimaId = 602, Cantidad = 100 },
+                new Formula { Id = 71, ProductoTerminadoId = 107, MateriaPrimaId = 602, Cantidad = 100 }
             );
+
         }
     }
 }

@@ -8,7 +8,7 @@ import IngresoStock from '../components/IngresoStock.vue';
 import VistaRemitos from '../components/VistaRemitos.vue';
 import DespachoRemitos from '../components/DespachoRemitos.vue';
 import Administracion from '../components/Administracion.vue';
-// Nota: He removido la importación de 'Produccion.vue' porque usas 'VistaProduccion.vue' en tu lista principal.
+import EditarProducto from '../components/EditarProducto.vue';
 
 const routes: Array<RouteRecordRaw> = [
     // --- LOGIN ---
@@ -67,6 +67,12 @@ const routes: Array<RouteRecordRaw> = [
         name: 'configuracion', 
         component: Administracion,
         meta: { requiresAuth: true }
+    },
+
+    {
+        path: '/editar-producto/:id', // :id es el parámetro dinámico
+        name: 'editar-producto',
+        component: EditarProducto
     },
 ];
 
