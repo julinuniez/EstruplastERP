@@ -92,5 +92,21 @@ namespace EstruplastERP.Api.Controllers
 
             return Ok(lista);
         }
+
+        [HttpGet("receta-proyectada")]
+        public async Task<IActionResult> GetRecetaProyectada([FromQuery] int productoId, [FromQuery] int clienteId, [FromQuery] decimal kilos)
+        {
+            try
+            {
+                // Llamamos al método visual que creamos en el servicio
+                // (Asegúrate de haber agregado ese método al final de tu Service como vimos antes)
+                var receta = await _produccionService.ObtenerRecetaProyectada(productoId, clienteId, kilos);
+                return Ok(receta);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }

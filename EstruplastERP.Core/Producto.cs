@@ -22,6 +22,8 @@ namespace EstruplastERP.Core
         public string? CodigoBarras { get; set; }
         [MaxLength(50)]
         public string? Color { get; set; } // Ej: "Gris Goff"
+
+        public string? Rubro { get; set; }// Valores sugeridos: "VIRGEN", "SCRAP", "TUTTI", "ADITIVO", "MASTERBATCH"
         public bool EsFazon { get; set; } = false;
 
         [Column(TypeName = "decimal(18,2)")]
@@ -55,6 +57,7 @@ namespace EstruplastERP.Core
         // Datos Multimedia
         public string? ImagenUrl { get; set; }
         public int? ClienteId { get; set; }
+        public int? FamiliaId { get; set; }
 
         [System.Text.Json.Serialization.JsonIgnore]
         public Cliente? Cliente { get; set; }

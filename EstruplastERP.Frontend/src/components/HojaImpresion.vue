@@ -16,27 +16,70 @@ const props = defineProps<{
 
 const emit = defineEmits(['add-insumo', 'remove-insumo', 'update-receta']);
 
-const insumoExtraId = ref('');
+// Variables para el buscador manual
+const insumoBusquedaTexto = ref(''); 
 const insumoExtraPorc = ref<number | ''>('');
+const mostrarLista = ref(false); // Controla si se ve el desplegable
 
-// Calcula cuántas copias mostrar: 2 si no hay fórmula, 1 si hay fórmula
 const cantidadCopias = computed(() => props.ocultarFormula ? 2 : 1);
 
 const totalKilosConDesperdicio = computed(() => {
     const kilosNetos = Number(props.form.kilosTotales) || 0;
     const porcentajeDesperdicio = Number(props.form.merma) || 0; 
-    // 🔥 CAMBIO: Redondeo hacia arriba siempre (ej: 34.1 -> 35)
     return Math.ceil(kilosNetos * (1 + (porcentajeDesperdicio / 100)));
 });
 
+// 🔥 FILTRO HÍBRIDO: MUESTRA TODO SI ESTÁ VACÍO, FILTRA SI HAY TEXTO
+const sugerenciasFiltradas = computed(() => {
+    const texto = insumoBusquedaTexto.value.trim().toUpperCase();
+    
+    let lista = props.materiasPrimas;
+
+    // Si hay texto, filtramos. Si no, usamos la lista completa.
+    if (texto) {
+        lista = lista.filter(mp => {
+            const nombre = (mp.nombre || '').toUpperCase();
+            const rubro = (mp.rubro || '').toUpperCase();
+            return nombre.includes(texto) || rubro.includes(texto);
+        });
+    }
+
+    // Siempre ordenamos alfabéticamente para facilitar la búsqueda visual
+    return [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre));
+});
+
+// Al seleccionar un ítem de la lista
+const seleccionarInsumo = (mp: any) => {
+    insumoBusquedaTexto.value = mp.nombre;
+    mostrarLista.value = false;
+};
+
+// Cierra la lista con un pequeño retraso para permitir el click en el ítem
+const cerrarListaConDelay = () => {
+    setTimeout(() => {
+        mostrarLista.value = false;
+    }, 200);
+};
+
 const solicitarAgregar = () => {
-    if (!insumoExtraId.value || !insumoExtraPorc.value) return;
-    emit('add-insumo', { 
-        id: Number(insumoExtraId.value), 
-        porcentaje: Number(insumoExtraPorc.value) 
-    });
-    insumoExtraId.value = '';
-    insumoExtraPorc.value = '';
+    if (!insumoBusquedaTexto.value || !insumoExtraPorc.value) return;
+
+    // Buscamos coincidencia exacta por nombre en la lista original
+    const mpEncontrada = props.materiasPrimas.find(m => m.nombre === insumoBusquedaTexto.value);
+
+    if (mpEncontrada) {
+        emit('add-insumo', { 
+            id: mpEncontrada.id, 
+            porcentaje: Number(insumoExtraPorc.value) 
+        });
+        
+        // Limpiamos y cerramos
+        insumoBusquedaTexto.value = '';
+        insumoExtraPorc.value = '';
+        mostrarLista.value = false;
+    } else {
+        alert("⚠️ Seleccione un insumo válido de la lista.");
+    }
 };
 
 const solicitarQuitar = (index: number) => {
@@ -94,24 +137,20 @@ const solicitarQuitar = (index: number) => {
                         <div v-if="form.conBrillo"><span class="valor-tech">SÍ</span></div>
                         <span v-else class="valor-tech">NO</span>
                     </div>
-                    
                     <div class="dato-box">
                         <span class="label-tech">UV</span>
                         <div v-if="form.aditivoUV"><span class="valor-tech">SÍ</span></div>
                         <span v-else class="valor-tech">NO</span>
                     </div>
-
                     <div class="dato-box">
                         <span class="label-tech">CAUCHO</span>
                         <div v-if="form.aditivoCaucho"><span class="valor-tech">SÍ</span></div>
                         <span v-else class="valor-tech">NO</span>
                     </div>
-                    
                     <div class="dato-box">
                         <span class="label-tech">TRAT. CORONA</span>
                         <span class="valor-tech">{{ form.tipoCorona && form.tipoCorona !== 'Ninguno' ? form.tipoCorona.toUpperCase() : 'NO' }}</span>
                     </div>
-
                     <div class="dato-box doble-ancho">
                         <span class="label-tech">TOTAL CARGA</span>
                         <span class="valor-tech" style="font-size: 18px;">{{ totalKilosConDesperdicio }} kg</span>
@@ -120,15 +159,12 @@ const solicitarQuitar = (index: number) => {
 
                 <div class="ficha-tecnica" v-if="form.aditivoCarga > 0 || form.conEstearato || (form.conBrillo && form.llevaFilm)">
                     <div class="dato-box" v-if="form.conBrillo && form.llevaFilm"><span class="label-tech">FILM PROTECTOR</span><span class="valor-tech">SÍ</span></div>
-                    
                     <div class="dato-box" v-if="form.aditivoCarga > 0"><span class="label-tech">CARGA MINERAL</span><span class="valor-tech">{{ form.aditivoCarga }} %</span></div>
-                    
                     <div class="dato-box" v-if="form.conEstearato">
                         <span class="label-tech">ESTEARATO</span>
                         <span class="valor-tech" style="font-size: 12px;">{{ (totalKilosConDesperdicio / 500).toFixed(1) }} Latas</span>
                     </div>
-                    
-                    <div class="dato-box" v-if="!(form.conBrillo && form.llevaFilm) || !(form.aditivoCarga > 0) || !form.conEstearato" style="background: #f4f4f4;"></div>
+                    <div class="dato-box" v-if="!(form.conBrillo && form.llevaFilm) || !(form.aditivoCarga > 0) || !form.conEstearato" style="background: #f4f4f4; flex-grow: 1;"></div>
                 </div>
 
                 <div v-if="receta.length > 0" v-show="!ocultarFormula" class="seccion-receta">
@@ -163,10 +199,32 @@ const solicitarQuitar = (index: number) => {
                     </table>
                     
                     <div class="agregar-fila" data-html2canvas-ignore="true">
-                        <select v-model="insumoExtraId" style="width: 200px;">
-                            <option value="">+ Agregar Insumo...</option>
-                            <option v-for="mp in materiasPrimas" :key="mp.id" :value="mp.id">{{ mp.nombre }}</option>
-                        </select>
+                        
+                        <div class="buscador-wrapper">
+                            <input 
+                                type="text" 
+                                v-model="insumoBusquedaTexto" 
+                                placeholder="🔍 Buscar Insumo..." 
+                                class="input-buscador"
+                                @focus="mostrarLista = true"
+                                @click="mostrarLista = true"
+                                @input="mostrarLista = true"
+                                @blur="cerrarListaConDelay"
+                            >
+                            
+                            <div v-if="mostrarLista && sugerenciasFiltradas.length > 0" class="lista-resultados">
+                                <div 
+                                    v-for="mp in sugerenciasFiltradas" 
+                                    :key="mp.id" 
+                                    class="item-resultado"
+                                    @click="seleccionarInsumo(mp)"
+                                >
+                                    <div style="font-weight:bold;">{{ mp.nombre }}</div>
+                                    <div style="font-size:10px; color:#666;">{{ mp.rubro }}</div>
+                                </div>
+                            </div>
+                        </div>
+
                         <input type="number" v-model="insumoExtraPorc" placeholder="%" style="width: 60px;">
                         <button @click="solicitarAgregar" type="button" style="background:#2ecc71; color:white; border:none; padding:5px 10px; cursor:pointer;">Añadir</button>
                     </div>
@@ -192,38 +250,9 @@ const solicitarQuitar = (index: number) => {
 
 <style scoped>
 /* ESTILOS OPTIMIZADOS PARA A4 (210mm x 297mm) */
-.hoja-papel { 
-    background: white; 
-    width: 209mm; 
-    height: 290mm; 
-    padding: 0; 
-    box-sizing: border-box; 
-    color: black; 
-    font-family: Arial, sans-serif;
-    overflow: hidden; 
-    position: relative;
-    box-shadow: 0 0 10px rgba(0,0,0,0.3);
-    
-    display: flex;
-    flex-direction: column;
-}
-
-.contenedor-comprobante {
-    padding: 15mm;
-    box-sizing: border-box;
-    flex-grow: 1; 
-    display: flex;
-    flex-direction: column;
-    position: relative;
-}
-
-.contenedor-comprobante.mitad-hoja {
-    height: 50%; 
-    padding: 10mm 15mm; 
-    border-bottom: 1px dashed #ccc; 
-}
-
-/* Ajustes internos para mitad de hoja */
+.hoja-papel { background: white; width: 209mm; height: 290mm; padding: 0; box-sizing: border-box; color: black; font-family: Arial, sans-serif; overflow: hidden; position: relative; box-shadow: 0 0 10px rgba(0,0,0,0.3); display: flex; flex-direction: column; }
+.contenedor-comprobante { padding: 15mm; box-sizing: border-box; flex-grow: 1; display: flex; flex-direction: column; position: relative; }
+.contenedor-comprobante.mitad-hoja { height: 50%; padding: 10mm 15mm; border-bottom: 1px dashed #ccc; }
 .mitad-hoja .logo-img { max-height: 50px; }
 .mitad-hoja .datos-orden h3 { font-size: 14px; }
 .mitad-hoja .caja-producto { margin-bottom: 5px; padding: 5px; }
@@ -231,88 +260,54 @@ const solicitarQuitar = (index: number) => {
 .mitad-hoja .ficha-tecnica { margin-bottom: 5px; }
 .mitad-hoja .recuadro-gigante { height: 30px; font-size: 18px; }
 .mitad-hoja .texto-lote { font-size: 12px; }
-
-.marca-copia {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(-30deg);
-    font-size: 40px;
-    color: rgba(0, 0, 0, 0.05);
-    font-weight: 900;
-    pointer-events: none;
-    border: 5px solid rgba(0, 0, 0, 0.05);
-    padding: 10px 40px;
-    border-radius: 10px;
-    z-index: 0;
-}
-
-.contenido-interno {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    z-index: 1;
-}
-
+.marca-copia { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 40px; color: rgba(0, 0, 0, 0.05); font-weight: 900; pointer-events: none; border: 5px solid rgba(0, 0, 0, 0.05); padding: 10px 40px; border-radius: 10px; z-index: 0; }
+.contenido-interno { flex-grow: 1; display: flex; flex-direction: column; z-index: 1; }
 .cabecera { border-bottom: 2px solid black; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
 .logo-img { max-height: 80px; max-width: 250px; object-fit: contain; }
 .datos-orden { text-align: right; }
 .datos-orden h3 { margin: 0; text-decoration: underline; font-size: 18px; font-weight: 900; }
 .datos-orden p { margin: 2px 0; font-size: 12px; }
-
 .fila-pdf { margin-bottom: 15px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
 .dato-relleno { font-family: 'Courier New', monospace; font-size: 16px; font-weight: bold; margin-left: 10px; text-transform: uppercase; }
-
 .caja-producto { border: 2px solid black; padding: 10px; margin-bottom: 10px; text-align: center; background: #f9f9f9; }
 .titulo-seccion { font-size: 10px; font-weight: bold; margin-bottom: 5px; letter-spacing: 1px; }
 .producto-nombre { font-size: 18px; font-weight: 900; }
 .producto-sku { font-size: 12px; margin-top: 5px; }
-
 .ficha-tecnica { display: flex; border: 2px solid black; margin-bottom: 10px; }
 .dato-box { flex: 1; border-right: 1px solid black; text-align: center; padding: 5px; }
 .dato-box:last-child { border-right: none; }
 .dato-box.doble-ancho { flex: 2; background: #e8e8e8; }
 .label-tech { display: block; font-size: 9px; font-weight: bold; color: #333; }
 .valor-tech { font-size: 14px; font-weight: bold; margin-top: 2px; display: block; }
-
-.seccion-receta { 
-    margin-top: 15px; 
-    border: 2px solid black; 
-    font-size: 14px; 
-}
-
+.seccion-receta { margin-top: 15px; border: 2px solid black; font-size: 14px; }
 .titulo-seccion-receta { background: #e0e0e0; padding: 8px; font-weight: 900; text-align: center; border-bottom: 2px solid black; font-size: 15px; }
 .tabla-receta { width: 100%; border-collapse: collapse; }
 .tabla-receta th { border-right: 1px solid black; border-bottom: 2px solid black; padding: 8px; background: #f4f4f4; font-size: 12px; }
 .tabla-receta td { border-right: 1px solid black; padding: 8px; font-size: 13px; }
-
 .agregar-fila { padding: 10px; border-top: 1px solid #ccc; display: flex; gap: 5px; align-items: center; justify-content: flex-end; background: #f9f9f9; }
-
 .fila-lotes { display: flex; gap: 20px; margin-top: 10px; margin-bottom: 10px; }
 .mitad { flex: 1; }
 .recuadro-gigante { border: 3px solid black; height: 40px; font-size: 24px; display: flex; align-items: center; justify-content: center; margin-top: 5px; font-weight: 900; overflow: hidden;}
 .texto-lote { font-size: 16px; }
-
-.pie-firma { 
-    margin-top: auto; 
-    padding-top: 10px;
-    display: flex; 
-    justify-content: space-around; 
-}
+.pie-firma { margin-top: auto; padding-top: 10px; display: flex; justify-content: space-around; }
 .linea-firma { border-top: 2px solid black; width: 40%; text-align: center; font-size: 11px; padding-top: 5px; font-weight: bold; }
-
-.linea-corte {
-    position: absolute;
-    bottom: -10px;
-    left: 0;
-    width: 100%;
-    text-align: center;
-    font-size: 10px;
-    color: #999;
-    z-index: 10;
-}
+.linea-corte { position: absolute; bottom: -10px; left: 0; width: 100%; text-align: center; font-size: 10px; color: #999; z-index: 10; }
 .linea-corte span { background: white; padding: 0 10px; }
-
 .input-sin-borde { border: none; background: transparent; font-weight: bold; color: inherit; width: 60px; text-align: center; }
 .input-sin-borde:focus { border-bottom: 1px solid #000; outline: none; }
+
+/* 🔥 ESTILOS DEL BUSCADOR PERSONALIZADO */
+.buscador-wrapper { position: relative; width: 250px; }
+.input-buscador { width: 100%; padding: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+.lista-resultados {
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    background: white; border: 1px solid #ccc;
+    max-height: 250px; /* ✅ ALTURA MÁXIMA CONTROLADA */
+    overflow-y: auto; /* ✅ SCROLL VERTICAL */
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.item-resultado { padding: 8px; border-bottom: 1px solid #eee; cursor: pointer; text-align: left; }
+.item-resultado:hover { background-color: #f0f0f0; }
 </style>

@@ -407,5 +407,44 @@ namespace EstruplastERP.Api.Controllers
                 return StatusCode(500, "Error al guardar: " + ex.Message);
             }
         }
+
+        [HttpPost("reparar-familias-v2")]
+        public async Task<IActionResult> RepararFamiliasV2()
+        {
+            // Buscamos solo materiales de CLIENTES (Fazón)
+            var materialesCliente = await _context.Productos
+                .Where(p => p.EsMateriaPrima && p.ClienteId != null)
+                .ToListAsync();
+
+            int cambios = 0;
+
+            foreach (var mat in materialesCliente)
+            {
+                int? nuevoId = null;
+
+                // Lógica de asignación por Nombre/SKU
+                if (mat.CodigoSku.Contains("AI-FIN")) nuevoId = 11;
+                else if (mat.CodigoSku.Contains("AI-GRU")) nuevoId = 12;
+                else if (mat.CodigoSku.Contains("AI-BIC")) nuevoId = 13;
+                else if (mat.CodigoSku.Contains("AI-TRI")) nuevoId = 14;
+
+                else if (mat.CodigoSku.Contains("ABS-GRU")) nuevoId = 21;
+
+                else if (mat.CodigoSku.Contains("POLI-FIN")) nuevoId = 31;
+                else if (mat.CodigoSku.Contains("POLI-GRU")) nuevoId = 32;
+
+                else if (mat.CodigoSku.Contains("PEAD-BIC")) nuevoId = 41;
+
+                if (nuevoId.HasValue && mat.FamiliaId != nuevoId)
+                {
+                    mat.FamiliaId = nuevoId;
+                    _context.Entry(mat).State = EntityState.Modified;
+                    cambios++;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok($"Se especificaron las familias de {cambios} materiales de clientes.");
+        }
     }
 }
