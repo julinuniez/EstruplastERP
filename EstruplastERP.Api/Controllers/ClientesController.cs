@@ -50,33 +50,32 @@ namespace EstruplastERP.Api.Controllers
             var cliente = await _context.Clientes.FindAsync(id);
             if (cliente == null) return NotFound("Cliente no encontrado.");
 
-            // 1. DEFINIR LAS FAMILIAS (IDs)
-            // Asegúrate de que estos números coincidan con la columna 'FamiliaId' 
-            // de tus productos GENÉRICOS en la base de datos.
-            int FAMILIA_ALTO_IMPACTO = 10;
-            int FAMILIA_ABS = 20;
-            int FAMILIA_POLIETILENO = 30;
-
-            // 2. AGREGAR LA PROPIEDAD 'FamiliaId' A LA LISTA
-            // Dentro de HabilitarFazon
+            // 1. DEFINICIÓN DE MATERIALES BASE
             var materialesFazon = new[]
             {
-    // A.I. (Base 10) -> Asignamos variantes 11, 12, 13, 14
-    new { Codigo = "AI-FIN", Nombre = "A.I. FINO (FAZÓN)", FamiliaId = 11 },
-    new { Codigo = "AI-GRU", Nombre = "A.I. GRUESO (FAZÓN)", FamiliaId = 12 },
-    new { Codigo = "AI-BIC", Nombre = "A.I. BICAPA (FAZÓN)", FamiliaId = 13 },
-    new { Codigo = "AI-TRI", Nombre = "A.I. TRICAPA (FAZÓN)", FamiliaId = 14 },
+        // A.I. (Familia Base 10)
+        new { Codigo = "AI-FIN", Nombre = "A.I. FINO (FAZÓN)", FamiliaId = 11 },
+        new { Codigo = "AI-GRU", Nombre = "A.I. GRUESO (FAZÓN)", FamiliaId = 12 },
+        new { Codigo = "AI-BIC", Nombre = "A.I. BICAPA (FAZÓN)", FamiliaId = 13 },
+        new { Codigo = "AI-TRI", Nombre = "A.I. TRICAPA (FAZÓN)", FamiliaId = 14 },
 
-    // ABS (Base 20) -> Variante 21
-    new { Codigo = "ABS-GRU", Nombre = "ABS GRUESO (FAZÓN)", FamiliaId = 21 },
+        // ABS (Familia Base 20)
+        new { Codigo = "ABS-GRU", Nombre = "ABS GRUESO (FAZÓN)", FamiliaId = 21 },
 
-    // POLI / BIO (Base 30) -> Variantes 31, 32
-    new { Codigo = "POLI-FIN", Nombre = "PEAD/PP/BIO FINO (FAZÓN)", FamiliaId = 31 },
-    new { Codigo = "POLI-GRU", Nombre = "PEAD/PP/BIO GRUESO (FAZÓN)", FamiliaId = 32 },
+        // POLI / BIO (Familia Base 30)
+        new { Codigo = "POLI-FIN", Nombre = "PEAD/PP/BIO FINO (FAZÓN)", FamiliaId = 31 },
+        new { Codigo = "POLI-GRU", Nombre = "PEAD/PP/BIO GRUESO (FAZÓN)", FamiliaId = 32 },
 
-    // PEAD (Base 40) -> Variante 41
-    new { Codigo = "PEAD-BIC", Nombre = "PEAD BICAPA (FAZÓN)", FamiliaId = 41 }
-};
+        // PEAD (Familia Base 40)
+        new { Codigo = "PEAD-BIC", Nombre = "PEAD BICAPA (FAZÓN)", FamiliaId = 41 }
+    };
+
+            // 2. OPTIMIZACIÓN: Traemos los SKUs existentes de este cliente de una sola vez
+            // Esto evita hacer 8 viajes a la base de datos dentro del loop.
+            var skusExistentes = await _context.Productos
+                                               .Where(p => p.ClienteId == id && p.CodigoSku.StartsWith($"MP-CLI-{id}"))
+                                               .Select(p => p.CodigoSku)
+                                               .ToListAsync();
 
             int creados = 0;
 
@@ -84,23 +83,29 @@ namespace EstruplastERP.Api.Controllers
             {
                 string sku = $"MP-CLI-{cliente.Id}-{mat.Codigo}";
 
-                bool existe = await _context.Productos.AnyAsync(p => p.CodigoSku == sku);
-
-                if (!existe)
+                // Verificamos en memoria (rápido) en lugar de en base de datos (lento)
+                if (!skusExistentes.Contains(sku))
                 {
                     var nuevoProducto = new Producto
                     {
-                        Nombre = $"MP {mat.Nombre} - PROPIEDAD DE {cliente.RazonSocial.ToUpper()}",
+                        // Nombre claro para que se vea bien en la hoja de impresión
+                        Nombre = $"MP: {mat.Nombre} ({cliente.RazonSocial.ToUpper()})",
                         CodigoSku = sku,
 
-                        // === AQUÍ ESTÁ LA MAGIA ===
-                        FamiliaId = mat.FamiliaId, // Asignamos la familia automáticamente
-                        ClienteId = cliente.Id, 
+                        // === DATOS CLAVE PARA LA LÓGICA ===
+                        FamiliaId = mat.FamiliaId,
+                        ClienteId = cliente.Id,
+
+                        // === ETIQUETADO PARA FILTROS ===
+                        Rubro = "MATERIA PRIMA",
+                        // === FLAGS ===
                         EsMateriaPrima = true,
                         EsProductoTerminado = false,
                         EsGenerico = false,
-                        EsFazon = false, // Es el material físico
-                        PesoEspecifico = 1.05m,
+                        EsFazon = false,             // False porque es el material, no el servicio
+
+                        // === VALORES POR DEFECTO ===
+                        PesoEspecifico = 1.05m, // Promedio, luego se puede editar
                         StockActual = 0,
                         StockMinimo = 0,
                         PrecioCosto = 0,
@@ -116,11 +121,11 @@ namespace EstruplastERP.Api.Controllers
             if (creados > 0)
             {
                 await _context.SaveChangesAsync();
-                return Ok(new { mensaje = $"Se crearon {creados} materiales de stock para {cliente.RazonSocial} vinculados a sus familias." });
+                return Ok(new { mensaje = $"✅ Se habilitaron {creados} materiales de stock para {cliente.RazonSocial}." });
             }
             else
             {
-                return Ok(new { mensaje = $"El cliente ya tenía los materiales habilitados." });
+                return Ok(new { mensaje = $"ℹ️ El cliente ya tenía todos los materiales habilitados." });
             }
         }
     }

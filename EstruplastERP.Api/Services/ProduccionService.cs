@@ -230,17 +230,9 @@ namespace EstruplastERP.Api.Services
                 int idFinal = itemReceta.MateriaPrimaId;
                 string nombreFinal = itemReceta.MateriaPrima.Nombre;
                 bool esSustitucion = false;
-
-                // === DETERMINAR LA FAMILIA EXACTA NECESARIA ===
                 int familiaBuscada = itemReceta.MateriaPrima.FamiliaId ?? 0;
 
-                // REGLAS DE REFINAMIENTO:
-                // Si la receta pide GENÉRICO (10, 30...), buscamos la variante ESPECÍFICA
-                // basándonos en el nombre del Producto Terminado.
-
                 string nombrePT = productoTerminado.Nombre.ToUpper();
-
-                // --- Reglas para ALTO IMPACTO (Base 10) ---
                 if (familiaBuscada == 10)
                 {
                     if (nombrePT.Contains("FINO")) familiaBuscada = 11;
@@ -253,16 +245,12 @@ namespace EstruplastERP.Api.Services
                 {
                     if (nombrePT.Contains("GRUESO")) familiaBuscada = 21;
                 }
-                // --- Reglas para POLI (Base 30 - PP) y (Base 40 - PE) ---
-                // Aquí asumimos que si es producto "POLI", usamos la familia 30
                 else if (familiaBuscada == 30 || familiaBuscada == 40)
                 {
                     if (nombrePT.Contains("FINO")) familiaBuscada = 31;
                     else if (nombrePT.Contains("GRUESO")) familiaBuscada = 32;
                     else if (nombrePT.Contains("BICAPA")) familiaBuscada = 41;
                 }
-
-                // === BÚSQUEDA DEL MATERIAL ===
                 var sustituto = materialesCliente.FirstOrDefault(m => m.FamiliaId == familiaBuscada);
 
                 if (sustituto != null)

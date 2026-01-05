@@ -19,23 +19,64 @@ const emit = defineEmits(['add-insumo', 'remove-insumo', 'update-receta']);
 // Variables para el buscador manual
 const insumoBusquedaTexto = ref(''); 
 const insumoExtraPorc = ref<number | ''>('');
-const mostrarLista = ref(false); // Controla si se ve el desplegable
+const mostrarLista = ref(false); 
 
 const cantidadCopias = computed(() => props.ocultarFormula ? 2 : 1);
 
-const totalKilosConDesperdicio = computed(() => {
-    const kilosNetos = Number(props.form.kilosTotales) || 0;
-    const porcentajeDesperdicio = Number(props.form.merma) || 0; 
-    return Math.ceil(kilosNetos * (1 + (porcentajeDesperdicio / 100)));
+// --- LÓGICA DE PESOS REPARADA ---
+
+// 1. PESO EXACTO (FÍSICO): Se usa para calcular cuántos KG de cada insumo van en la mezcla.
+// NO REDONDEAMOS AQUÍ. Usamos decimales.
+const pesoBrutoExacto = computed(() => {
+    // Protección contra nulos o textos inválidos
+    const kilosNetos = Number(props.form?.kilosTotales) || 0;
+    const porcentajeDesperdicio = Number(props.form?.merma) || 0; 
+    
+    const resultado = kilosNetos * (1 + (porcentajeDesperdicio / 100));
+    
+    // Si por alguna razón da NaN, devolvemos 0
+    return isNaN(resultado) ? 0 : resultado;
 });
 
-// 🔥 FILTRO HÍBRIDO: MUESTRA TODO SI ESTÁ VACÍO, FILTRA SI HAY TEXTO
+// 2. PESO VISUAL (ESTÉTICO): Se usa SOLO para el cartel grande de "TOTAL CARGA".
+// Aquí redondeamos para arriba para que el cliente vea un número limpio.
+const pesoVisualRedondeado = computed(() => {
+    return Math.ceil(pesoBrutoExacto.value);
+});
+
+
+// --- FILTRO DE INSUMOS ---
 const sugerenciasFiltradas = computed(() => {
     const texto = insumoBusquedaTexto.value.trim().toUpperCase();
-    
-    let lista = props.materiasPrimas;
+    let lista = props.materiasPrimas || [];
 
-    // Si hay texto, filtramos. Si no, usamos la lista completa.
+    lista = lista.filter(mp => {
+        const nombre = (mp.nombre || '').toUpperCase();
+
+        if (nombre.includes('BASE') && !nombre.includes('ALTA')) return false; 
+        if (nombre.includes('GENERICO') || nombre.includes('GENÉRICO')) return false;
+        if (nombre.includes('MATERIAL DE CLIENTE')) return false;
+        if (mp.id >= 990 && mp.id <= 999) return false;
+
+        const esPrivado = 
+            mp.clienteId ||                      
+            nombre.includes('PROPIEDAD DE') ||   
+            nombre.includes('(FAZÓN)') ||        
+            nombre.includes('(FAZON)') ||
+            nombre.startsWith('MP:');
+
+        if (esPrivado) {
+            if (!props.cliente || !props.cliente.id) return false; 
+            if (mp.clienteId && mp.clienteId != props.cliente.id) return false;
+
+            if (nombre.includes('PROPIEDAD DE')) {
+                 const nombreClienteActual = (props.cliente.razonSocial || '').toUpperCase();
+                 if (!nombre.includes(nombreClienteActual)) return false;
+            }
+        }
+        return true;
+    });
+
     if (texto) {
         lista = lista.filter(mp => {
             const nombre = (mp.nombre || '').toUpperCase();
@@ -43,37 +84,24 @@ const sugerenciasFiltradas = computed(() => {
             return nombre.includes(texto) || rubro.includes(texto);
         });
     }
-
-    // Siempre ordenamos alfabéticamente para facilitar la búsqueda visual
     return [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre));
 });
 
-// Al seleccionar un ítem de la lista
 const seleccionarInsumo = (mp: any) => {
     insumoBusquedaTexto.value = mp.nombre;
     mostrarLista.value = false;
 };
 
-// Cierra la lista con un pequeño retraso para permitir el click en el ítem
 const cerrarListaConDelay = () => {
-    setTimeout(() => {
-        mostrarLista.value = false;
-    }, 200);
+    setTimeout(() => { mostrarLista.value = false; }, 200);
 };
 
 const solicitarAgregar = () => {
     if (!insumoBusquedaTexto.value || !insumoExtraPorc.value) return;
-
-    // Buscamos coincidencia exacta por nombre en la lista original
-    const mpEncontrada = props.materiasPrimas.find(m => m.nombre === insumoBusquedaTexto.value);
+    const mpEncontrada = sugerenciasFiltradas.value.find(m => m.nombre === insumoBusquedaTexto.value);
 
     if (mpEncontrada) {
-        emit('add-insumo', { 
-            id: mpEncontrada.id, 
-            porcentaje: Number(insumoExtraPorc.value) 
-        });
-        
-        // Limpiamos y cerramos
+        emit('add-insumo', { id: mpEncontrada.id, porcentaje: Number(insumoExtraPorc.value) });
         insumoBusquedaTexto.value = '';
         insumoExtraPorc.value = '';
         mostrarLista.value = false;
@@ -82,23 +110,14 @@ const solicitarAgregar = () => {
     }
 };
 
-const solicitarQuitar = (index: number) => {
-    emit('remove-insumo', index);
-};
+const solicitarQuitar = (index: number) => { emit('remove-insumo', index); };
 </script>
 
 <template>
     <div id="hoja-de-impresion" class="hoja-papel">
         
-        <div 
-            v-for="n in cantidadCopias" 
-            :key="n" 
-            class="contenedor-comprobante"
-            :class="{ 'mitad-hoja': cantidadCopias === 2 }"
-        >
-            <div v-if="cantidadCopias === 2" class="marca-copia">
-                {{ n === 1 ? 'ORIGINAL' : 'DUPLICADO' }}
-            </div>
+        <div v-for="n in cantidadCopias" :key="n" class="contenedor-comprobante" :class="{ 'mitad-hoja': cantidadCopias === 2 }">
+            <div v-if="cantidadCopias === 2" class="marca-copia">{{ n === 1 ? 'ORIGINAL' : 'DUPLICADO' }}</div>
 
             <div class="contenido-interno">
                 <div class="cabecera">
@@ -153,7 +172,7 @@ const solicitarQuitar = (index: number) => {
                     </div>
                     <div class="dato-box doble-ancho">
                         <span class="label-tech">TOTAL CARGA</span>
-                        <span class="valor-tech" style="font-size: 18px;">{{ totalKilosConDesperdicio }} kg</span>
+                        <span class="valor-tech" style="font-size: 18px;">{{ pesoVisualRedondeado }} kg</span>
                     </div>
                 </div>
 
@@ -162,7 +181,7 @@ const solicitarQuitar = (index: number) => {
                     <div class="dato-box" v-if="form.aditivoCarga > 0"><span class="label-tech">CARGA MINERAL</span><span class="valor-tech">{{ form.aditivoCarga }} %</span></div>
                     <div class="dato-box" v-if="form.conEstearato">
                         <span class="label-tech">ESTEARATO</span>
-                        <span class="valor-tech" style="font-size: 12px;">{{ (totalKilosConDesperdicio / 500).toFixed(1) }} Latas</span>
+                        <span class="valor-tech" style="font-size: 12px;">{{ (pesoBrutoExacto / 500).toFixed(1) }} Latas</span>
                     </div>
                     <div class="dato-box" v-if="!(form.conBrillo && form.llevaFilm) || !(form.aditivoCarga > 0) || !form.conEstearato" style="background: #f4f4f4; flex-grow: 1;"></div>
                 </div>
@@ -190,7 +209,7 @@ const solicitarQuitar = (index: number) => {
                                         > %
                                     </div>
                                 </td>
-                                <td style="text-align:right"><strong>{{ ((totalKilosConDesperdicio * (parseFloat(r.cantidad.toString()) || 0)) / 100).toFixed(3) }} kg</strong></td>
+                                <td style="text-align:right"><strong>{{ ((pesoBrutoExacto * (parseFloat(r.cantidad.toString()) || 0)) / 100).toFixed(3) }} kg</strong></td>
                                 <td data-html2canvas-ignore="true">
                                     <button @click="solicitarQuitar(i)" style="background:none; border:none; color:red; cursor:pointer; font-weight:bold;">X</button>
                                 </td>
@@ -199,7 +218,6 @@ const solicitarQuitar = (index: number) => {
                     </table>
                     
                     <div class="agregar-fila" data-html2canvas-ignore="true">
-                        
                         <div class="buscador-wrapper">
                             <input 
                                 type="text" 
@@ -211,7 +229,6 @@ const solicitarQuitar = (index: number) => {
                                 @input="mostrarLista = true"
                                 @blur="cerrarListaConDelay"
                             >
-                            
                             <div v-if="mostrarLista && sugerenciasFiltradas.length > 0" class="lista-resultados">
                                 <div 
                                     v-for="mp in sugerenciasFiltradas" 
@@ -295,19 +312,9 @@ const solicitarQuitar = (index: number) => {
 .linea-corte span { background: white; padding: 0 10px; }
 .input-sin-borde { border: none; background: transparent; font-weight: bold; color: inherit; width: 60px; text-align: center; }
 .input-sin-borde:focus { border-bottom: 1px solid #000; outline: none; }
-
-/* 🔥 ESTILOS DEL BUSCADOR PERSONALIZADO */
 .buscador-wrapper { position: relative; width: 250px; }
 .input-buscador { width: 100%; padding: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-.lista-resultados {
-    position: absolute;
-    top: 100%; left: 0; right: 0;
-    background: white; border: 1px solid #ccc;
-    max-height: 250px; /* ✅ ALTURA MÁXIMA CONTROLADA */
-    overflow-y: auto; /* ✅ SCROLL VERTICAL */
-    z-index: 1000;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
+.lista-resultados { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; max-height: 250px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
 .item-resultado { padding: 8px; border-bottom: 1px solid #eee; cursor: pointer; text-align: left; }
 .item-resultado:hover { background-color: #f0f0f0; }
 </style>

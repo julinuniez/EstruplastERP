@@ -165,7 +165,7 @@ namespace EstruplastERP.Data
             );
 
             // =============================================================================
-            // 4. RESTAURACIÓN DE RECETAS (FÓRMULAS)
+            // 4. RECETAS (FÓRMULAS)
             // =============================================================================
 
             modelBuilder.Entity<Formula>().HasData(
