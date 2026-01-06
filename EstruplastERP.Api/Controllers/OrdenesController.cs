@@ -20,6 +20,72 @@ namespace EstruplastERP.Api.Controllers
             _produccionService = produccionService;
         }
 
+        // --- 1. NUEVO: LISTA RÁPIDA PARA EL FRONTEND ---
+        [HttpGet("recientes")]
+        public async Task<ActionResult> GetOrdenesRecientes()
+        {
+            var lista = await _context.Ordenes
+                .Include(o => o.Producto)
+                .Include(o => o.Empleado)
+                .OrderByDescending(o => o.FechaCreacion)
+                .Take(50) // Traemos las últimas 50 para no saturar
+                .Select(o => new
+                {
+                    o.Id,
+                    Fecha = o.FechaCreacion.ToString("dd/MM HH:mm"), // Formato corto
+                    Producto = o.Producto != null ? o.Producto.Nombre : "Desconocido",
+                    o.Cantidad,
+                    Kilos = o.KilosEstimados,
+                    Operario = o.Empleado != null ? o.Empleado.NombreCompleto : "-",
+                    Estado = o.Estado.ToString(),
+                    EsFinalizada = o.Estado == EstadoOrden.Finalizada
+                })
+                .ToListAsync();
+
+            return Ok(lista);
+        }
+
+        // --- 2. NUEVO: CONFIRMACIÓN SIMPLE (SUMAR STOCK) ---
+        [HttpPost("confirmar/{id}")]
+        public async Task<IActionResult> ConfirmarOrden(int id)
+        {
+            var orden = await _context.Ordenes
+                .Include(o => o.Producto)
+                .FirstOrDefaultAsync(o => o.Id == id);
+
+            if (orden == null) return NotFound("Orden no encontrada.");
+            if (orden.Estado == EstadoOrden.Finalizada) return BadRequest("Esta orden ya fue finalizada.");
+
+            // A. Cambiar Estado
+            orden.Estado = EstadoOrden.Finalizada;
+            orden.FechaFin = DateTime.Now;
+
+            // B. Sumar Stock de Producto Terminado
+            if (orden.Producto != null)
+            {
+                // Sumamos KILOS (o Cantidad según tu unidad de medida)
+                orden.Producto.StockActual += orden.KilosEstimados;
+
+                // C. Registrar Movimiento en Kardex
+                _context.Movimientos.Add(new Movimiento
+                {
+                    Fecha = DateTime.Now,
+                    ProductoId = orden.ProductoId,
+                    Cantidad = orden.KilosEstimados, // Positivo = Entrada
+                    TipoMovimiento = "PRODUCCION_TERMINADA",
+                    Observacion = $"Cierre Orden #{id} - {orden.Turno}",
+                    Turno = orden.Turno,
+                    EmpleadoId = orden.EmpleadoId,
+                    ClienteId = orden.ClienteId
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { mensaje = "Producción confirmada. Stock actualizado." });
+        }
+
+        // --- MÉTODOS EXISTENTES ---
+
         [HttpGet]
         public async Task<ActionResult<IEnumerable<OrdenProduccion>>> GetOrdenes()
         {
@@ -39,42 +105,16 @@ namespace EstruplastERP.Api.Controllers
             return orden;
         }
 
-        [HttpGet("rango")]
-        public async Task<ActionResult> GetProduccionPorRango(DateTime desde, DateTime hasta)
-        {
-            DateTime hastaFinDia = hasta.Date.AddDays(1).AddTicks(-1);
-            var lista = await _context.Ordenes
-                .Include(o => o.Empleado).Include(o => o.Producto)
-                .Where(o => o.FechaCreacion >= desde && o.FechaCreacion <= hastaFinDia)
-                .OrderByDescending(o => o.FechaCreacion)
-                .Select(o => new
-                {
-                    o.Id,
-                    Fecha = o.FechaCreacion,
-                    o.Turno,
-                    Operario = o.Empleado != null ? o.Empleado.NombreCompleto : "Sin Asignar",
-                    Producto = o.Producto != null ? o.Producto.Nombre : "Producto Eliminado",
-                    Lote = "L-" + o.Id.ToString(),
-                    o.Cantidad,
-                    Kilos = o.KilosEstimados,
-                    estado = (int)o.Estado
-                }).ToListAsync();
-            return Ok(lista);
-        }
-
         [HttpPost]
         public async Task<ActionResult<OrdenProduccion>> PostOrden([FromBody] NuevaOrdenDto dto)
         {
             if (dto.Kilos <= 0) return BadRequest("Los kilos deben ser mayores a 0.");
             if (dto.Consumos != null && dto.Consumos.Any(c => c.MateriaPrimaId == 22))
-                return BadRequest("⛔ ERROR: Debe especificar el color real (No use Masterbatch Genérico ID 22).");
+                return BadRequest("⛔ ERROR: Debe reemplazar el Masterbatch Genérico (ID 22) por un color real.");
 
             try
             {
-                // 1. Verificar Stock (Usando dynamic para leer respuesta anónima del servicio)
                 dynamic check = await _produccionService.VerificarStock(dto);
-
-                // Serialización rápida para leer propiedades
                 var jsonCheck = System.Text.Json.JsonSerializer.Serialize(check);
                 using var doc = System.Text.Json.JsonDocument.Parse(jsonCheck);
 
@@ -83,77 +123,13 @@ namespace EstruplastERP.Api.Controllers
                     return BadRequest(doc.RootElement.GetProperty("mensaje").GetString());
                 }
 
-                // 2. Crear Orden
                 var orden = await _produccionService.RegistrarOrden(dto);
-
                 return CreatedAtAction("GetOrden", new { id = orden.Id }, new { mensaje = "Orden creada", id = orden.Id });
             }
             catch (Exception ex)
             {
                 return BadRequest($"Error: {ex.Message}");
             }
-        }
-
-        [HttpPost("finalizar/{id}")]
-        public async Task<IActionResult> FinalizarOrden(int id, [FromBody] FinalizarOrdenDto request)
-        {
-            var orden = await _context.Ordenes.Include(o => o.Producto).FirstOrDefaultAsync(o => o.Id == id);
-            if (orden == null) return NotFound("Orden no encontrada.");
-            if (orden.Estado == EstadoOrden.Finalizada) return BadRequest("Ya finalizada.");
-
-            // Procesar Adiciones/Ajustes de MP al final
-            if (request.Adiciones != null)
-            {
-                foreach (var item in request.Adiciones)
-                {
-                    var insumo = await _context.Productos.FindAsync(item.MateriaPrimaId);
-                    if (insumo != null)
-                    {
-                        if (insumo.StockActual < item.Cantidad)
-                            return BadRequest($"Falta stock de {insumo.Nombre} para el ajuste final.");
-
-                        insumo.StockActual -= item.Cantidad;
-                        _context.Movimientos.Add(new Movimiento
-                        {
-                            Fecha = DateTime.Now,
-                            ProductoId = insumo.Id,
-                            Cantidad = -item.Cantidad,
-                            TipoMovimiento = "AJUSTE_FIN",
-                            Observacion = $"Ajuste OP#{id}: {item.Motivo}",
-                            Turno = orden.Turno,
-                            EmpleadoId = orden.EmpleadoId,
-                            ClienteId = orden.ClienteId
-                        });
-                    }
-                }
-            }
-
-            // Actualizar Orden
-            if (request.Desperdicio > 0) orden.Observacion += $" | Scrap: {request.Desperdicio}kg";
-            if (!string.IsNullOrEmpty(request.Observacion)) orden.Observacion += $" | Fin: {request.Observacion}";
-
-            orden.Estado = EstadoOrden.Finalizada;
-            orden.FechaFin = DateTime.Now;
-
-            // Ingreso de Producto Terminado (Solo al finalizar)
-            if (orden.Producto != null)
-            {
-                orden.Producto.StockActual += orden.Cantidad;
-                _context.Movimientos.Add(new Movimiento
-                {
-                    Fecha = DateTime.Now,
-                    ProductoId = orden.ProductoId,
-                    Cantidad = orden.Cantidad,
-                    TipoMovimiento = "ENTRADA_PROD",
-                    Observacion = $"Ingreso OP#{id}",
-                    Turno = orden.Turno,
-                    EmpleadoId = orden.EmpleadoId,
-                    ClienteId = orden.ClienteId
-                });
-            }
-
-            await _context.SaveChangesAsync();
-            return Ok(new { mensaje = "Orden finalizada correctamente." });
         }
     }
 }

@@ -28,13 +28,17 @@ interface Movimiento {
 // --- ESTADO ---
 const listaInsumos = ref<Insumo[]>([])
 const listaProveedores = ref<Proveedor[]>([]) 
-const listaUltimosMovimientos = ref<Movimiento[]>([]) 
+const listaMovimientosBruta = ref<Movimiento[]>([]) 
+
+// Filtros de Fecha
+const filtroFechaDesde = ref('')
+const filtroFechaHasta = ref('')
 
 const form = ref({
   productoId: '' as number | '', 
   proveedorId: '' as number | '', 
   cantidad: 0,
-  precioUnitario: 0, // <--- CAMBIO: Ahora el usuario ingresa esto
+  precioUnitario: 0, 
   numeroRemito: '',
   lote: '' 
 })
@@ -42,15 +46,13 @@ const form = ref({
 const mensaje = ref('')
 const error = ref('')
 
-const apiUrl = 'https://localhost:7244/api' 
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
 
-// --- HELPER TOKEN ---
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');
     return { headers: { Authorization: `Bearer ${token}` } };
 };
 
-// CAMBIO: Calculamos el TOTAL DE FACTURA (Solo visual)
 const totalEstimadoFactura = computed(() => {
     if (form.value.cantidad > 0 && form.value.precioUnitario > 0) {
         return (form.value.cantidad * form.value.precioUnitario).toFixed(2)
@@ -58,60 +60,76 @@ const totalEstimadoFactura = computed(() => {
     return "0.00"
 })
 
+// --- 🔥 COMPUTED: FILTRO SOLO COMPRAS + FECHAS ---
+const movimientosFiltrados = computed(() => {
+    let lista = listaMovimientosBruta.value;
+
+    // 1. FILTRAR SOLO COMPRAS (Excluir Producción)
+    lista = lista.filter(m => 
+        m.tipoMovimiento === 'COMPRA' || 
+        m.tipoMovimiento === 'ENTRADA'
+        // Se eliminó 'PRODUCCION' para que no aparezca aquí
+    );
+
+    // 2. Filtro por Fecha DESDE
+    if (filtroFechaDesde.value) {
+        const desde = new Date(filtroFechaDesde.value);
+        desde.setHours(0,0,0,0); 
+        lista = lista.filter(m => new Date(m.fecha) >= desde);
+    }
+
+    // 3. Filtro por Fecha HASTA
+    if (filtroFechaHasta.value) {
+        const hasta = new Date(filtroFechaHasta.value);
+        hasta.setHours(23,59,59,999); 
+        lista = lista.filter(m => new Date(m.fecha) <= hasta);
+    }
+
+    // Ordenar descendente (más nuevo primero)
+    return lista.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+});
+
 onMounted(async () => {
   await cargarInsumos();
   await cargarProveedores();
-  await cargarHistorialReciente(); 
+  await cargarHistorialCompras(); 
 })
 
-// --- CARGA DE DATOS ---
 async function cargarInsumos() {
     try {
         const res = await axios.get(`${apiUrl}/Productos/materias-primas`, getAuthConfig())
         listaInsumos.value = res.data
-    } catch (e: any) { 
-        console.error("Error cargando insumos", e)
-    }
+    } catch (e: any) { console.error(e) }
 }
 
 async function cargarProveedores() {
     try {
         const res = await axios.get(`${apiUrl}/Proveedores`, getAuthConfig())
         listaProveedores.value = res.data
-    } catch (e: any) {
-        console.error("Error cargando proveedores", e)
-        error.value = "No se pudieron cargar los proveedores."
-    }
+    } catch (e: any) { console.error(e) }
 }
 
-async function cargarHistorialReciente() {
+async function cargarHistorialCompras() {
     try {
+        // Traemos los movimientos y filtramos en el frontend
         const res = await axios.get(`${apiUrl}/Movimientos`, getAuthConfig())
-        listaUltimosMovimientos.value = res.data
-            .filter((m: Movimiento) => m.tipoMovimiento === 'COMPRA' || m.tipoMovimiento.includes('ENTRADA'))
-            .slice(0, 5) 
-            
-    } catch (e) { console.error("Error cargando historial", e) }
+        listaMovimientosBruta.value = res.data;
+    } catch (e) { console.error(e) }
 }
 
-// --- REGISTRAR INGRESO (COMPRA) ---
 async function registrarCompra() {
   mensaje.value = ''
   error.value = ''
 
-  // Validaciones
   if (!form.value.productoId) { error.value = "Seleccione un producto."; return; }
   if (!form.value.proveedorId) { error.value = "Seleccione un proveedor."; return; }
   if (form.value.cantidad <= 0) { error.value = "La cantidad debe ser mayor a 0."; return; }
-  // Validación extra opcional:
-  if (form.value.precioUnitario < 0) { error.value = "El precio no puede ser negativo."; return; }
 
-  // Payload directo (Ya no calculamos nada aquí)
   const payload = {
       productoId: Number(form.value.productoId),
       proveedorId: Number(form.value.proveedorId),
       cantidad: form.value.cantidad,
-      precioUnitario: form.value.precioUnitario, // Enviamos directo lo que escribió el usuario
+      precioUnitario: form.value.precioUnitario,
       numeroRemito: form.value.numeroRemito,
       lote: form.value.lote,
       observacion: `Ingreso Web - ${new Date().toLocaleDateString()}`
@@ -119,32 +137,28 @@ async function registrarCompra() {
 
   try {
     await axios.post(`${apiUrl}/Compras`, payload, getAuthConfig())
-
-    mensaje.value = `✅ Compra registrada. Stock y costos actualizados.`
+    mensaje.value = `✅ Compra registrada. Stock actualizado.`
     
-    // Limpieza
     form.value.cantidad = 0
-    form.value.precioUnitario = 0 // Reseteamos precio
+    form.value.precioUnitario = 0
     form.value.lote = ''
+    form.value.numeroRemito = ''
     
     await cargarInsumos()
-    await cargarHistorialReciente()
+    await cargarHistorialCompras()
 
   } catch (e: any) {
-    console.error(e)
     const msg = e.response?.data?.mensaje || e.message
     error.value = "❌ Error: " + msg
   }
 }
 
-// --- ELIMINAR ---
 async function eliminarMovimiento(id: number) {
-    if(!confirm("⚠️ ¿Eliminar este registro? Se revertirá el stock.")) return;
-
+    if(!confirm("⚠️ ¿Eliminar este registro de compra? Se descontará el stock.")) return;
     try {
         await axios.delete(`${apiUrl}/Movimientos/eliminar/${id}`, getAuthConfig());
         alert("✅ Eliminado correctamente.");
-        await cargarHistorialReciente();
+        await cargarHistorialCompras();
         await cargarInsumos();
     } catch (e: any) { 
         alert("Error: " + (e.response?.data?.mensaje || e.message)); 
@@ -156,7 +170,7 @@ async function eliminarMovimiento(id: number) {
   <div class="contenedor-ingresos">
       
       <div class="hoja-stock">
-        <h3>🏭 Registro de Compras (Ingreso)</h3>
+        <h3>🏭 Registro de Compras (Ingreso MP)</h3>
         
         <div class="campo">
           <label>Proveedor:</label>
@@ -214,33 +228,60 @@ async function eliminarMovimiento(id: number) {
       </div>
 
       <div class="historial-rapido">
-          <h4>📋 Últimas Compras</h4>
+          <div class="header-historial">
+              <h4>📋 Historial de Compras</h4>
+              
+              <div class="filtros-fecha">
+                  <div class="filtro-item">
+                      <small>Desde:</small>
+                      <input type="date" v-model="filtroFechaDesde">
+                  </div>
+                  <div class="filtro-item">
+                      <small>Hasta:</small>
+                      <input type="date" v-model="filtroFechaHasta">
+                  </div>
+              </div>
+          </div>
+
           <table class="tabla-mini">
               <thead>
                   <tr>
                       <th>Fecha</th>
                       <th>Proveedor</th>
                       <th>Producto</th>
-                      <th>Lote</th>
+                      <th>Lote / Remito</th>
                       <th>Cant.</th>
                       <th>$ Unit.</th>
                       <th></th>
                   </tr>
               </thead>
               <tbody>
-                  <tr v-for="mov in listaUltimosMovimientos" :key="mov.id">
-                      <td>{{ mov.fecha?.split(' ')[0] }}</td> 
-                      <td>{{ mov.proveedor || '-' }}</td> 
+                  <tr v-for="mov in movimientosFiltrados" :key="mov.id">
+                      <td>{{ new Date(mov.fecha).toLocaleDateString() }}</td> 
+                      
+                      <td>{{ mov.proveedor || '-' }}</td>
+                      
                       <td>{{ mov.producto }}</td>
-                      <td style="font-size: 0.8em; color:#666;">{{ mov.loteProveedor || '-' }}</td>
-                      <td style="font-weight:bold; color:green;">{{ mov.cantidad }}</td>
-                      <td>${{ mov.precioUnitario }}</td>
+                      
+                      <td style="font-size: 0.8em; color:#666;">
+                          {{ mov.loteProveedor || '-' }}
+                      </td>
+                      
+                      <td style="font-weight:bold; color:green;">+{{ mov.cantidad }}</td>
+                      
                       <td>
-                          <button @click="eliminarMovimiento(mov.id)" class="btn-undo">✖</button>
+                          <span v-if="mov.precioUnitario > 0">${{ mov.precioUnitario }}</span>
+                          <span v-else style="color:#aaa">-</span>
+                      </td>
+                      
+                      <td>
+                          <button @click="eliminarMovimiento(mov.id)" class="btn-undo" title="Eliminar Compra">✖</button>
                       </td>
                   </tr>
-                  <tr v-if="listaUltimosMovimientos.length === 0">
-                      <td colspan="7" style="text-align:center; padding: 20px;">Sin movimientos recientes.</td>
+                  <tr v-if="movimientosFiltrados.length === 0">
+                      <td colspan="7" style="text-align:center; padding: 20px; color: #666;">
+                          No hay compras registradas en este período.
+                      </td>
                   </tr>
               </tbody>
           </table>
@@ -250,8 +291,7 @@ async function eliminarMovimiento(id: number) {
 </template>
 
 <style scoped>
-/* Tus estilos se mantienen exactamente igual */
-.contenedor-ingresos { max-width: 700px; margin: 0 auto; font-family: 'Segoe UI', sans-serif; }
+.contenedor-ingresos { max-width: 850px; margin: 0 auto; font-family: 'Segoe UI', sans-serif; }
 
 .hoja-stock { 
     background: #ffffff; 
@@ -296,11 +336,29 @@ h3 { color: #1f2937; border-bottom: 2px solid #16a34a; padding-bottom: 10px; mar
 .exito { background: #dcfce7; color: #166534; padding: 10px; border-radius: 5px; margin-top: 10px; text-align: center;}
 .error { background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 5px; margin-top: 10px; text-align: center;}
 
+/* ESTILOS NUEVOS PARA HISTORIAL */
 .historial-rapido { background: white; padding: 0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eee; }
-.historial-rapido h4 { background: #f9fafb; padding: 15px; margin: 0; border-bottom: 1px solid #eee; color: #374151; }
+
+.header-historial {
+    background: #f9fafb; 
+    padding: 15px; 
+    border-bottom: 1px solid #eee; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.header-historial h4 { margin: 0; color: #374151; }
+
+.filtros-fecha { display: flex; gap: 10px; align-items: center; }
+.filtro-item { display: flex; align-items: center; gap: 5px; }
+.filtro-item input { padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; }
+
 .tabla-mini { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tabla-mini th { background: #f3f4f6; text-align: left; padding: 10px; font-weight: 600; color: #4b5563; }
 .tabla-mini td { border-bottom: 1px solid #f3f4f6; padding: 10px; color: #1f2937; }
+
 .btn-undo { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 1.1rem; }
 .btn-undo:hover { color: #b91c1c; transform: scale(1.1); }
 </style>

@@ -164,7 +164,6 @@ function limpiarForm() {
   };
 }
 
-// 🔥 LÓGICA DE FAZÓN (NUEVA)
 const habilitarFazon = async (cliente: Entidad) => {
     if(!confirm(`¿Generar productos de Fazón (AI, ABS, PP, PEAD) para ${cliente.razonSocial}? Esto permitirá cargarles stock.`)) return;
 

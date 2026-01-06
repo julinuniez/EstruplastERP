@@ -1,14 +1,16 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
 
-// --- IMPORTACIÓN DE COMPONENTES ---
-import Login from '../components/Login.vue';
-import VistaProduccion from '../components/VistaProduccion.vue';
-import ListaStock from '../components/ListaStock.vue';
-import IngresoStock from '../components/IngresoStock.vue';
-import VistaRemitos from '../components/VistaRemitos.vue';
-import DespachoRemitos from '../components/DespachoRemitos.vue';
-import Administracion from '../components/Administracion.vue';
-import EditarProducto from '../components/EditarProducto.vue';
+// Asegúrate de que los archivos estén físicamente en la carpeta 'views'
+import Login from '../views/Login.vue';
+import VistaDashboard from '../views/VistaDashboard.vue';        
+import FormularioProduccion from '../views/FormularioProduccion.vue'; 
+import GestionProductos from '../views/GestionProductos.vue';     
+import IngresoStock from '../views/IngresoStock.vue';
+import VistaGestionScrap from '../views/VistaGestionScrap.vue';   
+import VistaRemitos from '../views/VistaRemitos.vue';
+import DespachoRemitos from '../views/DespachoRemitos.vue';
+import Administracion from '../views/Administracion.vue';
+import EditarProducto from '../views/EditarProducto.vue';
 
 const routes: Array<RouteRecordRaw> = [
     // --- LOGIN ---
@@ -19,7 +21,7 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: false } 
     },
 
-    // --- HOME (Redirección) ---
+    // --- HOME (Redirección a Producción) ---
     { 
         path: '/', 
         redirect: { name: 'produccion' } 
@@ -29,17 +31,42 @@ const routes: Array<RouteRecordRaw> = [
     { 
         path: '/produccion', 
         name: 'produccion', 
-        component: VistaProduccion,
+        component: FormularioProduccion,
         meta: { requiresAuth: true } 
     },
 
-    // --- INVENTARIO ---
+    // --- DASHBOARD (BI) ---
     { 
-        path: '/inventario', 
-        name: 'inventario', 
-        component: ListaStock,
+        path: '/dashboard', 
+        name: 'dashboard', 
+        component: VistaDashboard,
+        meta: { requiresAuth: true } 
+    },
+
+    // --- RECUPERADO / SCRAP ---
+    { 
+        path: '/scrap', 
+        name: 'scrap', 
+        component: VistaGestionScrap,
+        meta: { requiresAuth: true } 
+    },
+
+    // --- GESTIÓN PRODUCTOS (INVENTARIO) ---
+    { 
+        path: '/productos', 
+        name: 'inventario', // Mantenemos 'inventario' como pediste
+        component: GestionProductos, 
         meta: { requiresAuth: true }
     },
+    {
+        path: '/editar-producto/:id', 
+        name: 'editar-producto',
+        component: EditarProducto,
+        props: true, 
+        meta: { requiresAuth: true }
+    },
+
+    // --- COMPRAS / INGRESO STOCK ---
     { 
         path: '/ingreso-stock', 
         name: 'ingreso-stock', 
@@ -47,18 +74,18 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true }
     },
 
-    // --- REMITOS ---
+    // --- LOGÍSTICA / REMITOS ---
     { 
         path: '/remitos', 
         name: 'remitos', 
         component: VistaRemitos,
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true } 
     },
     { 
         path: '/remitos/nuevo', 
         name: 'DespachoRemitos', 
         component: DespachoRemitos,
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true } 
     },
 
     // --- CONFIGURACIÓN ---
@@ -66,22 +93,16 @@ const routes: Array<RouteRecordRaw> = [
         path: '/configuracion', 
         name: 'configuracion', 
         component: Administracion,
-        meta: { requiresAuth: true }
-    },
-
-    {
-        path: '/editar-producto/:id', // :id es el parámetro dinámico
-        name: 'editar-producto',
-        component: EditarProducto
+        meta: { requiresAuth: true } 
     },
 ];
 
 const router = createRouter({
     history: createWebHashHistory(),
-    routes: routes // <--- AQUÍ ESTABA EL ERROR: Ahora pasamos la constante completa
+    routes: routes 
 });
 
-// --- GUARDIA DE NAVEGACIÓN (Auth) ---
+// --- GUARDIA DE NAVEGACIÓN ---
 router.beforeEach((to, from, next) => {
     const token = localStorage.getItem('token');
     const requiereAuth = to.matched.some(record => record.meta.requiresAuth);
@@ -90,7 +111,8 @@ router.beforeEach((to, from, next) => {
         next({ name: 'login' });
     } 
     else if (to.name === 'login' && token) {
-        next({ name: 'produccion' });
+        // Si ya está logueado, redirigir a Producción
+        next({ name: 'produccion' }); 
     } 
     else {
         next();

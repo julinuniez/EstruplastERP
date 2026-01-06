@@ -68,20 +68,14 @@ namespace EstruplastERP.Api.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetProductos([FromQuery] int? clienteId)
         {
-            
             var query = _context.Productos
                 .Where(p => p.Activo)
                 .AsQueryable();
             if (clienteId.HasValue && clienteId.Value > 0)
             {
-              
                 query = query.Where(p => p.ClienteId == null || p.ClienteId == clienteId);
             }
-            else
-            {
-                
-                query = query.Where(p => p.ClienteId == null);
-            }
+
             var productos = await query
                 .OrderBy(p => p.Nombre)
                 .Select(p => new
@@ -92,7 +86,9 @@ namespace EstruplastERP.Api.Controllers
                     p.EsProductoTerminado,
                     p.EsMateriaPrima,
                     p.EsGenerico,
-                    EsFazon = p.ClienteId != null,
+                    ClienteId = p.ClienteId,
+                    EsFazonCalculado = p.ClienteId != null,
+                    EsFazon = p.EsFazon, 
                     p.StockActual,
                     p.PesoEspecifico,
                     p.Largo,
