@@ -15,7 +15,7 @@ const error = ref('');
 
 // Pestañas
 const tabActual = ref('MP'); // 'MP' | 'PT' | 'CLI'
-const subTabCliente = ref('MP_CLI'); // 'MP_CLI' | 'PT_CLI'
+const subTabCliente = ref('MP_CLI'); // 'MP_CLI' | 'SCRAP_CLI' | 'PT_CLI'
 const clienteFiltro = ref<number | string>(''); 
 
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
@@ -28,9 +28,11 @@ const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
 // Obtener ID (Soporta clienteId, ClienteId o ID null)
 const getClienteId = (p: any) => p.clienteId || p.ClienteId || 0;
 
-// Detectar Tipo por SKU (Más seguro que los flags booleanos)
+// --- DETECTORES DE TIPO (Basados en SKU para máxima seguridad) ---
 const esMpCliente = (p: any) => getSku(p).startsWith('MP-CLI');
 const esServicioFazon = (p: any) => getSku(p).startsWith('FAZ-');
+// 🔥 NUEVO: Detector de Scrap (Por Flag o por SKU)
+const esScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP-CLI');
 
 // --- FILTRADO PRINCIPAL ---
 const productosFiltrados = computed(() => {
@@ -38,14 +40,16 @@ const productosFiltrados = computed(() => {
     const tab = tabActual.value;
 
     if (tab === 'MP') {
-        // Muestra Materias Primas de la Fábrica (Excluye las que empiezan con MP-CLI)
+        // Pestaña: Materias Primas de la Fábrica (Propiedad Nuestra)
+        // Excluye MP de Clientes y Excluye Scrap de Clientes
         lista = lista.filter(p => 
             (p.esMateriaPrima || p.EsMateriaPrima) && 
-            !esMpCliente(p)
+            !esMpCliente(p) && 
+            !esScrap(p)
         );
     } 
     else if (tab === 'PT') {
-        // Muestra PT Fábrica (Excluye servicios FAZ)
+        // Pestaña: PT Fábrica (Excluye servicios FAZ)
         lista = lista.filter(p => 
             (p.esProductoTerminado || p.EsProductoTerminado) && 
             !esServicioFazon(p)
@@ -56,18 +60,28 @@ const productosFiltrados = computed(() => {
 
         // 1. Filtrar por Sub-Tab
         if (subTabCliente.value === 'MP_CLI') {
-            // MODO: Materias Primas del Cliente
-            // Filtro: Todo lo que tenga SKU "MP-CLI..."
-            // Esto ignorará si EsFazon viene true/false/null, confía en el código.
-            lista = lista.filter(p => esMpCliente(p));
+            // MODO: Materias Primas Vírgenes del Cliente
+            // Filtro: Debe ser MP Cliente y NO ser Scrap
+            lista = lista.filter(p => esMpCliente(p) && !esScrap(p));
 
-            // Filtro Dropdown (Solo aplica a MP porque tienen dueño específico)
+            // Filtro Dropdown (Aplica porque tienen dueño específico)
             if (clienteFiltro.value) {
                 const idFiltro = Number(clienteFiltro.value);
                 lista = lista.filter(p => getClienteId(p) === idFiltro);
             }
 
-        } else {
+        } 
+        else if (subTabCliente.value === 'SCRAP_CLI') {
+            // 🔥 MODO: SCRAP / MOLIDO
+            lista = lista.filter(p => esScrap(p));
+
+            // Filtro Dropdown (El scrap también tiene dueño)
+            if (clienteFiltro.value) {
+                const idFiltro = Number(clienteFiltro.value);
+                lista = lista.filter(p => getClienteId(p) === idFiltro);
+            }
+        } 
+        else {
             // MODO: Servicios / Prod Terminados
             // Filtro: Todo lo que tenga SKU "FAZ-..."
             lista = lista.filter(p => esServicioFazon(p));
@@ -87,9 +101,10 @@ const productosFiltrados = computed(() => {
 });
 
 // --- CONTEOS ---
-const countMP = computed(() => listaProductos.value.filter(p => (p.esMateriaPrima || p.EsMateriaPrima) && !esMpCliente(p)).length);
+const countMP = computed(() => listaProductos.value.filter(p => (p.esMateriaPrima || p.EsMateriaPrima) && !esMpCliente(p) && !esScrap(p)).length);
 const countPT = computed(() => listaProductos.value.filter(p => (p.esProductoTerminado || p.EsProductoTerminado) && !esServicioFazon(p)).length);
-const countCLI = computed(() => listaProductos.value.filter(p => esMpCliente(p) || esServicioFazon(p)).length);
+// El contador de clientes suma todo: MP + SCRAP + SERVICIOS
+const countCLI = computed(() => listaProductos.value.filter(p => esMpCliente(p) || esServicioFazon(p) || esScrap(p)).length);
 
 const irAEditar = (id: number) => {
     router.push({ name: 'editar-producto', params: { id } });
@@ -106,10 +121,6 @@ onMounted(async () => {
         
         listaProductos.value = resProd.data.sort((a: any, b: any) => getNombre(a).localeCompare(getNombre(b)));
         listaClientes.value = resCli.data;
-
-        // DEBUG: Mira la consola para ver qué está llegando
-        console.log("Productos Cargados:", listaProductos.value.length);
-        console.log("Ejemplo de MP Cliente:", listaProductos.value.find(p => getSku(p).startsWith('MP-CLI')));
 
     } catch (e: any) {
         error.value = "Error al cargar datos.";
@@ -154,12 +165,19 @@ onMounted(async () => {
                 <button 
                     :class="{ 'sub-active': subTabCliente === 'MP_CLI' }" 
                     @click="subTabCliente = 'MP_CLI'">
-                    📥 Sus Materias Primas
+                    📥 Fazon
                 </button>
+                
+                <button 
+                    :class="{ 'sub-active': subTabCliente === 'SCRAP_CLI' }" 
+                    @click="subTabCliente = 'SCRAP_CLI'">
+                    ♻️ Scrap / Molido
+                </button>
+
                 <button 
                     :class="{ 'sub-active': subTabCliente === 'PT_CLI' }" 
                     @click="subTabCliente = 'PT_CLI'">
-                    📤 Sus Productos Terminados
+                    📤 Prod. Terminados
                 </button>
             </div>
         </div>
@@ -188,6 +206,7 @@ onMounted(async () => {
                         <td>
                             <div class="nombre-prod">{{ p.nombre }}</div>
                             <small v-if="p.esFazon && tabActual !== 'CLI'" class="tag-fazon">FAZON</small>
+                            <small v-if="esScrap(p)" style="color: #d35400; font-weight:bold; margin-left:5px;">(RECUPERADO)</small>
                         </td>
 
                         <td v-if="tabActual === 'CLI'">

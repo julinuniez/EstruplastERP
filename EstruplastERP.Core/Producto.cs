@@ -25,6 +25,7 @@ namespace EstruplastERP.Core
 
         public string? Rubro { get; set; }// Valores sugeridos: "VIRGEN", "SCRAP", "TUTTI", "ADITIVO", "MASTERBATCH"
         public bool EsFazon { get; set; } = false;
+        public bool EsScrap { get; set; } = false;
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal Largo { get; set; } // Ej: 1550

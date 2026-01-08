@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import { useSesionStore } from '../stores/sesion' // 1. Importamos la definición del store
+import { useSesionStore } from '../stores/Sesion' // 1. Importamos la definición del store
 
 const router = useRouter()
 const sesion = useSesionStore() // 2. ¡IMPORTANTE! Instanciamos el store aquí

@@ -65,10 +65,7 @@ async function descargarPDF(remito: Remito) {
     remitoParaImprimir.value = remito;
     await nextTick();
 
-    const element = document.getElementById('remito-imprimible');
-
-    const opt = {
-        // CAMBIO CLAVE: Margen en 0. Controlamos el espacio con CSS (padding).
+    const opt: any = {
         margin:       0, 
         filename:     `Remito-${remito.id}-${remito.cliente?.razonSocial || 'Cliente'}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
@@ -79,8 +76,8 @@ async function descargarPDF(remito: Remito) {
         },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
-
-    html2pdf().set(opt).from(element).save();
+    const element = document.getElementById('remito-impresion');
+    html2pdf().set(opt).from(element!).save();
 }
 
 onMounted(() => {

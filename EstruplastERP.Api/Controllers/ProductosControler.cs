@@ -89,6 +89,7 @@ namespace EstruplastERP.Api.Controllers
                     ClienteId = p.ClienteId,
                     EsFazonCalculado = p.ClienteId != null,
                     EsFazon = p.EsFazon, 
+                    EsScrap = p.EsScrap,
                     p.StockActual,
                     p.PesoEspecifico,
                     p.Largo,
@@ -114,9 +115,6 @@ namespace EstruplastERP.Api.Controllers
 
             if (producto == null) return NotFound("❌ Producto no encontrado.");
 
-            // =========================================================
-            // 2. LÓGICA DE HERENCIA DE RECETA (Cascade)
-            // =========================================================
             List<Formula> formulasFinales;
 
             if (producto.Formulas != null && producto.Formulas.Any())
@@ -136,9 +134,6 @@ namespace EstruplastERP.Api.Controllers
                 formulasFinales = new List<Formula>();
             }
 
-            // =========================================================
-            // 3. MAPEO A DTO
-            // =========================================================
             var dto = new ProductoDetalleDto
             {
                 Id = producto.Id,
@@ -191,8 +186,6 @@ namespace EstruplastERP.Api.Controllers
                     CodigoSku = data.CodigoSku.Trim().ToUpper(),
                     EsProductoTerminado = esProductoTerminado,
                     EsMateriaPrima = !esProductoTerminado,
-                    // Si viene en el DTO úsalo, si no, asume false
-                    // EsGenerico = data.EsGenerico, 
                     StockMinimo = data.StockMinimo,
                     PrecioCosto = data.PrecioCosto,
                     Color = data.Color,

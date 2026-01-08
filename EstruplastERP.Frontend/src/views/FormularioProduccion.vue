@@ -9,7 +9,9 @@ import ListaProduccion from '../components/ListaProduccion.vue'
 // CONFIGURACIÓN
 const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
 const DENSIDAD_DEFAULT = 1.1;
-
+const ID_MASTERBATCH_GENERICO = 90; 
+const PESO_LATA_KG = 0.150;        
+const KILOS_BASE_LATA = 25;
 // INTERFACES
 interface Producto { 
     id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean; 
@@ -329,7 +331,7 @@ async function registrarProduccion() {
 async function generarPDF(tipo: 'orden'|'carga') {
   ocultarFormula.value = (tipo === 'orden'); 
   await nextTick(); await new Promise(r => setTimeout(r, 100)); 
-  await html2pdf().set({ margin: 0, filename: `Doc_${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4' } }).from(document.getElementById('hoja-de-impresion')).save();
+  await html2pdf().set({ margin: 0, filename: `Doc_${Date.now()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4' } }).from(document.getElementById('hoja-de-impresion')!).save();
   ocultarFormula.value = false;
 }
 
