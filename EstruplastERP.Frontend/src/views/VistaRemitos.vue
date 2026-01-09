@@ -36,7 +36,7 @@ const cargando = ref(false)
 const error = ref('')
 const remitoParaImprimir = ref<Remito | null>(null)
 
-const apiUrl = 'https://localhost:7244/api'; 
+const apiUrl = '/api'; 
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');

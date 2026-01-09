@@ -29,7 +29,7 @@ const mostrarModalCierre = ref(false)
 const ordenSeleccionada = ref<ProduccionItem | null>(null)
 const listaMateriasPrimas = ref<any[]>([]) 
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 // --- CARGAR DATOS (USANDO /RECIENTES) ---
 async function cargarHistorial() {

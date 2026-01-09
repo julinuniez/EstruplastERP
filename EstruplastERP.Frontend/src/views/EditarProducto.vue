@@ -56,11 +56,11 @@ onMounted(async () => {
     if (!id) return router.push('/stock'); 
 
     try {
-        const resProd = await axios.get(`https://localhost:7244/api/Productos/${id}`, getConfig());
+        const resProd = await axios.get(`/api/Productos/${id}`, getConfig());
         producto.value = resProd.data;
         if (!producto.value.receta) producto.value.receta = [];
 
-        const resMP = await axios.get('https://localhost:7244/api/Productos/materias-primas', getConfig());
+        const resMP = await axios.get('/api/Productos/materias-primas', getConfig());
         listaMateriasPrimas.value = resMP.data.filter(mp => mp.id !== Number(id));
 
     } catch (e) {
@@ -130,7 +130,7 @@ const guardarConfiguracion = async () => {
             }))
         };
 
-        await axios.put(`https://localhost:7244/api/Productos/configurar/${producto.value.id}`, payload, getConfig());
+        await axios.put(`/api/Productos/configurar/${producto.value.id}`, payload, getConfig());
         
         alert("✅ Configuración guardada correctamente.");
         router.back();

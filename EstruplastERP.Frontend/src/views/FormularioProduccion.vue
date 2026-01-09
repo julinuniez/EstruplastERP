@@ -7,7 +7,7 @@ import HojaImpresion from '../components/HojaImpresion.vue'
 import ListaProduccion from '../components/ListaProduccion.vue'
 
 // CONFIGURACIÓN
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
+const apiUrl = import.meta.env.VITE_API_URL || '/api'; 
 const DENSIDAD_DEFAULT = 1.1;
 const ID_MASTERBATCH_GENERICO = 90; 
 const PESO_LATA_KG = 0.150;        

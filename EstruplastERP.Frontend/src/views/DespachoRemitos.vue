@@ -43,7 +43,7 @@ const itemTemporal = ref({
     detalle: '' // Aquí escribes "Rojo", "40 micrones", etc.
 });
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 // --- HELPER TOKEN ---
 const getAuthConfig = () => {

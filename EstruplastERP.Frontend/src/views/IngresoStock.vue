@@ -46,7 +46,7 @@ const form = ref({
 const mensaje = ref('')
 const error = ref('')
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
+const apiUrl = import.meta.env.VITE_API_URL || '/api'; 
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');

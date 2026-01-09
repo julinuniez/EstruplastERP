@@ -6,7 +6,7 @@ const pestanaActiva = ref('ingreso'); // 'ingreso' | 'proceso'
 const clientes = ref<any[]>([]);
 const mensaje = ref('');
 const error = ref('');
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
+const apiUrl = import.meta.env.VITE_API_URL || '/api'; 
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
 
 // Formularios
