@@ -14,13 +14,20 @@ async function ingresar() {
     error.value = '' 
     
     try {
-        const res = await axios.post('/api/Auth/login', {
+        // CAMBIO: Usamos Axios en lugar de fetch para mejor manejo de errores
+        // Asegúrate que el puerto coincida con tu backend .NET (ej: 7244 o 5123)
+        const res = await axios.post('https://localhost:7244/api/Auth/login', {
             nombreUsuario: form.value.usuario, // Mapeamos usuario -> nombreUsuario
             password: form.value.password
         })
 
+        // El backend devuelve: { token: "...", usuario: "admin", rol: "Admin" }
         const datosUsuario = res.data
+
+        // 3. Llamamos a la acción del Store nuevo
         sesion.iniciar(datosUsuario) 
+        
+        // 4. Redirigimos
         router.push({ name: 'produccion' })
         
     } catch (e: any) {
