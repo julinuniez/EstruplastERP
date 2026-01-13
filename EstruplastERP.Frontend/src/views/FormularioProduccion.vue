@@ -14,7 +14,7 @@ const PESO_LATA_KG = 0.150;
 const KILOS_BASE_LATA = 25;
 // INTERFACES
 interface Producto { 
-    id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean; 
+    id: number; nombre: string; CodigoSku: string; esProductoTerminado: boolean; 
     esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; rubro?: string;           
     largo: number; ancho: number; espesor: number; pesoEspecifico: number; color?: string; receta?: any[];
     espesorMinimo?: number; espesorMaximo?: number;
@@ -240,7 +240,7 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
     const regla = reglas.find(r => nombreProd.includes(r.key));
     if (regla) {
         materialElegido = materialesCliente.find(m => {
-            const txt = (m.nombre + (m.codigoSku||'')).toUpperCase();
+            const txt = (m.nombre + (m.CodigoSku||'')).toUpperCase();
             return regla.match.some(palabra => txt.includes(palabra));
         });
     }

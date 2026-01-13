@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace EstruplastERP.Api.Dtos
 {
@@ -51,8 +52,17 @@ namespace EstruplastERP.Api.Dtos
     {
         public string Nombre { get; set; }
         public string CodigoSku { get; set; }
-        public string? Color { get; set; }
+
+        [JsonPropertyName("stockMinimo")] 
         public decimal StockMinimo { get; set; }
+
+        public string? Color { get; set; }
+
+        [JsonPropertyName("stockActual")] 
+        public decimal StockActual { get; set; }
+
+        [JsonPropertyName("precioCosto")] 
+        public decimal PrecioCosto { get; set; }
     }
 
     // 5. INGREDIENTE
@@ -71,8 +81,8 @@ namespace EstruplastERP.Api.Dtos
         public bool EsMateriaPrima { get; set; }
         public bool EsProductoTerminado { get; set; }
         public bool EsFazon { get; set; }
+        public decimal StockActual { get; set; }
 
-        // 🔥 AGREGADO: La lista de ingredientes para guardar
         public List<IngredienteDto>? Receta { get; set; }
     }
 }

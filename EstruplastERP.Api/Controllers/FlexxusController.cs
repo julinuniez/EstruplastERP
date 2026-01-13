@@ -1,9 +1,17 @@
-﻿using EstruplastERP.Core;
-using EstruplastERP.Data;
-using ExcelDataReader;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Data;
+using CsvHelper;
+using CsvHelper.Configuration;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using System;
+using EstruplastERP.Data;
+using EstruplastERP.Core;
+using EstruplastERP.Api.Dtos;
 
 namespace EstruplastERP.Api.Controllers
 {
@@ -19,140 +27,154 @@ namespace EstruplastERP.Api.Controllers
         }
 
         [HttpPost("importar-mp")]
-        public async Task<IActionResult> ImportarMateriaPrima(IFormFile archivo)
+        public async Task<IActionResult> ImportarMaestro(IFormFile archivo)
         {
-            if (archivo == null || archivo.Length == 0) return BadRequest("Sube un archivo válido.");
+            if (archivo == null || archivo.Length == 0)
+                return BadRequest("Por favor, suba un archivo .csv válido.");
 
-            // Habilitar lectura de encodings viejos (Windows-1252 para ñ y acentos)
-            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-
-            int actualizados = 0;
             int creados = 0;
-            int errores = 0;
+            int actualizados = 0;
+            var errores = new List<string>();
 
             try
             {
-                // Carga rápida en memoria
-                var productosDb = await _context.Productos
-                    .ToDictionaryAsync(p => p.CodigoSku.ToUpper().Trim(), p => p);
-
-                using (var stream = archivo.OpenReadStream())
+                // Configuración para leer CSV argentino (punto y coma) y encoding de Flexxus
+                var config = new CsvConfiguration(new CultureInfo("es-AR"))
                 {
-                    using (var reader = ExcelReaderFactory.CreateReader(stream))
+                    Delimiter = ";",
+                    HasHeaderRecord = true,
+                    ShouldSkipRecord = args => args.Row.Parser.Row == 1, // Salta líneas vacías al inicio
+                    MissingFieldFound = null, // No falla si faltan columnas opcionales
+                    BadDataFound = null,
+                    Encoding = Encoding.Latin1 // Importante para ñ y acentos
+                };
+
+                using (var stream = new StreamReader(archivo.OpenReadStream(), Encoding.Latin1))
+                using (var csv = new CsvReader(stream, config))
+                {
+                    var registros = csv.GetRecords<FlexxusMaestroDto>().ToList();
+
+                    // Traemos la DB a memoria para comparar rápido
+                    var productosDb = await _context.Productos.ToListAsync();
+
+                    foreach (var row in registros)
                     {
-                        var result = reader.AsDataSet(new ExcelDataSetConfiguration()
+                        if (string.IsNullOrWhiteSpace(row.CodigoSku)) continue;
+
+                        string skuLimpio = row.CodigoSku.Trim().ToUpper();
+                        string nombreLimpio = row.Nombre?.Trim() ?? "SIN NOMBRE";
+                        string rubroLimpio = row.Rubro?.Trim().ToUpper() ?? "OTROS";
+
+                        // 1. Validaciones anti-basura del CSV
+                        if (skuLimpio.Contains("/") || skuLimpio.Contains(":") || skuLimpio.Length < 3)
                         {
-                            ConfigureDataTable = (_) => new ExcelDataTableConfiguration() { UseHeaderRow = false }
-                        });
+                            continue;
+                        }
 
-                        var tabla = result.Tables[0];
+                        // 2. Lógica de Clasificación Automática (Materia Prima vs Producto)
+                        bool esMateriaPrima = rubroLimpio.Contains("MATERIA PRIMA") ||
+                                              rubroLimpio.Contains("MASTERBATCH") ||
+                                              rubroLimpio.Contains("INSUMO");
+                        bool esProductoTerminado = !esMateriaPrima;
 
-                        // ==========================================
-                        // ⚙️ CONFIGURACIÓN DE COLUMNAS
-                        // ==========================================
-                        int colSku = 0;     // Col A
-                        int colNombre = 1;  // Col B
-                        int colRubro = 4;   // Col E (Donde dice MASTERBATCH, etc.)
+                        // Buscamos si ya existe
+                        var prod = productosDb.FirstOrDefault(p => p.CodigoSku.Trim().ToUpper() == skuLimpio);
 
-                        // Recorremos desde la fila 2 para saltar encabezados sucios
-                        for (int i = 2; i < tabla.Rows.Count; i++)
+                        if (prod != null)
                         {
-                            DataRow row = tabla.Rows[i];
-                            try
+                            // --- ACTUALIZAR PRODUCTO EXISTENTE ---
+                            bool huboCambios = false;
+
+                            if (prod.Nombre != nombreLimpio)
                             {
-                                var skuRaw = row[colSku]?.ToString();
-                                if (string.IsNullOrWhiteSpace(skuRaw)) continue;
+                                prod.Nombre = nombreLimpio;
+                                huboCambios = true;
+                            }
 
-                                var sku = skuRaw.ToUpper().Trim();
+                            // Si cambia el rubro, actualizamos también los flags
+                            if (prod.Rubro != rubroLimpio)
+                            {
+                                prod.Rubro = rubroLimpio;
+                                prod.EsMateriaPrima = esMateriaPrima;
+                                prod.EsProductoTerminado = esProductoTerminado;
+                                huboCambios = true;
+                            }
 
-                                // Nombre
-                                var nombreRaw = row[colNombre]?.ToString();
-                                string nombre = string.IsNullOrWhiteSpace(nombreRaw) ? $"Producto {sku}" : nombreRaw.Trim();
-
-                                // --- LÓGICA DE RUBRO 🧠 ---
-                                string rubro = row[colRubro]?.ToString()?.ToUpper().Trim() ?? "";
-
-                                // Por defecto asumimos que es Materia Prima si no dice lo contrario
-                                bool esMP = true;
-                                bool esPT = false;
-
-                                if (rubro.Contains("TERMINADO") || rubro.Contains("PT"))
+                            // Actualizar PRECIO solo si el CSV trae dato (no es null)
+                            if (row.Precio.HasValue)
+                            {
+                                if (prod.PrecioCosto != row.Precio.Value)
                                 {
-                                    esMP = false;
-                                    esPT = true;
-                                }
-                                else if (rubro.Contains("MASTER") || rubro.Contains("MATERIA") || rubro.Contains("VIRGEN") || rubro.Contains("INSUMO"))
-                                {
-                                    esMP = true;
-                                    esPT = false;
-                                }
-
-                                if (productosDb.TryGetValue(sku, out var productoExistente))
-                                {
-                                    // --- ACTUALIZAR ---
-                                    bool cambio = false;
-
-                                    if (productoExistente.Nombre != nombre)
-                                    {
-                                        productoExistente.Nombre = nombre;
-                                        cambio = true;
-                                    }
-
-                                    // Actualizamos también la categoría si cambió en Flexxus
-                                    if (productoExistente.EsMateriaPrima != esMP)
-                                    {
-                                        productoExistente.EsMateriaPrima = esMP;
-                                        productoExistente.EsProductoTerminado = esPT;
-                                        cambio = true;
-                                    }
-
-                                    if (cambio) actualizados++;
-                                }
-                                else
-                                {
-                                    // --- CREAR NUEVO ---
-                                    var nuevoProd = new Producto
-                                    {
-                                        CodigoSku = sku,
-                                        Nombre = nombre,
-                                        StockActual = 0,
-                                        PrecioCosto = 0,
-
-                                        // Aquí asignamos lo que detectamos del Rubro
-                                        EsMateriaPrima = esMP,
-                                        EsProductoTerminado = esPT,
-
-                                        FechaCreacion = DateTime.Now,
-                                        StockMinimo = 10,
-                                        Color = "A definir" // O podrías leerlo de otra columna si existe
-                                    };
-
-                                    _context.Productos.Add(nuevoProd);
-                                    productosDb.Add(sku, nuevoProd);
-                                    creados++;
+                                    prod.PrecioCosto = row.Precio.Value;
+                                    huboCambios = true;
                                 }
                             }
-                            catch
+
+                            // Actualizar STOCK solo si el CSV trae dato (no es null)
+                            if (row.Stock.HasValue)
                             {
-                                errores++;
+                                if (prod.StockActual != row.Stock.Value)
+                                {
+                                    prod.StockActual = row.Stock.Value;
+                                    huboCambios = true;
+                                }
+                            }
+
+                            if (huboCambios)
+                            {
+                                _context.Entry(prod).State = EntityState.Modified;
+                                actualizados++;
                             }
                         }
+                        else
+                        {
+                            // --- CREAR PRODUCTO NUEVO ---
+                            var nuevo = new Producto
+                            {
+                                CodigoSku = skuLimpio,
+                                Nombre = nombreLimpio,
+                                Rubro = rubroLimpio,
+
+                                // Flags automáticos
+                                EsMateriaPrima = esMateriaPrima,
+                                EsProductoTerminado = esProductoTerminado,
+
+                                // Si es nuevo y no trae precio/stock, ponemos 0
+                                PrecioCosto = row.Precio ?? 0,
+                                StockActual = row.Stock ?? 0,
+
+                                // Valores por defecto de tu negocio
+                                EsGenerico = false,
+                                EsFazon = false,
+                                StockMinimo = 100,
+                                Activo = true,
+                                FechaCreacion = DateTime.Now,
+
+                                // Peso específico por defecto (1.05 para MP, 1.00 para el resto)
+                                PesoEspecifico = esMateriaPrima ? 1.05m : 1.00m
+                            };
+
+                            _context.Productos.Add(nuevo);
+                            creados++;
+                        }
+                    }
+
+                    // Guardamos cambios si hubo alguno
+                    if (actualizados > 0 || creados > 0)
+                    {
+                        await _context.SaveChangesAsync();
                     }
                 }
 
-                await _context.SaveChangesAsync();
-
                 return Ok(new
                 {
-                    mensaje = "Sincronización finalizada",
-                    creados = creados,
-                    actualizados = actualizados,
-                    errores = errores
+                    mensaje = $"Importación Flexxus finalizada.\n🆕 Creados: {creados}\n🔄 Actualizados: {actualizados}",
+                    detalles = new { Creados = creados, Actualizados = actualizados, Errores = errores }
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, "Error procesando archivo: " + ex.Message);
+                return StatusCode(500, $"Error en FlexxusController: {ex.Message}");
             }
         }
     }

@@ -67,26 +67,43 @@ const clickImportarFlexxus = () => {
 
 const procesarArchivoFlexxus = async (event: Event) => {
     const target = event.target as HTMLInputElement;
+    
+    // 1. Validamos la lista de archivos
     if (!target.files || target.files.length === 0) return;
 
     const file = target.files[0];
     
-    // Validación más estricta para CSV si quieres
+    // 🛑 FIX TYPESCRIPT: Agrega esta línea
+    // Esto le asegura al compilador que 'file' no es undefined
+    if (!file) return; 
+
+    // Validar extensión simple
+    if (!file.name.endsWith('.csv') && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+        alert('Por favor selecciona un archivo CSV o Excel válido.');
+        return;
+    }
+
+    // Ahora TS ya no se quejará aquí de que file.name puede ser undefined
     if (!confirm(`¿Procesar archivo "${file.name}"?`)) {
-        target.value = '';
+        target.value = ''; 
         return;
     }
 
     try {
         cargando.value = true;
+        
         const formData = new FormData();
-        formData.append('archivo', file);
+        // Ni tampoco se quejará aquí
+        formData.append('archivo', file); 
 
         const response = await axios.post(`${apiUrl}/Flexxus/importar-mp`, formData, {
-            headers: { ...getAuthConfig().headers, 'Content-Type': 'multipart/form-data' }
+            headers: {
+                ...getAuthConfig().headers,
+                'Content-Type': 'multipart/form-data'
+            }
         });
 
-        // 🆕 Guardamos los datos y mostramos el modal
+        // Actualizamos datos del modal
         resumenData.value = {
             creados: response.data.creados,
             actualizados: response.data.actualizados,
@@ -98,11 +115,11 @@ const procesarArchivoFlexxus = async (event: Event) => {
 
     } catch (e: any) {
         console.error(e);
-        const msg = e.response?.data?.message || e.message || 'Error al importar.';
+        const msg = e.response?.data?.message || 'Error al importar archivo.';
         alert(`❌ Error: ${msg}`);
     } finally {
         cargando.value = false;
-        target.value = '';
+        target.value = ''; 
     }
 };
 

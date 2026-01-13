@@ -20,25 +20,39 @@ namespace EstruplastERP.Api.Controllers
         [HttpGet("inventario-completo")]
         public async Task<ActionResult<IEnumerable<object>>> GetInventarioCompleto()
         {
-            var productos = await _context.Productos
-                .Where(p => p.Activo) 
+            try
+            {
+                var productos = await _context.Productos
+                .Where(p => p.Activo == true)
                 .OrderBy(p => p.Nombre)
                 .Select(p => new
                 {
                     p.Id,
                     p.Nombre,
                     p.CodigoSku,
-                    p.StockActual,
-                    p.StockMinimo,
-                    p.PesoEspecifico,
-                    p.EsMateriaPrima,       
-                    p.EsProductoTerminado,  
-                    p.EsFazon,
-                    p.PrecioCosto
+                    StockActual = (decimal?)p.StockActual ?? 0,
+                    StockMinimo = (decimal?)p.StockMinimo ?? 0,
+                    PesoEspecifico = (decimal?)p.PesoEspecifico ?? 0,
+                    EsMateriaPrima = p.EsMateriaPrima == true,
+                    EsProductoTerminado = p.EsProductoTerminado == true,
+                    EsFazon = p.EsFazon == true,
+                    PrecioCosto = (decimal?)p.PrecioCosto ?? 0
                 })
                 .ToListAsync();
 
-            return Ok(productos);
+                return Ok(productos);
+            }
+            catch(Exception ex)
+            {
+                return BadRequest(new
+                {
+                    ERROR_CRITICO = "Hubo un fallo al leer la base de datos.",
+                    MENSAJE = ex.Message,
+                    CAUSA_INTERNA = ex.InnerException?.Message ?? "N/A",
+                    DONDE = ex.StackTrace
+                });
+            }
+            
         }
 
         // ==========================================
@@ -69,7 +83,7 @@ namespace EstruplastERP.Api.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetProductos([FromQuery] int? clienteId)
         {
             var query = _context.Productos
-                .Where(p => p.Activo)
+                .Where(p => p.Activo == true)
                 .AsQueryable();
             if (clienteId.HasValue && clienteId.Value > 0)
             {
@@ -88,8 +102,8 @@ namespace EstruplastERP.Api.Controllers
                     p.EsGenerico,
                     ClienteId = p.ClienteId,
                     EsFazonCalculado = p.ClienteId != null,
-                    EsFazon = p.EsFazon, 
-                    EsScrap = p.EsScrap,
+                    EsFazon = p.EsFazon == true, 
+                    EsScrap = p.EsScrap == true,
                     p.StockActual,
                     p.PesoEspecifico,
                     p.Largo,
@@ -289,18 +303,19 @@ namespace EstruplastERP.Api.Controllers
             if (id <= 0) return BadRequest("ID inválido.");
 
             var producto = await _context.Productos.FirstOrDefaultAsync(p => p.Id == id);
+
             if (producto == null) return NotFound("❌ Producto no encontrado.");
 
             producto.Nombre = data.Nombre.Trim();
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
             producto.Color = data.Color;
-            // producto.EsGenerico = data.EsGenerico; // Descomentar si agregas esto al DTO
+            producto.StockActual = data.StockActual;
 
             try
             {
                 await _context.SaveChangesAsync();
-                return Ok(new { mensaje = "✅ Ítem actualizado correctamente." });
+                return Ok(new { mensaje = "✅ Producto actualizado correctamente." });
             }
             catch (Exception ex)
             {
@@ -360,20 +375,22 @@ namespace EstruplastERP.Api.Controllers
             producto.EsProductoTerminado = dto.EsProductoTerminado;
             producto.EsFazon = dto.EsFazon;
 
+            // 🔥 AGREGAR ESTA LÍNEA AQUÍ 🔥
+            producto.StockActual = dto.StockActual;
+
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // 2. ACTUALIZAR RECETA (Borrar vieja e insertar nueva)
+                // 2. ACTUALIZAR RECETA (Esto lo dejamos igual, funcionaba bien)
                 if (dto.Receta != null)
                 {
-                    // A. Borramos los ingredientes actuales de este producto
+                    // ... lógica de borrar e insertar receta ...
                     var formulasViejas = await _context.Formulas
-                        .Where(f => f.ProductoTerminadoId == id)
-                        .ToListAsync();
+                               .Where(f => f.ProductoTerminadoId == id)
+                               .ToListAsync();
 
                     _context.Formulas.RemoveRange(formulasViejas);
 
-                    // B. Insertamos los nuevos
                     foreach (var item in dto.Receta)
                     {
                         _context.Formulas.Add(new Formula
@@ -386,9 +403,9 @@ namespace EstruplastERP.Api.Controllers
                 }
 
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync(); // Confirmar todo
+                await transaction.CommitAsync();
 
-                return Ok(new { mensaje = "✅ Configuración y Receta guardadas." });
+                return Ok(new { mensaje = "✅ Configuración y Stock guardados." });
             }
             catch (Exception ex)
             {

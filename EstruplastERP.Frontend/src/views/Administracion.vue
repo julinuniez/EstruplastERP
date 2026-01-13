@@ -42,7 +42,7 @@ const itemForm = ref({
 })
 
 const modoEdicion = ref(false)
-const apiUrl = 'https://localhost:7244/api';  
+const apiUrl = '/api';  
 
 const getAuthConfig = () => {
   const token = localStorage.getItem('token');
