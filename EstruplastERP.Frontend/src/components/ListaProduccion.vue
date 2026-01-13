@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 // Asegúrate de que este archivo exista en la misma carpeta o ajusta la ruta
 import ModalCierreOrden from './ModalCierreOrden.vue' 
 
@@ -24,12 +24,37 @@ const producciones = ref<ProduccionItem[]>([])
 const cargando = ref(false)
 const error = ref('')
 
+// FILTROS
+const filtroFecha = ref(''); // Formato YYYY-MM-DD
+const filtroEstado = ref('todos'); // 'todos', 'pendiente', 'finalizada'
+
+
 // MODAL
 const mostrarModalCierre = ref(false)
 const ordenSeleccionada = ref<ProduccionItem | null>(null)
 const listaMateriasPrimas = ref<any[]>([]) 
 
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
+
+// --- COMPUTED PARA FILTRAR ---
+const produccionesFiltradas = computed(() => {
+  let items = producciones.value;
+
+  // 1. Filtrar por estado
+  if (filtroEstado.value !== 'todos') {
+    const esFinalizada = filtroEstado.value === 'finalizada';
+    items = items.filter(p => p.esFinalizada === esFinalizada);
+  }
+
+  // 2. Filtrar por fecha
+  if (filtroFecha.value) {
+    // Comparamos solo la parte de la fecha (YYYY-MM-DD)
+    items = items.filter(p => p.fecha.startsWith(filtroFecha.value));
+  }
+
+  return items;
+});
+
 
 // --- CARGAR DATOS (USANDO /RECIENTES) ---
 async function cargarHistorial() {
@@ -121,6 +146,22 @@ defineExpose({ cargarHistorial })
         <button @click="cargarHistorial" class="btn-refresh" title="Actualizar">🔄 Actualizar</button>
     </div>
 
+    <!-- SECCIÓN DE FILTROS -->
+    <div class="filtros-container">
+        <div class="filtro-item">
+            <label for="filtro-fecha">Filtrar por Fecha:</label>
+            <input type="date" id="filtro-fecha" v-model="filtroFecha" class="input-filtro">
+        </div>
+        <div class="filtro-item">
+            <label for="filtro-estado">Filtrar por Estado:</label>
+            <select id="filtro-estado" v-model="filtroEstado" class="input-filtro">
+                <option value="todos">Todos</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="finalizada">Finalizada</option>
+            </select>
+        </div>
+    </div>
+
     <div v-if="cargando" class="loading">Cargando...</div>
     <div v-else-if="error" class="error-msg">{{ error }}</div>
 
@@ -138,7 +179,7 @@ defineExpose({ cargarHistorial })
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="p in producciones" :key="p.id" :class="{'fila-ok': p.esFinalizada}">
+                <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-ok': p.esFinalizada}">
                     <td>{{ p.fecha }}</td>
                     <td class="td-prod">{{ p.producto }}</td>
                     <td style="text-align: center;">{{ p.cantidad }}</td>
@@ -163,8 +204,10 @@ defineExpose({ cargarHistorial })
                         </button>
                     </td>
                 </tr>
-                <tr v-if="producciones.length === 0">
-                    <td colspan="7" class="vacio">No hay órdenes recientes.</td>
+                <tr v-if="produccionesFiltradas.length === 0">
+                    <td colspan="7" class="vacio">
+                        No hay órdenes que coincidan con los filtros seleccionados.
+                    </td>
                 </tr>
             </tbody>
         </table>
@@ -180,6 +223,39 @@ defineExpose({ cargarHistorial })
 
 .btn-refresh { background: none; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 4px 8px; font-size: 0.9rem; transition: all 0.2s; }
 .btn-refresh:hover { background: #f9f9f9; color: #3498db; border-color: #3498db; }
+
+/* Estilos para los filtros */
+.filtros-container {
+    display: flex;
+    gap: 20px;
+    padding: 10px 5px;
+    margin-bottom: 10px;
+    background-color: #f9f9f9;
+    border-radius: 6px;
+    border: 1px solid #eee;
+}
+.filtro-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.filtro-item label {
+    font-size: 0.85rem;
+    color: #555;
+    font-weight: 600;
+}
+.input-filtro {
+    padding: 5px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+.input-filtro:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
 
 .tabla-scroll { overflow-y: auto; flex: 1; }
 .tabla-custom { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
