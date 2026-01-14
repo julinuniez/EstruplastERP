@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
+import api from '@/services/axiosInstance';
 
 const route = useRoute();
 const router = useRouter();
@@ -16,7 +17,7 @@ const producto = ref({
     id: 0,
     nombre: '',
     codigoSku: '',
-    pesoEspecifico: 1.0,
+    pesoEspecifico: 1.1,
     stockMinimo: 0,
     esMateriaPrima: false,
     esProductoTerminado: false,
@@ -50,21 +51,22 @@ const puedeGuardar = computed(() => {
     return true; // Si es materia prima, no valida receta
 });
 
-// 1. Cargar datos al entrar
 onMounted(async () => {
     const id = route.params.id;
     if (!id) return router.push('/stock'); 
 
     try {
-        const resProd = await axios.get(`https://localhost:7244/api/Productos/${id}`, getConfig());
+        // 🔥 Usamos api.get y rutas cortas
+        const resProd = await api.get(`/Productos/${id}`);
         producto.value = resProd.data;
         if (!producto.value.receta) producto.value.receta = [];
 
-        const resMP = await axios.get('https://localhost:7244/api/Productos/materias-primas', getConfig());
+        const resMP = await api.get('/Productos/materias-primas');
         listaMateriasPrimas.value = resMP.data.filter(mp => mp.id !== Number(id));
 
     } catch (e) {
-        alert("Error al cargar datos: " + e.message);
+        console.error(e);
+        alert("Error al cargar datos.");
         router.push('/stock');
     } finally {
         loading.value = false;
@@ -106,8 +108,6 @@ const quitarIngrediente = (index) => {
     producto.value.receta.splice(index, 1);
 };
 
-// --- GUARDADO ---
-
 const guardarConfiguracion = async () => {
     // Validación final de seguridad
     if (producto.value.esProductoTerminado && totalPorcentaje.value !== 100) {
@@ -119,24 +119,28 @@ const guardarConfiguracion = async () => {
         const payload = {
             stockMinimo: Number(producto.value.stockMinimo),
             pesoEspecifico: Number(producto.value.pesoEspecifico),
-            // Enviamos los valores actuales (ya no se editan en pantalla, pero el backend los necesita)
             esMateriaPrima: producto.value.esMateriaPrima,
             esProductoTerminado: producto.value.esProductoTerminado,
             esFazon: producto.value.esFazon,
-            
             receta: producto.value.receta.map(item => ({
                 materiaPrimaId: item.materiaPrimaId,
                 cantidad: Number(item.cantidad)
             }))
         };
 
-        await axios.put(`https://localhost:7244/api/Productos/configurar/${producto.value.id}`, payload, getConfig());
+        // CORRECCIÓN 1: Usamos api.put (porque el controller es [HttpPut])
+        // CORRECCIÓN 2: Usamos producto.value.id (no props.producto.id)
+        // CORRECCIÓN 3: Pasamos el payload directo como segundo argumento (Body)
+        await api.put(`/Productos/configurar/${producto.value.id}`, payload);
         
         alert("✅ Configuración guardada correctamente.");
         router.back();
         
     } catch (e) {
-        alert("Error al guardar: " + (e.response?.data || e.message));
+        console.error(e);
+        // Esto captura mejor el mensaje de error del backend
+        const msg = e.response?.data || e.message; 
+        alert("Error al guardar: " + (typeof msg === 'object' ? JSON.stringify(msg) : msg));
     } finally {
         guardando.value = false;
     }

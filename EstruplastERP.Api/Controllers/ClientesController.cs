@@ -50,11 +50,8 @@ namespace EstruplastERP.Api.Controllers
             var cliente = await _context.Clientes.FindAsync(id);
             if (cliente == null) return NotFound("Cliente no encontrado.");
 
-            // ==========================================
-            // 1. LISTA DE MATERIAS PRIMAS (Vírgenes)
-            // ==========================================
-            var materialesFazon = new[]
-            {
+            // Listas de Materiales (Tu configuración actual)
+            var materialesFazon = new[] {
         new { Codigo = "AI-FIN", Nombre = "A.I. FINO (FAZÓN)", FamiliaId = 11 },
         new { Codigo = "AI-GRU", Nombre = "A.I. GRUESO (FAZÓN)", FamiliaId = 12 },
         new { Codigo = "AI-BIC", Nombre = "A.I. BICAPA (FAZÓN)", FamiliaId = 13 },
@@ -64,12 +61,7 @@ namespace EstruplastERP.Api.Controllers
         new { Codigo = "PEAD-BIC", Nombre = "PEAD BICAPA (FAZÓN)", FamiliaId = 41 }
     };
 
-            // ==========================================
-            // 2. LISTA DE SCRAP (Molido/Recuperado)
-            // ==========================================
-            var materialesScrap = new[]
-            {
-        // El Scrap suele mantener la familia base (10, 20, 30) o la específica si prefieres
+            var materialesScrap = new[] {
         new { Codigo = "SCRAP-AI", Nombre = "SCRAP A.I. (MOLIDO)", FamiliaId = 10 },
         new { Codigo = "SCRAP-ABS", Nombre = "SCRAP ABS (MOLIDO)", FamiliaId = 20 },
         new { Codigo = "SCRAP-POLI", Nombre = "SCRAP POLIETILENO (MOLIDO)", FamiliaId = 30 },
@@ -78,63 +70,76 @@ namespace EstruplastERP.Api.Controllers
 
             int creados = 0;
 
-            // --- BUCLE 1: CREAR MP VIRGEN ---
+            // --- BUCLE 1: MP VIRGEN ---
             foreach (var mat in materialesFazon)
             {
                 string sku = $"MP-CLI-{cliente.Id}-{mat.Codigo}";
+                // Usamos Trim() y ToUpper() para asegurar que no haya diferencias tontas
                 if (!await _context.Productos.AnyAsync(p => p.CodigoSku == sku))
                 {
                     _context.Productos.Add(new Producto
                     {
-                        Nombre = $"MP {mat.Nombre} - PROPIEDAD DE {cliente.RazonSocial.ToUpper()}",
+                        Nombre = $"MP {mat.Nombre} - {cliente.RazonSocial.ToUpper()}",
                         CodigoSku = sku,
                         FamiliaId = mat.FamiliaId,
                         ClienteId = cliente.Id,
                         Rubro = "MATERIA PRIMA",
                         EsMateriaPrima = true,
-                        EsFazon = true,   // ✅ Importante
-                        EsScrap = false,  // ❌ No es scrap
-                        Activo = true,
-                        FechaCreacion = DateTime.Now
+                        EsFazon = true,
+                        EsScrap = false,
+                        Largo = 0,
+                        Ancho = 0,
+                        Espesor = 0,
+                        StockActual = 0,
+                        StockMinimo = 0,
+                        PrecioCosto = 0,
+                        PesoEspecifico = 1,
+                        Activo = true
                     });
                     creados++;
                 }
             }
 
-            // --- BUCLE 2: CREAR SCRAP ---
+            // --- BUCLE 2: SCRAP ---
             foreach (var scrap in materialesScrap)
             {
-                // SKU: SCRAP-CLI-15-AI
                 string sku = $"SCRAP-CLI-{cliente.Id}-{scrap.Codigo}";
-
                 if (!await _context.Productos.AnyAsync(p => p.CodigoSku == sku))
                 {
                     _context.Productos.Add(new Producto
                     {
-                        Nombre = $"{scrap.Nombre} - PROPIEDAD DE {cliente.RazonSocial.ToUpper()}",
+                        Nombre = $"{scrap.Nombre} - {cliente.RazonSocial.ToUpper()}",
                         CodigoSku = sku,
                         FamiliaId = scrap.FamiliaId,
                         ClienteId = cliente.Id,
-
                         Rubro = "SCRAP",
-                        EsMateriaPrima = true, // El scrap TAMBIÉN se usa para fabricar
-                        EsProductoTerminado = false,
-                        EsFazon = true,        // Es de terceros
-
-                        // 🔥 LA BANDERA NUEVA
-                        EsScrap = true,
-
+                        EsMateriaPrima = true,
+                        EsFazon = true,
+                        EsScrap = true, // 🔥 Flag Scrap Activado
+                        Largo = 0,
+                        Ancho = 0,
+                        Espesor = 0,
                         StockActual = 0,
-                        Activo = true,
-                        FechaCreacion = DateTime.Now
+                        StockMinimo = 0,
+                        PrecioCosto = 0,
+                        PesoEspecifico = 1,
+                        Activo = true
                     });
                     creados++;
                 }
             }
 
-            if (creados > 0) await _context.SaveChangesAsync();
-
-            return Ok(new { mensaje = $"✅ Proceso finalizado. Se agregaron {creados} ítems (MP y Scrap)." });
+            if (creados > 0)
+            {
+                await _context.SaveChangesAsync();
+                // 🔥 ESTADO 201: CREADO (Verde)
+                return StatusCode(201, new { nuevo = true, mensaje = $"✅ Se generaron {creados} ítems nuevos." });
+            }
+            else
+            {
+                // 🔥 ESTADO 200: OK PERO SIN CAMBIOS (Azul/Amarillo)
+                return Ok(new { nuevo = false, mensaje = "ℹ️ El cliente ya tiene todo el servicio habilitado." });
+            }
         }
     }
 }

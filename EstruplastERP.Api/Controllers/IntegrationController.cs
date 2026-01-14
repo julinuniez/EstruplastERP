@@ -123,7 +123,7 @@ namespace EstruplastERP.Api.Controllers
                                 FechaCreacion = DateTime.Now,
 
                                 // Asignamos peso específico por defecto según tipo
-                                PesoEspecifico = esMateriaPrima ? 1.05m : 1.00m
+                                PesoEspecifico = esMateriaPrima ? 1.2m : 1.1m
                             };
 
                             _context.Productos.Add(nuevo);

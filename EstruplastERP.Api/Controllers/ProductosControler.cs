@@ -257,7 +257,7 @@ namespace EstruplastERP.Api.Controllers
                     StockActual = 0,             // Empieza en 0
                     StockMinimo = 0,
                     PrecioCosto = 0,             // El material es del cliente, costo 0 para nosotros
-                    PesoEspecifico = 1.05m,      // Valor por defecto (PAI), editable luego si es otro material
+                    PesoEspecifico = 1.1m,      // Valor por defecto (PAI), editable luego si es otro material
 
                     Activo = true,
                     FechaCreacion = DateTime.Now
@@ -363,17 +363,14 @@ namespace EstruplastERP.Api.Controllers
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // 2. ACTUALIZAR RECETA (Borrar vieja e insertar nueva)
                 if (dto.Receta != null)
                 {
-                    // A. Borramos los ingredientes actuales de este producto
                     var formulasViejas = await _context.Formulas
                         .Where(f => f.ProductoTerminadoId == id)
                         .ToListAsync();
 
                     _context.Formulas.RemoveRange(formulasViejas);
 
-                    // B. Insertamos los nuevos
                     foreach (var item in dto.Receta)
                     {
                         _context.Formulas.Add(new Formula

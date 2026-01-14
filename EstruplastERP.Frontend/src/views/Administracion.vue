@@ -165,15 +165,14 @@ function limpiarForm() {
 }
 
 const habilitarFazon = async (cliente: Entidad) => {
-    if(!confirm(`¿Generar productos de Fazón (AI, ABS, PP, PEAD) para ${cliente.razonSocial}? Esto permitirá cargarles stock.`)) return;
+    if (!confirm(`¿Generar productos de Fazón para ${cliente.razonSocial}?`)) return;
 
     cargandoFazon.value = cliente.id;
     try {
-        await axios.post(`${apiUrl}/Clientes/habilitar-fazon/${cliente.id}`, {}, getAuthConfig());
-        alert(`✅ Materiales habilitados para ${cliente.razonSocial}. Ahora puede ingresar stock.`);
+        const res = await axios.post(`${apiUrl}/Clientes/habilitar-fazon/${cliente.id}`, {}, getAuthConfig());
+        alert(res.data.mensaje);
     } catch (e: any) {
-        console.error(e);
-        alert("❌ Error: " + (e.response?.data?.mensaje || e.message));
+        alert("Error: " + (e.response?.data?.mensaje || e.message));
     } finally {
         cargandoFazon.value = null;
     }

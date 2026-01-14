@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-// Asegúrate de que este archivo exista en la misma carpeta o ajusta la ruta
-import ModalCierreOrden from './ModalCierreOrden.vue' 
+// 🔥 IMPORTANTE: Importamos nuestra instancia configurada, no el axios "crudo"
+import api from '@/services/axiosInstance' 
 
-// INTERFACES (Adaptadas a lo que devuelve el endpoint /recientes)
 interface ProduccionItem {
   id: number;
   fecha: string;
@@ -11,39 +10,34 @@ interface ProduccionItem {
   cantidad: number;
   kilos: number;
   operario: string;
-  estado: string; // El backend devuelve "Pendiente" o "Finalizada" como string
-  esFinalizada: boolean; // El backend devuelve true/false
-  
-  // Campos opcionales para lógica interna
-  lote?: string;
-  turno?: string;
+  estado: string;
+  esFinalizada: boolean;
 }
 
-// ESTADO
 const producciones = ref<ProduccionItem[]>([])
 const cargando = ref(false)
 const error = ref('')
 
-// MODAL
-const mostrarModalCierre = ref(false)
-const ordenSeleccionada = ref<ProduccionItem | null>(null)
-const listaMateriasPrimas = ref<any[]>([]) 
+// YA NO NECESITAMOS apiUrl NI getConfig() MANUALMENTE
+// api ya sabe la URL y ya tiene el token.
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
-
-// --- CARGAR DATOS (USANDO /RECIENTES) ---
 async function cargarHistorial() {
   cargando.value = true
   error.value = ''
+  
   try {
-    // 🔥 CAMBIO CLAVE: Usamos el endpoint simple que no falla por fechas
-    const res = await fetch(`${apiUrl}/Ordenes/recientes`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-    })
+    // 🔥 Petición limpia: solo la ruta final
+    const res = await api.get('/Ordenes/recientes')
     
-    if (!res.ok) throw new Error("Error al obtener datos")
-    
-    producciones.value = await res.json()
+    if (Array.isArray(res.data)) {
+        producciones.value = res.data.sort((a: any, b: any) => 
+            new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+        );
+    } else {
+        console.error("⚠️ La API devolvió HTML basura:", res.data);
+        error.value = "Error de conexión con el servidor.";
+    }
+
   } catch (e: any) {
     console.error("Error cargando historial:", e)
     error.value = "No se pudieron cargar las órdenes."
@@ -52,57 +46,62 @@ async function cargarHistorial() {
   }
 }
 
-// --- LOGICA DE FINALIZAR (CONFIRMACIÓN SIMPLE) ---
 async function confirmarOrdenRapida(item: ProduccionItem) {
-    if(!confirm(`¿Confirmar orden del producto ${item.producto}? Se sumarán ${item.kilos}kg al stock.`)) return;
+    if(!confirm(`¿Confirmar orden?`)) return;
 
     try {
-        const res = await fetch(`${apiUrl}/Ordenes/confirmar/${item.id}`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
+        // 🔥 Petición limpia
+        await api.post(`/Ordenes/confirmar/${item.id}`)
 
-        if(res.ok) {
-            // Actualizar localmente para feedback instantáneo
-            item.esFinalizada = true;
-            item.estado = "Finalizada";
-        } else {
-            const data = await res.json();
-            alert("Error: " + (data.mensaje || "No se pudo confirmar"));
-        }
-    } catch (e) {
-        alert("Error de conexión");
+        item.esFinalizada = true;
+        item.estado = "Finalizada";
+        alert("✅ Confirmado.");
+
+    } catch (e: any) {
+        const msg = e.response?.data?.mensaje || "Error de conexión";
+        alert("❌ Error: " + msg);
     }
 }
 
-// IMPRIMIR ETIQUETA
-const imprimirEtiqueta = (item: ProduccionItem) => {
+// --- IMPRIMIR ETIQUETA ---
+const imprimirEtiqueta = (item: any) => {
+    // Formateo de fecha para que se vea bonita en papel
+    const fechaLimpia = new Date(item.fecha).toLocaleDateString() + ' ' + new Date(item.fecha).toLocaleTimeString().slice(0,5);
+
     const ventana = window.open('', 'PRINT', 'height=600,width=800');
     if (ventana) {
         ventana.document.write(`
             <html>
             <head>
-                <title>Etiqueta ${item.id}</title>
+                <title>Lote #${item.id}</title>
                 <style>
-                    body { font-family: sans-serif; padding: 20px; text-align: center; border: 2px solid black; }
-                    h1 { font-size: 40px; margin-bottom: 10px; }
-                    .dato { font-size: 20px; margin: 10px 0; }
-                    .grande { font-size: 60px; font-weight: bold; margin: 20px 0; }
+                    body { font-family: 'Arial', sans-serif; padding: 40px; text-align: center; border: 4px solid black; margin: 20px; }
+                    h1 { font-size: 38px; margin-bottom: 5px; text-transform: uppercase; }
+                    .meta { font-size: 18px; color: #555; margin-bottom: 20px; }
+                    .kilos { font-size: 80px; font-weight: 900; margin: 30px 0; }
+                    .footer { font-size: 14px; margin-top: 50px; border-top: 1px dashed black; padding-top: 10px; }
                 </style>
             </head>
             <body>
                 <h1>${item.producto}</h1>
-                <div class="dato">Fecha: ${item.fecha}</div>
-                <div class="dato">Operario: ${item.operario}</div>
-                <hr>
-                <div class="grande">${item.kilos} Kg</div>
-                <div class="dato">Lote ID: ${item.id}</div>
+                <div class="meta">FECHA: ${fechaLimpia} | OP: ${item.operario}</div>
+                
+                <div class="kilos">${item.kilos} Kg</div>
+                
+                <div style="font-size: 24px; font-weight: bold;">LOTE ID: #${item.id}</div>
+                
+                <div class="footer">
+                    ESTRUPLAST S.A. - CONTROL DE PRODUCCIÓN
+                </div>
             </body>
             </html>
         `);
         ventana.document.close();
         ventana.focus();
-        setTimeout(() => { ventana.print(); ventana.close(); }, 500);
+        setTimeout(() => { 
+            ventana.print(); 
+            ventana.close(); 
+        }, 500);
     }
 };
 
@@ -110,7 +109,6 @@ onMounted(() => {
     cargarHistorial();
 })
 
-// Exponemos la función para que el Padre (Formulario) pueda recargar la tabla
 defineExpose({ cargarHistorial })
 </script>
 
@@ -118,13 +116,14 @@ defineExpose({ cargarHistorial })
   <div class="historial-wrapper">
     <div class="header-tabla">
         <h3>📋 Últimos Movimientos de Producción</h3>
-        <button @click="cargarHistorial" class="btn-refresh" title="Actualizar">🔄 Actualizar</button>
+        <button @click="cargarHistorial" class="btn-refresh" title="Actualizar" :disabled="cargando">
+            {{ cargando ? '⏳' : '🔄 Actualizar' }}
+        </button>
     </div>
 
-    <div v-if="cargando" class="loading">Cargando...</div>
-    <div v-else-if="error" class="error-msg">{{ error }}</div>
+    <div v-if="error" class="error-msg">{{ error }}</div>
 
-    <div v-else class="tabla-scroll">
+    <div class="tabla-scroll">
         <table class="tabla-custom">
             <thead>
                 <tr>
@@ -139,7 +138,8 @@ defineExpose({ cargarHistorial })
             </thead>
             <tbody>
                 <tr v-for="p in producciones" :key="p.id" :class="{'fila-ok': p.esFinalizada}">
-                    <td>{{ p.fecha }}</td>
+                    <td>{{ new Date(p.fecha).toLocaleDateString() }}</td>
+                    
                     <td class="td-prod">{{ p.producto }}</td>
                     <td style="text-align: center;">{{ p.cantidad }}</td>
                     <td style="text-align: right; font-weight: bold;">{{ p.kilos }}</td>
@@ -163,32 +163,33 @@ defineExpose({ cargarHistorial })
                         </button>
                     </td>
                 </tr>
-                <tr v-if="producciones.length === 0">
+                <tr v-if="producciones.length === 0 && !cargando">
                     <td colspan="7" class="vacio">No hay órdenes recientes.</td>
                 </tr>
             </tbody>
         </table>
+        <div v-if="cargando" class="loading-overlay">Cargando datos...</div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.historial-wrapper { background: white; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; height: 100%; display: flex; flex-direction: column; }
+.historial-wrapper { background: white; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; height: 100%; display: flex; flex-direction: column; position: relative; }
 
 .header-tabla { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 2px solid #f1c40f; padding-bottom: 5px; }
 .header-tabla h3 { margin: 0; color: #2c3e50; font-size: 1.1rem; }
 
 .btn-refresh { background: none; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 4px 8px; font-size: 0.9rem; transition: all 0.2s; }
-.btn-refresh:hover { background: #f9f9f9; color: #3498db; border-color: #3498db; }
+.btn-refresh:hover:not(:disabled) { background: #f9f9f9; color: #3498db; border-color: #3498db; }
 
-.tabla-scroll { overflow-y: auto; flex: 1; }
+.tabla-scroll { overflow-y: auto; flex: 1; position: relative; }
 .tabla-custom { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tabla-custom th { background: #2c3e50; color: white; padding: 8px; text-align: left; position: sticky; top: 0; z-index: 5; }
 .tabla-custom td { padding: 8px; border-bottom: 1px solid #eee; color: #333; }
 
 .td-prod { font-weight: 600; color: #2c3e50; }
-.fila-ok { background-color: #f8fff9; color: #888; }
-.fila-ok .td-prod { color: #888; }
+.fila-ok { background-color: #f8fff9; color: #888; } /* Verde muy suave para finalizadas */
+.fila-ok .td-prod { color: #888; text-decoration: line-through; } /* Tachamos visualmente las finalizadas */
 
 .badge-ok { background: #d4edda; color: #155724; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #c3e6cb; }
 .badge-pend { background: #fff3cd; color: #856404; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #ffeeba; }
@@ -200,6 +201,6 @@ defineExpose({ cargarHistorial })
 .btn-check:hover { background: #d4edda; }
 
 .vacio { text-align: center; padding: 20px; color: #aaa; font-style: italic; }
-.loading { text-align: center; padding: 20px; color: #3498db; }
-.error-msg { text-align: center; padding: 20px; color: #e74c3c; font-weight: bold; }
+.loading-overlay { position: absolute; top: 50px; left: 0; width: 100%; text-align: center; background: rgba(255,255,255,0.8); padding: 20px; color: #3498db; font-weight: bold; }
+.error-msg { text-align: center; padding: 10px; color: #e74c3c; font-weight: bold; font-size: 0.9rem; background: #fadbd8; margin-bottom: 10px; border-radius: 4px; }
 </style>

@@ -39,51 +39,58 @@ const productosFiltrados = computed(() => {
     let lista = listaProductos.value;
     const tab = tabActual.value;
 
+    // Helper interno para leer propiedad sin importar mayúsculas/minúsculas
+    const checkGenerico = (p: any) => !!(p.esGenerico || p.EsGenerico);
+    
+    // Helper para leer propiedad EsScrap (blindado)
+    const checkEsScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP');
+
     if (tab === 'MP') {
-        // Pestaña: Materias Primas de la Fábrica (Propiedad Nuestra)
-        // Excluye MP de Clientes y Excluye Scrap de Clientes
+        // Pestaña: MATERIAS PRIMAS (Vírgenes de Fábrica)
         lista = lista.filter(p => 
             (p.esMateriaPrima || p.EsMateriaPrima) && 
-            !esMpCliente(p) && 
-            !esScrap(p)
+            !esMpCliente(p) &&     // No mostrar MP de Clientes
+            !checkEsScrap(p) &&    // ⛔ NO MOSTRAR SCRAP AQUÍ (Ni propio ni ajeno)
+            
+            // Filtros Lógicos (Ocultar bases de sistema)
+            !checkGenerico(p) && 
+            !getNombre(p).includes('GENERICO') &&
+            !getNombre(p).includes('BASE') && 
+            p.id !== 90 
         );
     } 
     else if (tab === 'PT') {
-        // Pestaña: PT Fábrica (Excluye servicios FAZ)
+        // Pestaña: PRODUCTOS TERMINADOS (Fábrica)
+        // Aquí mostramos tus productos de venta (aunque sean genéricos)
         lista = lista.filter(p => 
             (p.esProductoTerminado || p.EsProductoTerminado) && 
-            !esServicioFazon(p)
+            !esServicioFazon(p) // Excluir servicios de inyección puro
         );
     } 
     else if (tab === 'CLI') {
         // --- PESTAÑA CLIENTES ---
 
-        // 1. Filtrar por Sub-Tab
         if (subTabCliente.value === 'MP_CLI') {
             // MODO: Materias Primas Vírgenes del Cliente
-            // Filtro: Debe ser MP Cliente y NO ser Scrap
-            lista = lista.filter(p => esMpCliente(p) && !esScrap(p));
+            lista = lista.filter(p => esMpCliente(p) && !checkEsScrap(p));
 
-            // Filtro Dropdown (Aplica porque tienen dueño específico)
             if (clienteFiltro.value) {
                 const idFiltro = Number(clienteFiltro.value);
                 lista = lista.filter(p => getClienteId(p) === idFiltro);
             }
-
         } 
         else if (subTabCliente.value === 'SCRAP_CLI') {
-            // 🔥 MODO: SCRAP / MOLIDO
-            lista = lista.filter(p => esScrap(p));
+            // MODO: Scrap / Molido / Recuperado
+            // Aquí SI mostramos todo lo que sea Scrap
+            lista = lista.filter(p => checkEsScrap(p));
 
-            // Filtro Dropdown (El scrap también tiene dueño)
             if (clienteFiltro.value) {
                 const idFiltro = Number(clienteFiltro.value);
                 lista = lista.filter(p => getClienteId(p) === idFiltro);
             }
         } 
         else {
-            // MODO: Servicios / Prod Terminados
-            // Filtro: Todo lo que tenga SKU "FAZ-..."
+            // MODO: Servicios Fazon
             lista = lista.filter(p => esServicioFazon(p));
         }
     }
@@ -110,21 +117,46 @@ const irAEditar = (id: number) => {
     router.push({ name: 'editar-producto', params: { id } });
 };
 
-// --- CARGA DE DATOS ---
+// --- CARGA DE DATOS BLINDADA ---
 onMounted(async () => {
     try {
         cargando.value = true;
+        
+        // Hacemos las peticiones
         const [resProd, resCli] = await Promise.all([
             axios.get(`${apiUrl}/Productos`, getAuthConfig()),
             axios.get(`${apiUrl}/Clientes`, getAuthConfig())
         ]);
-        
-        listaProductos.value = resProd.data.sort((a: any, b: any) => getNombre(a).localeCompare(getNombre(b)));
-        listaClientes.value = resCli.data;
+
+        // 🛡️ VALIDACIÓN DE SEGURIDAD PARA PRODUCTOS
+        if (Array.isArray(resProd.data)) {
+            // Si es un array real, ordenamos y asignamos
+            listaProductos.value = resProd.data.sort((a: any, b: any) => 
+                getNombre(a).localeCompare(getNombre(b))
+            );
+        } else {
+            // Si NO es un array (es HTML de error), avisamos y evitamos el crash
+            console.error("⚠️ ALERTA API PRODUCTOS: Se esperaba una lista [] pero llegó:", resProd.data);
+            listaProductos.value = []; // Dejamos la lista vacía para que no explote la tabla
+        }
+
+        // 🛡️ VALIDACIÓN DE SEGURIDAD PARA CLIENTES
+        if (Array.isArray(resCli.data)) {
+            listaClientes.value = resCli.data;
+        } else {
+            console.error("⚠️ ALERTA API CLIENTES: Se esperaba una lista [] pero llegó:", resCli.data);
+            listaClientes.value = [];
+        }
 
     } catch (e: any) {
-        error.value = "Error al cargar datos.";
-        console.error(e);
+        error.value = "Error de conexión con el servidor.";
+        console.error("❌ Error Crítico:", e);
+        
+        // Si el error es 401 (No autorizado), mandamos al login
+        if (e.response && e.response.status === 401) {
+            alert("Tu sesión ha expirado. Por favor ingresa nuevamente.");
+            // router.push('/login'); // Descomenta si tienes ruta de login
+        }
     } finally {
         cargando.value = false;
     }
