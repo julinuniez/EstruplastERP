@@ -20,25 +20,42 @@ namespace EstruplastERP.Api.Controllers
             _produccionService = produccionService;
         }
 
-        // --- 1. NUEVO: LISTA RÁPIDA PARA EL FRONTEND ---
         [HttpGet("recientes")]
         public async Task<ActionResult> GetOrdenesRecientes()
         {
             var lista = await _context.Ordenes
                 .Include(o => o.Producto)
                 .Include(o => o.Empleado)
+                .Include(o => o.Consumos).ThenInclude(c => c.MateriaPrima) 
                 .OrderByDescending(o => o.FechaCreacion)
-                .Take(50) // Traemos las últimas 50 para no saturar
+                .Take(50)
                 .Select(o => new
                 {
                     o.Id,
-                    Fecha = o.FechaCreacion.ToString("dd/MM HH:mm"), // Formato corto
+                    Fecha = o.FechaCreacion.ToString("dd/MM HH:mm"),
                     Producto = o.Producto != null ? o.Producto.Nombre : "Desconocido",
+
+                    ProductoId = o.ProductoId,
+                    ClienteId = o.ClienteId,
+                    EmpleadoId = o.EmpleadoId,
+                    Turno = o.Turno,
+                    Observacion = o.Observacion,
+
+                    o.Largo,
+                    o.Ancho,
+                    o.Espesor,
+
                     o.Cantidad,
                     Kilos = o.KilosEstimados,
                     Operario = o.Empleado != null ? o.Empleado.NombreCompleto : "-",
                     Estado = o.Estado.ToString(),
-                    EsFinalizada = o.Estado == EstadoOrden.Finalizada
+                    EsFinalizada = o.Estado == EstadoOrden.Finalizada,
+                    
+                    Consumos = o.Consumos.Select(c => new {
+                        MateriaPrimaId = c.MateriaPrimaId,
+                        NombreMateriaPrima = c.MateriaPrima.Nombre,
+                        CantidadKilos = c.CantidadKilos // Kilos reales consumidos
+                    }).ToList()
                 })
                 .ToListAsync();
 
@@ -129,6 +146,65 @@ namespace EstruplastERP.Api.Controllers
             catch (Exception ex)
             {
                 return BadRequest($"Error: {ex.Message}");
+            }
+        }
+
+
+        [HttpPost("cancelar/{id}")]
+        public async Task<IActionResult> CancelarOrden(int id)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // 1. Buscar la orden con sus consumos (LA FOTO EXACTA DE LO QUE SE GASTÓ)
+                var orden = await _context.Ordenes
+                    .Include(o => o.Consumos)
+                    .FirstOrDefaultAsync(o => o.Id == id);
+
+                if (orden == null) return NotFound("Orden no encontrada.");
+
+                // Solo permitimos cancelar si está Pendiente o EnProceso
+                if (orden.Estado == EstadoOrden.Finalizada || orden.Estado == EstadoOrden.Cancelada)
+                    return BadRequest("No se puede cancelar una orden finalizada o ya cancelada.");
+
+                // 2. Devolver Materias Primas al Inventario
+                foreach (var consumo in orden.Consumos)
+                {
+                    var materiaPrima = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
+
+                    if (materiaPrima != null)
+                    {
+                        // A. Devolvemos el stock
+                        materiaPrima.StockActual += consumo.CantidadKilos;
+
+                        // B. Dejamos registro en el Kardex (Entrada por cancelación)
+                        _context.Movimientos.Add(new Movimiento
+                        {
+                            Fecha = DateTime.Now,
+                            ProductoId = materiaPrima.Id,
+                            Cantidad = consumo.CantidadKilos, // Positivo = Entrada
+                            TipoMovimiento = "DEVOLUCION", // O "CANCELACION_ORDEN"
+                            Observacion = $"Cancelación Orden #{orden.Id}",
+                            EmpleadoId = orden.EmpleadoId,
+                            Turno = orden.Turno,
+                            ClienteId = orden.ClienteId
+                        });
+                    }
+                }
+
+                // 3. Marcar orden como cancelada
+                orden.Estado = EstadoOrden.Cancelada;
+                orden.FechaFin = DateTime.Now; // Fecha de cancelación
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { mensaje = "Orden cancelada y stock devuelto al inventario." });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, $"Error al cancelar: {ex.Message}");
             }
         }
     }

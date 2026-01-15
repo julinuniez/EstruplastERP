@@ -6,6 +6,9 @@
         public int? ClienteId { get; set; }
         public int EmpleadoId { get; set; }
         public int Cantidad { get; set; }
+        public decimal Largo { get; set; }
+        public decimal Ancho { get; set; }
+        public decimal Espesor { get; set; }
         public decimal Kilos { get; set; }
         public string? Turno { get; set; }
         public string? Observacion { get; set; }

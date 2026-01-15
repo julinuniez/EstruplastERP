@@ -14,51 +14,34 @@ namespace EstruplastERP.Api.Services
             _context = context;
         }
 
-        // ==============================================================================
-        // MÉTODO PRIVADO: APLICA LA SUSTITUCIÓN DE FAZÓN (MAQUILA)
-        // ==============================================================================
-        // Recibe la lista de consumos teóricos y devuelve la lista con los materiales reales del cliente.
-        // NOTA: Si DetalleConsumoDto está anidada dentro de NuevaOrdenDto, cambia el tipo a:
-        // NuevaOrdenDto.DetalleConsumoDto
+        // --- LÓGICA DE SUSTITUCIÓN (Intacta) ---
         private async Task<List<DetalleConsumoDto>> AplicarSustitucionFazon(int clienteId, List<DetalleConsumoDto> consumosOriginales)
         {
-            // 1. Buscamos las reglas de mapeo para este cliente en la BD
             var reglas = await _context.ClientesMaterialesFazon
                 .Where(c => c.ClienteId == clienteId)
                 .ToListAsync();
 
-            // Si el cliente no tiene reglas especiales, devolvemos la lista tal cual
             if (!reglas.Any()) return consumosOriginales;
 
             var consumosFinales = new List<DetalleConsumoDto>();
 
             foreach (var item in consumosOriginales)
             {
-                // ¿El material de este item (ej: 990) tiene un reemplazo configurado?
                 var regla = reglas.FirstOrDefault(r => r.MaterialGenericoId == item.MateriaPrimaId);
-
                 consumosFinales.Add(new DetalleConsumoDto
                 {
-                    // SI HAY REGLA: Usamos el ID del material real (ej: 5000)
-                    // SI NO: Mantenemos el original
                     MateriaPrimaId = regla != null ? regla.MaterialRealId : item.MateriaPrimaId,
-
-                    // Copiamos la cantidad igual
                     CantidadKilos = item.CantidadKilos
                 });
             }
-
             return consumosFinales;
         }
 
-        // ==============================================================================
-        // VERIFICACIÓN DE STOCK (MODIFICADO)
-        // ==============================================================================
+        // --- VERIFICACIÓN DE STOCK (Intacta) ---
         public async Task<object> VerificarStock(NuevaOrdenDto request)
         {
             List<DetalleConsumoDto> itemsParaVerificar = new List<DetalleConsumoDto>();
 
-            // 1. Obtener consumos (del front o de la receta)
             if (request.Consumos != null && request.Consumos.Any())
             {
                 itemsParaVerificar = request.Consumos;
@@ -79,42 +62,31 @@ namespace EstruplastERP.Api.Services
                 }).ToList();
             }
 
-            // 2. APLICAR SUSTITUCIÓN DE FAZÓN (Si hay cliente)
             if (request.ClienteId.GetValueOrDefault() > 0)
             {
                 itemsParaVerificar = await AplicarSustitucionFazon(request.ClienteId.Value, itemsParaVerificar);
             }
 
-            // 3. Verificar Stock de los IDs resultantes (ya sustituidos)
             var ids = itemsParaVerificar.Select(i => i.MateriaPrimaId).Distinct().ToList();
-            var inventario = await _context.Productos
-                .Where(p => ids.Contains(p.Id))
-                .ToListAsync();
+            var inventario = await _context.Productos.Where(p => ids.Contains(p.Id)).ToListAsync();
 
             foreach (var item in itemsParaVerificar)
             {
                 var mp = inventario.FirstOrDefault(p => p.Id == item.MateriaPrimaId);
-
-                if (mp == null)
-                    return new { posible = false, mensaje = $"❌ Error: Insumo ID {item.MateriaPrimaId} no existe." };
+                if (mp == null) return new { posible = false, mensaje = $"❌ Error: Insumo ID {item.MateriaPrimaId} no existe." };
 
                 bool esGenerico = mp.Id >= 990 && mp.Id <= 999;
 
                 if (!esGenerico && mp.StockActual < item.CantidadKilos)
                 {
-                    return new
-                    {
-                        posible = false,
-                        mensaje = $"❌ Falta {mp.Nombre}. Req: {item.CantidadKilos:N2} - Hay: {mp.StockActual:N2}"
-                    };
+                    return new { posible = false, mensaje = $"❌ Falta {mp.Nombre}. Req: {item.CantidadKilos:N2} - Hay: {mp.StockActual:N2}" };
                 }
             }
-
             return new { posible = true, mensaje = "✅ Stock Disponible." };
         }
 
         // ==============================================================================
-        // REGISTRO DE ORDEN (MODIFICADO)
+        // REGISTRO DE ORDEN (CORREGIDO PARA GUARDAR MEDIDAS)
         // ==============================================================================
         public async Task<OrdenProduccion> RegistrarOrden(NuevaOrdenDto request)
         {
@@ -135,6 +107,12 @@ namespace EstruplastERP.Api.Services
                     Turno = request.Turno,
                     Observacion = request.Observacion,
                     Estado = EstadoOrden.Pendiente,
+
+                    // 🔥 GUARDAMOS LAS MEDIDAS HISTÓRICAS AQUÍ
+                    Largo = request.Largo,
+                    Ancho = request.Ancho,
+                    Espesor = request.Espesor,
+
                     Consumos = new List<ConsumoOrden>()
                 };
 
@@ -151,7 +129,7 @@ namespace EstruplastERP.Api.Services
                     }).ToList();
                 }
 
-                // APLICAR SUSTITUCIÓN ANTES DE DESCONTAR
+                // APLICAR SUSTITUCIÓN
                 if (request.ClienteId.GetValueOrDefault() > 0)
                 {
                     consumosCalculados = await AplicarSustitucionFazon(request.ClienteId.Value, consumosCalculados);
@@ -192,6 +170,7 @@ namespace EstruplastERP.Api.Services
                 _context.Ordenes.Add(nuevaOrden);
                 await _context.SaveChangesAsync();
 
+                // Actualizar ID en movimientos
                 var movsRecientes = _context.Movimientos.Local.Where(m => m.Observacion == "Orden Producción (Pendiente)");
                 foreach (var m in movsRecientes) m.Observacion = $"Orden #{nuevaOrden.Id}";
 
@@ -207,21 +186,12 @@ namespace EstruplastERP.Api.Services
             }
         }
 
+        // --- LÓGICA VISUAL (Intacta) ---
         public async Task<List<ItemFormulaVisualDto>> ObtenerRecetaProyectada(int productoId, int clienteId, decimal kilosAProducir)
         {
-            // 1. Buscamos el PRODUCTO TERMINADO (Para saber qué estamos fabricando)
             var productoTerminado = await _context.Productos.FindAsync(productoId);
-
-            // 2. Buscamos la receta
-            var recetaDb = await _context.Formulas
-                .Include(f => f.MateriaPrima)
-                .Where(f => f.ProductoTerminadoId == productoId)
-                .ToListAsync();
-
-            // 3. Traemos materiales del cliente
-            var materialesCliente = await _context.Productos
-                .Where(p => p.ClienteId == clienteId && p.EsMateriaPrima && p.FamiliaId != null)
-                .ToListAsync();
+            var recetaDb = await _context.Formulas.Include(f => f.MateriaPrima).Where(f => f.ProductoTerminadoId == productoId).ToListAsync();
+            var materialesCliente = await _context.Productos.Where(p => p.ClienteId == clienteId && p.EsMateriaPrima && p.FamiliaId != null).ToListAsync();
 
             var listaVisual = new List<ItemFormulaVisualDto>();
 
@@ -233,6 +203,8 @@ namespace EstruplastERP.Api.Services
                 int familiaBuscada = itemReceta.MateriaPrima.FamiliaId ?? 0;
 
                 string nombrePT = productoTerminado.Nombre.ToUpper();
+
+                // Lógica de mapeo de familias (Tu lógica original)
                 if (familiaBuscada == 10)
                 {
                     if (nombrePT.Contains("FINO")) familiaBuscada = 11;
@@ -240,7 +212,6 @@ namespace EstruplastERP.Api.Services
                     else if (nombrePT.Contains("BICAPA")) familiaBuscada = 13;
                     else if (nombrePT.Contains("TRICAPA")) familiaBuscada = 14;
                 }
-                // --- Reglas para ABS (Base 20) ---
                 else if (familiaBuscada == 20)
                 {
                     if (nombrePT.Contains("GRUESO")) familiaBuscada = 21;
@@ -251,6 +222,7 @@ namespace EstruplastERP.Api.Services
                     else if (nombrePT.Contains("GRUESO")) familiaBuscada = 32;
                     else if (nombrePT.Contains("BICAPA")) familiaBuscada = 41;
                 }
+
                 var sustituto = materialesCliente.FirstOrDefault(m => m.FamiliaId == familiaBuscada);
 
                 if (sustituto != null)

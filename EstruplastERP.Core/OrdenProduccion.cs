@@ -18,8 +18,17 @@ namespace EstruplastERP.Core
             public Producto Producto { get; set; }
             public decimal Cantidad { get; set; }
 
-            // --- NUEVOS CAMPOS (Estos son los que te faltan) ---
-            public int? ClienteId { get; set; }
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Largo { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Ancho { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Espesor { get; set; }
+
+        // --- NUEVOS CAMPOS (Estos son los que te faltan) ---
+        public int? ClienteId { get; set; }
         [ForeignKey("ClienteId")]
         public Cliente? Cliente { get; set; }
         public int? EmpleadoId { get; set; } // Puede ser nulo si nadie la tomó aún

@@ -15,10 +15,9 @@ const ID_CAUCHO = 1076;
 const ID_CARGA = 1077;      
 const ID_MASTERBATCH_GENERICO = 90;
 
-// 🔥 CAMBIO AQUÍ: Definimos el porcentaje fijo que pediste
 const PORC_ESTEARATO = 0.08; 
 
-// --- 2. INTERFACES (Tipado fuerte) ---
+// --- 2. INTERFACES ---
 interface Producto {
     id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean;
     esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; rubro?: string;
@@ -34,7 +33,7 @@ interface ItemReceta {
     esFazonInput?: boolean; materialBase?: string;
 }
 
-// --- 3. ESTADO REACTIVO (Variables) ---
+// --- 3. ESTADO REACTIVO ---
 const loading = ref(false);
 const productos = ref<Producto[]>([])
 const listaInventarioCompleto = ref<any[]>([])
@@ -73,7 +72,7 @@ const form = ref({
     merma: 8, kilosTotales: 0
 })
 
-// --- 💾 AUTO-GUARDADO (Memoria) ---
+// --- 💾 AUTO-GUARDADO ---
 const STORAGE_KEY = 'produccion_borrador';
 
 watch(
@@ -93,7 +92,7 @@ const limpiarBorrador = () => {
     localStorage.removeItem(STORAGE_KEY);
 };
 
-// --- 4. PROPIEDADES COMPUTADAS (Lógica de Negocio) ---
+// --- 4. PROPIEDADES COMPUTADAS ---
 
 const productoSeleccionado = computed(() => productos.value.find(p => p.id === Number(form.value.productoTerminadoId)) || null);
 const empleadoSeleccionado = computed(() => empleados.value.find(e => e.id === Number(form.value.empleadoId)) || null);
@@ -101,10 +100,9 @@ const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Num
 
 const medidasBloqueadas = computed(() => !productoSeleccionado.value || !productoSeleccionado.value.esGenerico);
 
-// Valida si el espesor está dentro del rango permitido
 const espesorValido = computed(() => {
     const e = Number(form.value.espesor);
-    if (e <= 0) return true; // Si es 0 se valida en otro lado
+    if (e <= 0) return true;
     if (limiteMinimo.value > 0 && e < limiteMinimo.value) return false;
     if (limiteMaximo.value > 0 && e > limiteMaximo.value) return false;
     return true;
@@ -206,14 +204,22 @@ const esClienteFazon = computed(() => {
 
 const hayBloqueoDeStock = computed(() => insumosSinStock.value.length > 0);
 
+// 🔥 COLOR: Prioriza Texto Manual
 const colorFinalParaPDF = computed(() => {
-    if (!form.value.esProductoColor) return form.value.colorTexto || '-';
-    if (!form.value.masterbatchId) return 'A DEFINIR';
-    const mb = listaMasterbatches.value.find(m => m.id === form.value.masterbatchId);
-    return mb ? (mb.nombre.split(' ').length > 1 ? mb.nombre.split(' ').slice(1).join(' ') : mb.nombre) : '-';
+    // 1. Si escribió algo a mano, eso manda
+    if (form.value.colorTexto && form.value.colorTexto.trim() !== '') {
+        return form.value.colorTexto.toUpperCase();
+    }
+    // 2. Si no, busca el masterbatch
+    if (form.value.esProductoColor && form.value.masterbatchId) {
+        const mb = listaMasterbatches.value.find(m => m.id === form.value.masterbatchId);
+        return mb ? (mb.nombre.split(' ').length > 1 ? mb.nombre.split(' ').slice(1).join(' ') : mb.nombre) : 'A DEFINIR';
+    }
+    // 3. Fallback
+    return '-';
 });
 
-// --- 5. MÉTODOS: LÓGICA DE RECETA Y FAZON ---
+// --- 5. MÉTODOS ---
 
 function balancearBase() {
     if (recetaDinamica.value.length === 0) return;
@@ -264,7 +270,7 @@ function recalcularFormulaAutomatica() {
 
     if (form.value.conBrillo) add('BRILLO', form.value.porcBrillo, 'esBrillo', ID_BRILLO);
     
-    // 🔥 AQUÍ USAMOS EL NUEVO PORCENTAJE FIJO 0.01%
+    // Porcentaje Fijo Estearato
     if (form.value.conEstearato) add('ESTEARATO', PORC_ESTEARATO, 'esEstearato', ID_ESTEARATO);
     
     if (form.value.aditivoUV) add('UV', form.value.porcentajeUv, 'esUv', ID_UV);
@@ -352,7 +358,7 @@ function agregarInsumoDesdeHijo(item: { id: number, porcentaje: number }) {
     }
 }
 
-// --- 6. MÉTODOS: LLAMADAS API ---
+// --- 6. API ---
 
 async function CargarProductosFiltrados(clienteId: number | string = '') {
     try {
@@ -448,10 +454,7 @@ async function registrarProduccion() {
     error.value = '';
 
     if (!form.value.empleadoId) return error.value = "Faltan datos de operario.";
-    
-    if (!espesorValido.value) {
-        return error.value = `⛔ ERROR DE CALIDAD: El espesor debe estar entre ${limiteMinimo.value} y ${limiteMaximo.value} mm (Producto FINO/GRUESO).`;
-    }
+    if (!espesorValido.value) return error.value = `⛔ ERROR DE CALIDAD: El espesor debe estar entre ${limiteMinimo.value} y ${limiteMaximo.value} mm.`;
 
     const pesoNetoGeometrico = kilosCalculados.value;
     if (pesoNetoGeometrico <= 0) return error.value = "El peso calculado es 0. Revise las medidas.";
@@ -476,6 +479,7 @@ async function registrarProduccion() {
 
     try {
         loading.value = true;
+        // 🔥 AGREGAMOS MEDIDAS AL POST
         await api.post('/Ordenes', {
             productoTerminadoId: Number(form.value.productoTerminadoId),
             clienteId: form.value.clienteId ? Number(form.value.clienteId) : null,
@@ -484,6 +488,9 @@ async function registrarProduccion() {
             turno: form.value.turno,
             observacion: (form.value.observacion || '') + ` | Geo: ${pesoNetoGeometrico}kg | Merma: ${porcentajeMerma}%`,
             kilos: Number(pesoBrutoExacto.toFixed(3)),
+            largo: Number(form.value.largo),
+            ancho: Number(form.value.ancho),
+            espesor: Number(form.value.espesor),
             consumos: consumosReales
         });
 
@@ -501,6 +508,70 @@ async function registrarProduccion() {
         loading.value = false;
     }
 }
+
+// 🔥 NUEVA FUNCIÓN: Reimprimir desde historial
+const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'carga' }) => {
+    const { orden, tipo } = payload;
+    if (!confirm(`¿Reimprimir ${tipo.toUpperCase()} de la Orden #${orden.id}?`)) return;
+
+    try {
+        loading.value = true;
+        
+        // 1. Cargar datos básicos
+        form.value.turno = orden.turno || 'Mañana';
+        form.value.observacion = orden.observacion || '';
+        form.value.cantidad = orden.cantidad;
+        form.value.kilosTotales = orden.kilos;
+        
+        // 2. IDs
+        form.value.clienteId = orden.clienteId;
+        form.value.empleadoId = orden.empleadoId;
+        form.value.productoTerminadoId = orden.productoId; 
+
+        // 3. Receta
+        if (orden.consumos && Array.isArray(orden.consumos)) {
+            recetaDinamica.value = orden.consumos.map((c: any) => {
+                const mpOriginal = listaTodasMateriasPrimas.value.find((m: any) => m.id === c.materiaPrimaId);
+                const esEstearato = c.materiaPrimaId === ID_ESTEARATO;
+                const esColor = c.materiaPrimaId === ID_MASTERBATCH_GENERICO || 
+                                (c.nombreMateriaPrima && c.nombreMateriaPrima.toUpperCase().includes('MASTER'));
+                
+                // Calculo aprox porcentaje
+                const porcentajeCalc = c.cantidadKilos ? ((c.cantidadKilos / orden.kilos) * 100).toFixed(2) : 0;
+
+                return {
+                    id: Date.now() + Math.random(),
+                    materiaPrimaId: c.materiaPrimaId,
+                    nombreInsumo: c.nombreMateriaPrima || mpOriginal?.nombre || 'Insumo Histórico',
+                    cantidad: porcentajeCalc, 
+                    densidad: mpOriginal ? mpOriginal.pesoEspecifico : 1,
+                    esEstearato: esEstearato,
+                    esColor: esColor,
+                    esBase: false 
+                };
+            });
+        }
+
+        // 4. Esperar Watchers y Sobrescribir Medidas
+        setTimeout(async () => {
+            if (orden.largo) form.value.largo = orden.largo;
+            if (orden.ancho) form.value.ancho = orden.ancho;
+            if (orden.espesor) form.value.espesor = orden.espesor;
+            
+            await nextTick();
+            await new Promise(r => setTimeout(r, 200)); // Render delay
+            await generarPDF(tipo);
+            
+            mensaje.value = `✅ Reimpresión Orden #${orden.id} generada.`;
+            loading.value = false;
+        }, 600);
+
+    } catch (e) {
+        console.error(e);
+        error.value = "Error recuperando historial.";
+        loading.value = false;
+    }
+};
 
 async function generarPDF(tipo: 'orden' | 'carga') {
     ocultarFormula.value = (tipo === 'orden');
@@ -650,6 +721,18 @@ onMounted(async () => {
                     </select>
                 </div>
 
+                <div class="fila-input" style="margin-top: 5px;">
+                    <div style="flex:1">
+                        <label style="color:#3498db;">✏️ Texto Color (Opcional):</label>
+                        <input 
+                            type="text" 
+                            v-model="form.colorTexto" 
+                            placeholder="Ej: AZUL PANTONE..."
+                            style="font-weight:bold; color:#2980b9;"
+                        >
+                    </div>
+                </div>
+
                 <label class="lbl-sep">
                     Medidas: <span v-if="medidasBloqueadas" style="color:#e74c3c">(FIJAS)</span><span v-else style="color:#2ecc71">(EDITABLES)</span>
                 </label>
@@ -720,7 +803,7 @@ onMounted(async () => {
     </div>
 
     <div class="bloque-inferior">
-        <ListaProduccion ref="listaProduccionRef" />
+        <ListaProduccion ref="listaProduccionRef" @imprimir-historial="imprimirDesdeHistorial" />
     </div>
 
   </div>

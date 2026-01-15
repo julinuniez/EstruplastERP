@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-// 🔥 IMPORTANTE: Importamos nuestra instancia configurada, no el axios "crudo"
+import { ref, onMounted, computed } from 'vue'
 import api from '@/services/axiosInstance' 
+
+const emit = defineEmits(['imprimir-historial']);
 
 interface ProduccionItem {
   id: number;
@@ -12,26 +13,68 @@ interface ProduccionItem {
   operario: string;
   estado: string;
   esFinalizada: boolean;
+  
+  largo?: number;
+  ancho?: number;
+  espesor?: number;
+  consumos?: any[];
+  productoId?: number;
+  clienteId?: number;
+  empleadoId?: number;
+  turno?: string;
+  observacion?: string;
 }
 
 const producciones = ref<ProduccionItem[]>([])
 const cargando = ref(false)
 const error = ref('')
 
-// YA NO NECESITAMOS apiUrl NI getConfig() MANUALMENTE
-// api ya sabe la URL y ya tiene el token.
+// --- VARIABLES DE FILTRO ---
+const filtroEstado = ref('Todos');
+const filtroFecha = ref(''); // YYYY-MM-DD
+
+// --- COMPUTED PARA FILTRAR ---
+const produccionesFiltradas = computed(() => {
+    return producciones.value.filter(item => {
+        // 1. Filtro por Estado
+        let pasaEstado = true;
+        if (filtroEstado.value === 'Pendientes') pasaEstado = !item.esFinalizada && item.estado !== 'Cancelada';
+        else if (filtroEstado.value === 'Finalizadas') pasaEstado = item.esFinalizada;
+        else if (filtroEstado.value === 'Canceladas') pasaEstado = item.estado === 'Cancelada';
+
+        // 2. Filtro por Fecha
+        let pasaFecha = true;
+        if (filtroFecha.value) {
+            // Convertimos la fecha del item (DD/MM HH:mm) a comparable o usamos substring simple si coincide el formato visual
+            // Como tu backend devuelve "dd/MM HH:mm", la comparación directa es difícil.
+            // Lo ideal sería que el backend devuelva la fecha ISO en otro campo, pero trabajaremos con lo que hay.
+            // Asumiremos que el filtro busca coincidencia de texto parcial o parseamos.
+            
+            // Opción robusta: Parsear la fecha del item (asumiendo año actual si no viene)
+            // O mejor: Usar string includes para simplicidad si el formato visual coincide
+            // Pero como el input date es YYYY-MM-DD y tu tabla es DD/MM... hay que convertir.
+            
+            const [year, month, day] = filtroFecha.value.split('-');
+            const fechaBuscada = `${day}/${month}`; // "15/01"
+            
+            pasaFecha = item.fecha.startsWith(fechaBuscada);
+        }
+
+        return pasaEstado && pasaFecha;
+    });
+});
 
 async function cargarHistorial() {
   cargando.value = true
   error.value = ''
   
   try {
-    // 🔥 Petición limpia: solo la ruta final
     const res = await api.get('/Ordenes/recientes')
     
     if (Array.isArray(res.data)) {
         producciones.value = res.data.sort((a: any, b: any) => 
-            new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+            // Truco para ordenar por fecha string DD/MM HH:mm asumiendo año actual o comparando IDs que es más seguro
+            b.id - a.id 
         );
     } else {
         console.error("⚠️ La API devolvió HTML basura:", res.data);
@@ -47,10 +90,9 @@ async function cargarHistorial() {
 }
 
 async function confirmarOrdenRapida(item: ProduccionItem) {
-    if(!confirm(`¿Confirmar orden?`)) return;
+    if(!confirm(`¿Confirmar orden #${item.id}? Se sumará al stock.`)) return;
 
     try {
-        // 🔥 Petición limpia
         await api.post(`/Ordenes/confirmar/${item.id}`)
 
         item.esFinalizada = true;
@@ -63,11 +105,29 @@ async function confirmarOrdenRapida(item: ProduccionItem) {
     }
 }
 
-// --- IMPRIMIR ETIQUETA ---
-const imprimirEtiqueta = (item: any) => {
-    // Formateo de fecha para que se vea bonita en papel
-    const fechaLimpia = new Date(item.fecha).toLocaleDateString() + ' ' + new Date(item.fecha).toLocaleTimeString().slice(0,5);
+async function cancelarOrden(item: ProduccionItem) {
+    if (!confirm(`⚠️ ¿Estás seguro de CANCELAR la Orden #${item.id}?\n\nSe devolverán los materiales al stock.`)) return;
 
+    try {
+        await api.post(`/Ordenes/cancelar/${item.id}`);
+        
+        item.estado = "Cancelada";
+        
+        await cargarHistorial();
+        
+        alert("✅ Orden cancelada correctamente.");
+    } catch (e: any) {
+        const msg = e.response?.data || "Error al cancelar";
+        alert("❌ " + msg);
+    }
+}
+
+const solicitarImpresion = (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
+    emit('imprimir-historial', { orden, tipo });
+};
+
+const imprimirEtiqueta = (item: any) => {
+    const fechaLimpia = new Date().toLocaleDateString();
     const ventana = window.open('', 'PRINT', 'height=600,width=800');
     if (ventana) {
         ventana.document.write(`
@@ -75,24 +135,18 @@ const imprimirEtiqueta = (item: any) => {
             <head>
                 <title>Lote #${item.id}</title>
                 <style>
-                    body { font-family: 'Arial', sans-serif; padding: 40px; text-align: center; border: 4px solid black; margin: 20px; }
-                    h1 { font-size: 38px; margin-bottom: 5px; text-transform: uppercase; }
-                    .meta { font-size: 18px; color: #555; margin-bottom: 20px; }
-                    .kilos { font-size: 80px; font-weight: 900; margin: 30px 0; }
-                    .footer { font-size: 14px; margin-top: 50px; border-top: 1px dashed black; padding-top: 10px; }
+                    body { font-family: 'Arial', sans-serif; padding: 20px; text-align: center; border: 4px solid black; margin: 10px; }
+                    h1 { font-size: 32px; margin-bottom: 5px; text-transform: uppercase; }
+                    .meta { font-size: 16px; color: #555; margin-bottom: 20px; }
+                    .kilos { font-size: 70px; font-weight: 900; margin: 20px 0; }
+                    .footer { font-size: 12px; margin-top: 40px; border-top: 1px dashed black; padding-top: 10px; }
                 </style>
             </head>
             <body>
                 <h1>${item.producto}</h1>
-                <div class="meta">FECHA: ${fechaLimpia} | OP: ${item.operario}</div>
-                
+                <div class="meta">LOTE: #${item.id} | OP: ${item.operario}</div>
                 <div class="kilos">${item.kilos} Kg</div>
-                
-                <div style="font-size: 24px; font-weight: bold;">LOTE ID: #${item.id}</div>
-                
-                <div class="footer">
-                    ESTRUPLAST S.A. - CONTROL DE PRODUCCIÓN
-                </div>
+                <div class="footer">ESTRUPLAST S.A. - CONTROL DE PRODUCCIÓN</div>
             </body>
             </html>
         `);
@@ -115,10 +169,22 @@ defineExpose({ cargarHistorial })
 <template>
   <div class="historial-wrapper">
     <div class="header-tabla">
-        <h3>📋 Últimos Movimientos de Producción</h3>
-        <button @click="cargarHistorial" class="btn-refresh" title="Actualizar" :disabled="cargando">
-            {{ cargando ? '⏳' : '🔄 Actualizar' }}
-        </button>
+        <h3>📋 Últimos Movimientos</h3>
+        
+        <div class="filtros-container">
+            <select v-model="filtroEstado" class="input-filtro">
+                <option value="Todos">Todos</option>
+                <option value="Pendientes">Pendientes</option>
+                <option value="Finalizadas">Finalizadas</option>
+                <option value="Canceladas">Canceladas</option>
+            </select>
+            
+            <input type="date" v-model="filtroFecha" class="input-filtro" title="Filtrar por fecha">
+            
+            <button @click="cargarHistorial" class="btn-refresh" :disabled="cargando" title="Recargar datos">
+                {{ cargando ? '⏳' : '🔄' }}
+            </button>
+        </div>
     </div>
 
     <div v-if="error" class="error-msg">{{ error }}</div>
@@ -137,34 +203,61 @@ defineExpose({ cargarHistorial })
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="p in producciones" :key="p.id" :class="{'fila-ok': p.esFinalizada}">
-                    <td>{{ new Date(p.fecha).toLocaleDateString() }}</td>
+                <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-ok': p.esFinalizada, 'fila-cancel': p.estado === 'Cancelada'}">
+                    <td>{{ p.fecha }}</td>
                     
                     <td class="td-prod">{{ p.producto }}</td>
                     <td style="text-align: center;">{{ p.cantidad }}</td>
                     <td style="text-align: right; font-weight: bold;">{{ p.kilos }}</td>
                     <td>{{ p.operario }}</td>
                     <td>
-                        <span :class="p.esFinalizada ? 'badge-ok' : 'badge-pend'">
-                            {{ p.esFinalizada ? 'FINALIZADA' : 'PENDIENTE' }}
+                        <span :class="{
+                            'badge-ok': p.esFinalizada, 
+                            'badge-pend': !p.esFinalizada && p.estado !== 'Cancelada',
+                            'badge-cancel': p.estado === 'Cancelada'
+                        }">
+                            {{ p.estado === 'Cancelada' ? 'CANCELADA' : (p.esFinalizada ? 'FINALIZADA' : 'PENDIENTE') }}
                         </span>
                     </td>
                     <td class="td-acciones">
-                        <button 
-                            v-if="!p.esFinalizada" 
-                            @click="confirmarOrdenRapida(p)" 
-                            class="btn-action btn-check" 
-                            title="Confirmar Producción y Stock">
-                            ✅
-                        </button>
                         
-                        <button @click="imprimirEtiqueta(p)" class="btn-action btn-print" title="Imprimir Etiqueta">
+                        <template v-if="!p.esFinalizada && p.estado !== 'Cancelada'">
+                            <button 
+                                @click="confirmarOrdenRapida(p)" 
+                                class="btn-action btn-check" 
+                                title="Confirmar">
+                                ✅
+                            </button>
+
+                            <button 
+                                @click="solicitarImpresion(p, 'orden')" 
+                                class="btn-action btn-orden" 
+                                title="Orden">
+                                📄
+                            </button>
+                            <button 
+                                @click="solicitarImpresion(p, 'carga')" 
+                                class="btn-action btn-carga" 
+                                title="Carga">
+                                🧪
+                            </button>
+
+                            <button 
+                                @click="cancelarOrden(p)" 
+                                class="btn-action btn-cancel" 
+                                title="Cancelar Orden"
+                                style="color:red; border-color: #ffcccc;">
+                                ❌
+                            </button>
+                        </template>
+                        
+                        <button @click="imprimirEtiqueta(p)" class="btn-action btn-print" title="Etiqueta">
                             🖨️
                         </button>
                     </td>
                 </tr>
-                <tr v-if="producciones.length === 0 && !cargando">
-                    <td colspan="7" class="vacio">No hay órdenes recientes.</td>
+                <tr v-if="produccionesFiltradas.length === 0 && !cargando">
+                    <td colspan="7" class="vacio">No hay órdenes que coincidan con los filtros.</td>
                 </tr>
             </tbody>
         </table>
@@ -175,32 +268,40 @@ defineExpose({ cargarHistorial })
 
 <style scoped>
 .historial-wrapper { background: white; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; height: 100%; display: flex; flex-direction: column; position: relative; }
-
-.header-tabla { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 2px solid #f1c40f; padding-bottom: 5px; }
+.header-tabla { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 2px solid #f1c40f; padding-bottom: 5px; flex-wrap: wrap; gap: 10px; }
 .header-tabla h3 { margin: 0; color: #2c3e50; font-size: 1.1rem; }
 
-.btn-refresh { background: none; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 4px 8px; font-size: 0.9rem; transition: all 0.2s; }
-.btn-refresh:hover:not(:disabled) { background: #f9f9f9; color: #3498db; border-color: #3498db; }
+/* NUEVOS ESTILOS PARA FILTROS */
+.filtros-container { display: flex; gap: 8px; align-items: center; }
+.input-filtro { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; color: #555; outline: none; }
+.input-filtro:focus { border-color: #3498db; }
 
-.tabla-scroll { overflow-y: auto; flex: 1; position: relative; }
+.btn-refresh { background: none; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 4px 10px; font-size: 1rem; }
+.tabla-scroll { overflow-y: auto; flex: 1; }
 .tabla-custom { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tabla-custom th { background: #2c3e50; color: white; padding: 8px; text-align: left; position: sticky; top: 0; z-index: 5; }
 .tabla-custom td { padding: 8px; border-bottom: 1px solid #eee; color: #333; }
-
 .td-prod { font-weight: 600; color: #2c3e50; }
-.fila-ok { background-color: #f8fff9; color: #888; } /* Verde muy suave para finalizadas */
-.fila-ok .td-prod { color: #888; text-decoration: line-through; } /* Tachamos visualmente las finalizadas */
+
+.fila-ok { background-color: #f8fff9; color: #888; }
+.fila-ok .td-prod { text-decoration: line-through; } 
+
+.fila-cancel { background-color: #fff5f5; color: #999; }
+.fila-cancel .td-prod { text-decoration: line-through; color: #c0392b; }
 
 .badge-ok { background: #d4edda; color: #155724; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #c3e6cb; }
 .badge-pend { background: #fff3cd; color: #856404; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #ffeeba; }
+.badge-cancel { background: #f8d7da; color: #721c24; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #f5c6cb; }
 
-.td-acciones { display: flex; gap: 5px; justify-content: center; }
-.btn-action { border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; padding: 4px 8px; font-size: 1.1rem; transition: transform 0.1s; }
+.td-acciones { display: flex; gap: 4px; justify-content: center; }
+.btn-action { border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; padding: 4px 6px; font-size: 1.1rem; transition: transform 0.1s; }
 .btn-action:hover { transform: scale(1.1); background: #f0f8ff; }
 .btn-check { color: green; border-color: #c3e6cb; }
-.btn-check:hover { background: #d4edda; }
+.btn-orden { color: #2980b9; border-color: #a9cce3; }
+.btn-carga { color: #8e44ad; border-color: #d2b4de; }
+.btn-cancel:hover { background: #ffebeb; }
 
 .vacio { text-align: center; padding: 20px; color: #aaa; font-style: italic; }
 .loading-overlay { position: absolute; top: 50px; left: 0; width: 100%; text-align: center; background: rgba(255,255,255,0.8); padding: 20px; color: #3498db; font-weight: bold; }
-.error-msg { text-align: center; padding: 10px; color: #e74c3c; font-weight: bold; font-size: 0.9rem; background: #fadbd8; margin-bottom: 10px; border-radius: 4px; }
+.error-msg { text-align: center; padding: 10px; color: #e74c3c; background: #fadbd8; margin-bottom: 10px; border-radius: 4px; }
 </style>
