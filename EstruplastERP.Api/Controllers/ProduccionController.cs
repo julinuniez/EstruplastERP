@@ -1,8 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore; 
-using EstruplastERP.Data;            
-using EstruplastERP.Api.Dtos;        
-using EstruplastERP.Api.Services;    
+﻿using EstruplastERP.Api.Dtos;
+using EstruplastERP.Api.Services;
+using EstruplastERP.Core;
+using EstruplastERP.Data;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace EstruplastERP.Api.Controllers
 {
@@ -10,8 +11,8 @@ namespace EstruplastERP.Api.Controllers
     [ApiController]
     public class ProduccionController : ControllerBase
     {
-        private readonly ProduccionService _produccionService; 
-        private readonly ApplicationDbContext _context;        
+        private readonly ProduccionService _produccionService;
+        private readonly ApplicationDbContext _context;
 
         public ProduccionController(ProduccionService produccionService, ApplicationDbContext context)
         {
@@ -40,7 +41,6 @@ namespace EstruplastERP.Api.Controllers
             }
         }
 
-        // GET: api/Produccion/hoy
         [HttpGet("hoy")]
         public async Task<ActionResult<IEnumerable<object>>> GetProduccionDelDia()
         {
@@ -66,7 +66,6 @@ namespace EstruplastERP.Api.Controllers
             return Ok(lista);
         }
 
-        // GET: api/Produccion/rango
         [HttpGet("rango")]
         public async Task<ActionResult<IEnumerable<object>>> GetProduccionPorRango(DateTime desde, DateTime hasta)
         {
@@ -98,8 +97,6 @@ namespace EstruplastERP.Api.Controllers
         {
             try
             {
-                // Llamamos al método visual que creamos en el servicio
-                // (Asegúrate de haber agregado ese método al final de tu Service como vimos antes)
                 var receta = await _produccionService.ObtenerRecetaProyectada(productoId, clienteId, kilos);
                 return Ok(receta);
             }
@@ -107,6 +104,180 @@ namespace EstruplastERP.Api.Controllers
             {
                 return BadRequest(ex.Message);
             }
+        }
+
+        [HttpPost("registrar-fazon-auto")]
+        public async Task<IActionResult> RegistrarProduccionFazonAuto([FromBody] NuevaOrdenDto request)
+        {
+            using var transaction = _context.Database.BeginTransaction();
+            try
+            {
+                await DescontarStockScrapAutomatico(request);
+                var produccion = await _produccionService.RegistrarOrden(request);
+                await transaction.CommitAsync();
+                return Ok(new { mensaje = "Producción Fazón registrada y stock descontado automáticamente.", id = produccion.Id });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(new { mensaje = ex.Message });
+            }
+        }
+
+        private async Task DescontarStockScrapAutomatico(NuevaOrdenDto request)
+        {
+            var productoTerminado = await _context.Productos.FindAsync(request.ProductoTerminadoId);
+            if (productoTerminado == null) throw new Exception("Producto terminado no encontrado");
+
+            string materialNecesario = productoTerminado.TipoMaterial;
+            int clienteId = request.ClienteId ?? productoTerminado.ClienteId ?? 0;
+            if (clienteId == 0) throw new Exception("Error: Se requiere un Cliente para procesar Fazón.");
+
+            var stocksDisponibles = await _context.Productos
+                .Where(p => p.ClienteId == clienteId
+                            && p.EsScrap == true
+                            && p.TipoMaterial == materialNecesario
+                            && p.StockActual > 0)
+                .OrderByDescending(p => p.StockActual)
+                .ToListAsync();
+
+            if (!stocksDisponibles.Any())
+            {
+                throw new Exception($"No hay stock disponible de '{materialNecesario}' para el cliente seleccionado.");
+            }
+
+            decimal restantePorDescontar = request.Kilos;
+
+            foreach (var lote in stocksDisponibles)
+            {
+                if (restantePorDescontar <= 0) break;
+
+                decimal aDescontar = Math.Min(restantePorDescontar, lote.StockActual);
+
+                lote.StockActual -= aDescontar;
+                restantePorDescontar -= aDescontar;
+
+                _context.Entry(lote).State = EntityState.Modified;
+            }
+
+            if (restantePorDescontar > 0)
+            {
+                throw new Exception($"Stock insuficiente. Faltan {restantePorDescontar} kg de {materialNecesario} en el inventario del cliente.");
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        [HttpPost("transformar-scrap")]
+        public async Task<IActionResult> TransformarScrap([FromBody] ScrapDto request)
+        {
+            using var transaction = _context.Database.BeginTransaction();
+            try
+            {
+                if (request.KilosObtenidos > request.KilosEntrada)
+                    return BadRequest("Error: No puedes obtener más kilos de salida que de entrada.");
+
+                var productoScrap = await _context.Productos.FindAsync(request.ProductoScrapId);
+                if (productoScrap == null) return BadRequest("El producto Scrap no existe.");
+
+                if (productoScrap.StockActual < request.KilosEntrada)
+                    return BadRequest($"Stock insuficiente. Disponible: {productoScrap.StockActual} kg.");
+
+                string skuRecuperado = productoScrap.CodigoSku.Replace("SCRAP", "REC");
+                if (!skuRecuperado.Contains("REC")) skuRecuperado = $"REC-{productoScrap.CodigoSku}";
+
+                var productoRecuperado = await _context.Productos
+                    .FirstOrDefaultAsync(p => p.CodigoSku == skuRecuperado && p.ClienteId == request.ClienteId);
+
+                if (productoRecuperado == null)
+                {
+                    productoRecuperado = new Producto
+                    {
+                        CodigoSku = skuRecuperado,
+                        Nombre = productoScrap.Nombre.Replace("[SCRAP]", "[RECUPERADO]"),
+                        Rubro = "MATERIA PRIMA RECUPERADA",
+                        TipoMaterial = productoScrap.TipoMaterial,
+                        Color = productoScrap.Color,
+                        ClienteId = request.ClienteId,
+                        EsScrap = false,
+                        EsMateriaPrima = true,
+                        EsProductoTerminado = false,
+                        StockActual = 0,
+                        StockMinimo = 0,
+                        Activo = true,
+                        FechaCreacion = DateTime.Now,
+                        PesoEspecifico = 1
+                    };
+
+                    if (!productoRecuperado.Nombre.Contains("[RECUPERADO]"))
+                        productoRecuperado.Nombre = $"[RECUPERADO] {productoScrap.Nombre}";
+
+                    _context.Productos.Add(productoRecuperado);
+                    await _context.SaveChangesAsync();
+                }
+
+                // Descuento de Stock
+                productoScrap.StockActual -= request.KilosEntrada;
+                productoRecuperado.StockActual += request.KilosObtenidos;
+
+                _context.Entry(productoScrap).State = EntityState.Modified;
+                _context.Entry(productoRecuperado).State = EntityState.Modified;
+
+                // Cálculo de Merma
+                decimal merma = request.KilosEntrada - request.KilosObtenidos;
+                decimal porcentaje = (request.KilosEntrada > 0) ? (merma / request.KilosEntrada) * 100 : 0;
+
+                // Registro en Historial (Producción)
+                var historial = new Produccion
+                {
+                    FechaRegistro = DateTime.Now,
+                    ProductoTerminadoId = productoRecuperado.Id, // CORREGIDO: Usando ProductoTerminadoId
+                    ClienteId = request.ClienteId,
+                    Cantidad = 1,
+                    Kilos = request.KilosObtenidos,
+                    Observacion = $"TRANSFORMACION: {request.KilosEntrada}kg {productoScrap.Nombre} -> {request.KilosObtenidos}kg. Merma: {merma}kg ({porcentaje:N1}%)",
+                    Turno = "General",
+                    EmpleadoId = 1 // Asegúrate de tener un empleado con ID 1 en la base de datos
+                };
+                _context.Producciones.Add(historial);
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new
+                {
+                    mensaje = "Transformación registrada con éxito.",
+                    stockScrap = productoScrap.StockActual,
+                    stockRecuperado = productoRecuperado.StockActual,
+                    merma = merma
+                });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return BadRequest($"Error: {ex.Message}");
+            }
+        }
+
+        [HttpGet("historial-transformaciones")]
+        public async Task<ActionResult> GetHistorialTransformaciones()
+        {
+            var lista = await _context.Producciones
+                .Include(p => p.Producto)
+                .Include(p => p.Cliente)
+                .Where(p => p.Observacion.StartsWith("TRANSFORMACION"))
+                .OrderByDescending(p => p.FechaRegistro)
+                .Take(20)
+                .Select(p => new {
+                    p.Id,
+                    Fecha = p.FechaRegistro,
+                    Cliente = p.Cliente.RazonSocial,
+                    Producto = p.Producto.Nombre,
+                    Detalle = p.Observacion
+                })
+                .ToListAsync();
+
+            return Ok(lista);
         }
     }
 }

@@ -24,6 +24,7 @@ namespace EstruplastERP.Core
         public string? Color { get; set; } // Ej: "Gris Goff"
 
         public string? Rubro { get; set; }// Valores sugeridos: "VIRGEN", "SCRAP", "TUTTI", "ADITIVO", "MASTERBATCH"
+        public string? TipoMaterial { get; set; } // Ej: "PAI", "ABS", "BIO", "PP"
         public bool EsFazon { get; set; } = false;
         public bool EsScrap { get; set; } = false;
 

@@ -28,6 +28,7 @@ namespace EstruplastERP.Api.Controllers
             return await _context.Proveedores
                                  .Where(p => p.Activo)
                                  .OrderBy(p => p.RazonSocial)
+                                 .AsNoTracking()
                                  .ToListAsync();
         }
 

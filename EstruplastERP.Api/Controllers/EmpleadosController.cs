@@ -16,11 +16,14 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
-        // 1. GET: Lista todos (incluso inactivos si quieres verlos, o filtrados)
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Empleado>>> GetEmpleados()
+        public async Task<ActionResult<IEnumerable<object>>> GetEmpleados()
         {
-            return await _context.Empleados.ToListAsync();
+            var lista = await _context.Empleados
+                .AsNoTracking()
+                .ToListAsync();
+
+            return Ok(lista);
         }
 
         // 2. POST: Crear Nuevo

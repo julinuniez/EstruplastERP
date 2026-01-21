@@ -8,13 +8,12 @@ import api from '@/services/axiosInstance'
 
 // --- 1. CONSTANTES Y CONFIGURACIÓN ---
 const DENSIDAD_DEFAULT = 1.1;
-const ID_BRILLO = 1073;     
-const ID_ESTEARATO = 1074;  
-const ID_UV = 1075;         
-const ID_CAUCHO = 1076;     
-const ID_CARGA = 1077;      
+const ID_BRILLO = 1073; 
+const ID_ESTEARATO = 1074; 
+const ID_UV = 1075; 
+const ID_CAUCHO = 1076; 
+const ID_CARGA = 1077; 
 const ID_MASTERBATCH_GENERICO = 90;
-
 const PORC_ESTEARATO = 0.08; 
 
 // --- 2. INTERFACES ---
@@ -23,6 +22,7 @@ interface Producto {
     esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; rubro?: string;
     largo: number; ancho: number; espesor: number; pesoEspecifico: number; color?: string;
     receta?: any[]; espesorMinimo?: number; espesorMaximo?: number; clienteId?: number;
+    tipoMaterial?: string;
 }
 interface Empleado { id: number; nombreCompleto: string; }
 interface Cliente { id: number; razonSocial: string; }
@@ -43,6 +43,10 @@ const empleados = ref<Empleado[]>([])
 const clientes = ref<Cliente[]>([])
 const recetaDinamica = ref<ItemReceta[]>([])
 const stockFazonDetectado = ref<number | null>(null);
+
+// Variables FAZON
+const listaLotesCliente = ref<any[]>([]); 
+const loteFazonSeleccionadoId = ref<string | number>('');
 
 const listaProduccionRef = ref<any>(null);
 
@@ -108,9 +112,12 @@ const espesorValido = computed(() => {
     return true;
 });
 
+// Filtra productos terminados disponibles
 const listaProductosDisponibles = computed(() => {
     if (!productos.value || productos.value.length === 0) return [];
     
+    const idClienteSeleccionado = form.value.clienteId ? Number(form.value.clienteId) : null;
+
     return productos.value.filter(p => {
         const nombre = (p.nombre || '').toUpperCase();
         const rubro = (p.rubro || '').toUpperCase();
@@ -124,12 +131,36 @@ const listaProductosDisponibles = computed(() => {
         if (p.id >= 990 && p.id <= 999) return false; 
 
         const esProductoFazon = p.esFazon || nombre.includes('FAZON') || nombre.includes('SERVICIO');
+
         if (esProductoFazon) {
-            if (!form.value.clienteId) return false;
-            if (!esClienteFazon.value) return false; 
-            if (p.clienteId && p.clienteId != form.value.clienteId) return false; 
+            if (!idClienteSeleccionado) return false;
+            // Solo mostrar si es genérico (Servicio) o si pertenece explícitamente al cliente
+            const esPropioDelCliente = p.clienteId && p.clienteId == idClienteSeleccionado;
+            const esServicioGenerico = !p.clienteId || p.clienteId === 0;
+
+            if (esPropioDelCliente || esServicioGenerico) {
+                return true; 
+            } else {
+                return false; 
+            }
         }
         return true;
+    });
+});
+
+// Limpia la lista de MPs para la hoja de impresión (Oculta Scrap si no es Fazón)
+const materiasPrimasLimpias = computed(() => {
+    const esFazon = productoSeleccionado.value?.esFazon || 
+                    (productoSeleccionado.value?.nombre || '').toUpperCase().includes('FAZON');
+
+    return listaTodasMateriasPrimas.value.filter(mp => {
+        const nombre = (mp.nombre || '').toUpperCase();
+        if (!esFazon) {
+            if (mp.esScrap) return false;
+            if (nombre.includes('SCRAP') || nombre.includes('RECUPERADO')) return false;
+            if (nombre.includes('FAZON') || mp.esFazon) return false;
+        }
+        return true; 
     });
 });
 
@@ -195,27 +226,16 @@ const insumosSinStock = computed(() => {
     return faltantes;
 });
 
-const esClienteFazon = computed(() => {
-    if (!form.value.clienteId) return false;
-    return listaInventarioCompleto.value.some(item => 
-        item.esMateriaPrima && item.clienteId === Number(form.value.clienteId)
-    );
-});
-
 const hayBloqueoDeStock = computed(() => insumosSinStock.value.length > 0);
 
-// 🔥 COLOR: Prioriza Texto Manual
 const colorFinalParaPDF = computed(() => {
-    // 1. Si escribió algo a mano, eso manda
     if (form.value.colorTexto && form.value.colorTexto.trim() !== '') {
         return form.value.colorTexto.toUpperCase();
     }
-    // 2. Si no, busca el masterbatch
     if (form.value.esProductoColor && form.value.masterbatchId) {
         const mb = listaMasterbatches.value.find(m => m.id === form.value.masterbatchId);
         return mb ? (mb.nombre.split(' ').length > 1 ? mb.nombre.split(' ').slice(1).join(' ') : mb.nombre) : 'A DEFINIR';
     }
-    // 3. Fallback
     return '-';
 });
 
@@ -270,7 +290,6 @@ function recalcularFormulaAutomatica() {
 
     if (form.value.conBrillo) add('BRILLO', form.value.porcBrillo, 'esBrillo', ID_BRILLO);
     
-    // Porcentaje Fijo Estearato
     if (form.value.conEstearato) add('ESTEARATO', PORC_ESTEARATO, 'esEstearato', ID_ESTEARATO);
     
     if (form.value.aditivoUV) add('UV', form.value.porcentajeUv, 'esUv', ID_UV);
@@ -288,51 +307,104 @@ function recalcularFormulaAutomatica() {
 }
 
 async function actualizarRecetaFazonConCliente(clienteId: string | number, producto: Producto) {
+    listaLotesCliente.value = [];
+    loteFazonSeleccionadoId.value = '';
+
     if (!clienteId || !producto) return;
-    const itemFazon = recetaDinamica.value.find(r => r.esFazonInput);
-    if (!itemFazon) return;
-    const materialesCliente = listaInventarioCompleto.value.filter((p: any) => p.esMateriaPrima && p.clienteId == clienteId);
 
-    if (materialesCliente.length === 0) {
-        itemFazon.nombreInsumo = "⚠️ CLIENTE SIN STOCK DE MP";
-        stockFazonDetectado.value = 0;
-        return;
-    }
+    // 1. VALIDACIÓN INICIAL: Solo procesar si es FAZON
+    const esFazon = producto.esFazon || producto.nombre.toUpperCase().includes('FAZON') || producto.nombre.toUpperCase().includes('SERVICIO');
+    if (!esFazon) return;
 
-    let materialElegido = null;
+    // 2. OBTENER TODO EL STOCK DEL CLIENTE (Limpio, sin scrap basura)
+    // Esto es lo que tiene el cliente en total.
+    const todoElStockCliente = listaInventarioCompleto.value.filter((p: any) => 
+        Number(p.clienteId) === Number(clienteId) && 
+        p.stockActual > 0 &&
+        !p.esScrap && 
+        !p.nombre.toUpperCase().includes('[SCRAP]')
+    );
+
+    // 3. DETECTAR EL MATERIAL QUE PIDE EL PRODUCTO
+    // Buscamos pistas en el nombre del producto terminado (Ej: "LAMINADO ABS BLANCO")
     const nombreProd = producto.nombre.toUpperCase();
-    const reglas = [
-        { key: "TUTTI", match: ["TUTTI", "MEZCLA", "RECUPERADO"] },
-        { key: "GRUESO", match: ["GRUESO", "GRU", "GSO", "AI"] },
-        { key: "FINO", match: ["FINO", "FIN", "LAM", "AI"] },
-        { key: "ABS", match: ["ABS"] },
-        { key: "PEAD", match: ["PEAD", "AD", "ALTA"] },
-        { key: "PEBD", match: ["PEBD", "BAJA"] },
-        { key: "PP", match: ["PP", "POLIPROPILENO"] }
-    ];
+    const tipoDB = producto.tipoMaterial ? producto.tipoMaterial.toUpperCase() : '';
+    
+    let materialDetectado = '';
 
-    const regla = reglas.find(r => nombreProd.includes(r.key));
-    if (regla) {
-        materialElegido = materialesCliente.find(m => {
-            const txt = (m.nombre + (m.codigoSku || '')).toUpperCase();
-            return regla.match.some(palabra => txt.includes(palabra));
+    // Prioridad 1: Base de datos
+    if (tipoDB) {
+        materialDetectado = tipoDB;
+    } 
+    // Prioridad 2: Nombre del producto
+    else {
+        if (nombreProd.includes("PAI") || nombreProd.includes("IMPACTO") || nombreProd.includes("TUTI")) materialDetectado = 'PAI';
+        else if (nombreProd.includes("ABS")) materialDetectado = 'ABS'; // 👈 AQUÍ DETECTA ABS
+        else if (nombreProd.includes("PP") || nombreProd.includes("POLIPROPILENO")) materialDetectado = 'PP';
+        else if (nombreProd.includes("PEAD") || nombreProd.includes("ALTA") || nombreProd.includes("HDPE")) materialDetectado = 'PEAD';
+        else if (nombreProd.includes("PEBD") || nombreProd.includes("BAJA") || nombreProd.includes("LDPE")) materialDetectado = 'PEBD';
+        else if (nombreProd.includes("PVC")) materialDetectado = 'PVC';
+        else if (nombreProd.includes("PS") || nombreProd.includes("ESTIRENO")) materialDetectado = 'PS';
+    }
+
+    // 4. 🔥 FILTRADO ESTRICTO 🔥
+    if (materialDetectado) {
+        // Si sabemos qué material es, SOLO mostramos eso.
+        // Si el cliente no tiene ese material, la lista quedará VACÍA (Correcto).
+        listaLotesCliente.value = todoElStockCliente.filter(lote => {
+            const n = lote.nombre.toUpperCase();
+            const t = (lote.tipoMaterial || '').toUpperCase();
+            
+            // Regla: El lote debe coincidir con el material detectado
+            return n.includes(materialDetectado) || t === materialDetectado;
         });
+    } else {
+        // Solo si el sistema NO SABE qué material es el producto (nombre raro),
+        // mostramos todo el stock del cliente para que el operario decida.
+        listaLotesCliente.value = todoElStockCliente;
     }
 
-    if (!materialElegido && (nombreProd.includes("A.I.") || nombreProd.includes("IMPACTO"))) {
-        materialElegido = materialesCliente.find(m => m.nombre.toUpperCase().includes("AI") || m.nombre.toUpperCase().includes("IMPACTO"));
-    }
-    if (!materialElegido && materialesCliente.length > 0) {
-        materialElegido = materialesCliente[0];
-    }
+    // 5. AUTO-SELECCIÓN (Si quedó algo en la lista)
+    listaLotesCliente.value.sort((a, b) => b.stockActual - a.stockActual);
 
-    if (materialElegido) {
-        const clienteObj = clientes.value.find(c => c.id == clienteId);
-        const nombreCli = clienteObj ? clienteObj.razonSocial : 'CLIENTE';
-        itemFazon.materiaPrimaId = materialElegido.id;
-        itemFazon.nombreInsumo = `MP: ${materialElegido.nombre} (${nombreCli})`;
-        itemFazon.densidad = materialElegido.pesoEspecifico;
-        stockFazonDetectado.value = materialElegido.stockActual;
+    if (listaLotesCliente.value.length > 0) {
+        const mejorOpcion = listaLotesCliente.value[0];
+        loteFazonSeleccionadoId.value = mejorOpcion.id;
+        aplicarLoteFazonAReceta(mejorOpcion);
+    } else {
+        // AVISO DE ERROR: El cliente tiene cosas, pero NO lo que pide el producto.
+        const itemFazon = recetaDinamica.value.find(r => r.esFazonInput || r.esBase);
+        if (itemFazon) {
+            if (todoElStockCliente.length > 0 && materialDetectado) {
+                // Caso: Tiene PAI pero el producto pide ABS
+                itemFazon.nombreInsumo = `⚠️ CLIENTE SIN STOCK DE ${materialDetectado}`;
+            } else {
+                // Caso: Cliente vacío
+                itemFazon.nombreInsumo = "⚠️ CLIENTE SIN STOCK DISPONIBLE";
+            }
+            itemFazon.materiaPrimaId = 0; 
+        }
+    }
+    
+    // Debug para que veas qué está pasando (abre la consola F12 si falla)
+    console.log(`Fazón Logic: Producto="${nombreProd}" -> Detectado="${materialDetectado}" -> StockFiltrado=${listaLotesCliente.value.length}`);
+}
+
+function alCambiarLoteFazon() {
+    const lote = listaLotesCliente.value.find(l => l.id === loteFazonSeleccionadoId.value);
+    if (lote) aplicarLoteFazonAReceta(lote);
+}
+
+function aplicarLoteFazonAReceta(lote: any) {
+    let itemFazon = recetaDinamica.value.find(r => r.esFazonInput);
+    if (!itemFazon) itemFazon = recetaDinamica.value.find(r => r.esBase);
+
+    if (itemFazon && lote) {
+        itemFazon.materiaPrimaId = lote.id;
+        itemFazon.nombreInsumo = `MP: ${lote.nombre}`; 
+        itemFazon.densidad = lote.pesoEspecifico || 1;
+        stockFazonDetectado.value = lote.stockActual;
+        balancearBase(); 
     }
 }
 
@@ -358,7 +430,7 @@ function agregarInsumoDesdeHijo(item: { id: number, porcentaje: number }) {
     }
 }
 
-// --- 6. API ---
+// --- 6. API Y CARGAS ---
 
 async function CargarProductosFiltrados(clienteId: number | string = '') {
     try {
@@ -434,9 +506,12 @@ async function CargarDatosProductos(id: number) {
                     esFazonInput: esBaseFazon
                 };
             });
-            if (form.value.clienteId && prod.esFazon) {
+            
+            // 🔥 SI HAY CLIENTE, BUSCAMOS STOCK SI ES FAZON
+            if (form.value.clienteId) {
                 nextTick(async () => { await actualizarRecetaFazonConCliente(form.value.clienteId, prod); });
             }
+            
             recalcularFormulaAutomatica();
             stockFazonDetectado.value = null;
         } else {
@@ -479,7 +554,6 @@ async function registrarProduccion() {
 
     try {
         loading.value = true;
-        // 🔥 AGREGAMOS MEDIDAS AL POST
         await api.post('/Ordenes', {
             productoTerminadoId: Number(form.value.productoTerminadoId),
             clienteId: form.value.clienteId ? Number(form.value.clienteId) : null,
@@ -509,7 +583,6 @@ async function registrarProduccion() {
     }
 }
 
-// 🔥 NUEVA FUNCIÓN: Reimprimir desde historial
 const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'carga' }) => {
     const { orden, tipo } = payload;
     if (!confirm(`¿Reimprimir ${tipo.toUpperCase()} de la Orden #${orden.id}?`)) return;
@@ -517,18 +590,15 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
     try {
         loading.value = true;
         
-        // 1. Cargar datos básicos
         form.value.turno = orden.turno || 'Mañana';
         form.value.observacion = orden.observacion || '';
         form.value.cantidad = orden.cantidad;
         form.value.kilosTotales = orden.kilos;
         
-        // 2. IDs
         form.value.clienteId = orden.clienteId;
         form.value.empleadoId = orden.empleadoId;
         form.value.productoTerminadoId = orden.productoId; 
 
-        // 3. Receta
         if (orden.consumos && Array.isArray(orden.consumos)) {
             recetaDinamica.value = orden.consumos.map((c: any) => {
                 const mpOriginal = listaTodasMateriasPrimas.value.find((m: any) => m.id === c.materiaPrimaId);
@@ -536,7 +606,6 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
                 const esColor = c.materiaPrimaId === ID_MASTERBATCH_GENERICO || 
                                 (c.nombreMateriaPrima && c.nombreMateriaPrima.toUpperCase().includes('MASTER'));
                 
-                // Calculo aprox porcentaje
                 const porcentajeCalc = c.cantidadKilos ? ((c.cantidadKilos / orden.kilos) * 100).toFixed(2) : 0;
 
                 return {
@@ -552,14 +621,13 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
             });
         }
 
-        // 4. Esperar Watchers y Sobrescribir Medidas
         setTimeout(async () => {
             if (orden.largo) form.value.largo = orden.largo;
             if (orden.ancho) form.value.ancho = orden.ancho;
             if (orden.espesor) form.value.espesor = orden.espesor;
             
             await nextTick();
-            await new Promise(r => setTimeout(r, 200)); // Render delay
+            await new Promise(r => setTimeout(r, 200)); 
             await generarPDF(tipo);
             
             mensaje.value = `✅ Reimpresión Orden #${orden.id} generada.`;
@@ -597,7 +665,7 @@ watch(() => form.value.clienteId, async (nuevoCli) => {
     }
     if (nuevoCli && form.value.productoTerminadoId) {
         const prod = productos.value.find(p => p.id === Number(form.value.productoTerminadoId));
-        if (prod && (prod.esFazon || prod.nombre.toUpperCase().includes('FAZON'))) {
+        if (prod) {
             setTimeout(async () => { await actualizarRecetaFazonConCliente(nuevoCli, prod); }, 200);
         }
     }
@@ -641,7 +709,6 @@ onMounted(async () => {
         if (Array.isArray(resEmp.data)) empleados.value = resEmp.data;
         if (Array.isArray(resInv.data)) listaInventarioCompleto.value = resInv.data;
 
-        // 🔥 RESTAURAR BORRADOR
         const borradorGuardado = localStorage.getItem(STORAGE_KEY);
         if (borradorGuardado) {
             try {
@@ -680,7 +747,8 @@ onMounted(async () => {
                     id="hoja-de-impresion"
                     :form="form" :producto="productoSeleccionado" :cliente="clienteSeleccionado" 
                     :empleado="empleadoSeleccionado" :receta="recetaDinamica" :colorFinal="colorFinalParaPDF" 
-                    :densidad="densidadMezcla" :totalPorcentaje="totalPorcentajeReceta" :materiasPrimas="listaTodasMateriasPrimas" 
+                    :densidad="densidadMezcla" :totalPorcentaje="totalPorcentajeReceta" 
+                    :materiasPrimas="materiasPrimasLimpias" 
                     :ocultarFormula="ocultarFormula" @add-insumo="agregarInsumoDesdeHijo" 
                     @remove-insumo="quitarInsumoManual" @update-receta="balancearBase"  
                 />
@@ -711,6 +779,16 @@ onMounted(async () => {
                     {{ p.esFazon ? '★ ' : '' }}{{ p.nombre }} {{ p.esGenerico ? '(A Medida)' : (p.esFazon ? '(Fazon)' : '(Estándar)') }}
                 </option>
             </select>
+
+            <div v-if="listaLotesCliente.length > 0" class="box-fazon-selector">
+                <label style="color: #2ecc71;">♻️ Lote Recuperado (Fazón):</label>
+                <select v-model="loteFazonSeleccionadoId" @change="alCambiarLoteFazon" class="select-fazon">
+                    <option disabled value="">-- Seleccionar Lote --</option>
+                    <option v-for="lote in listaLotesCliente" :key="lote.id" :value="lote.id">
+                        {{ lote.nombre }} (Stock: {{ lote.stockActual }} kg)
+                    </option>
+                </select>
+            </div>
 
             <div v-if="form.productoTerminadoId" class="seccion-medidas-editables">
                 <div v-if="form.esProductoColor" class="box-color">
@@ -810,7 +888,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* ESTRUCTURA GENERAL */
 .contenedor-principal-produccion {
     display: flex; flex-direction: column; width: 100%; min-height: 100vh;
     font-family: 'Segoe UI', sans-serif; background-color: #ecf0f1;
@@ -833,7 +910,6 @@ onMounted(async () => {
 }
 .bloque-inferior { width: 100%; padding: 20px; background-color: #f8f9fa; border-top: 3px solid #bdc3c7; }
 
-/* ESTILOS DE CONTROLES */
 .header-control h3 { margin-top: 0; border-bottom: 2px solid #3498db; padding-bottom: 10px; color: #ecf0f1; font-size: 1.1rem; }
 label { display: block; margin-top: 8px; font-size: 13px; color: #bdc3c7; font-weight: 600; }
 select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; border: none; font-size: 13px; box-sizing: border-box; background: #ecf0f1; color: #2c3e50; }
@@ -858,14 +934,29 @@ select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; 
 .alerta-stock { background-color: #ffebee; border: 1px solid #ef5350; color: #c62828; padding: 10px; border-radius: 6px; margin-top: 15px; font-size: 12px; text-align: left; }
 .bloque-derecha { display: flex; flex-direction: column; align-items: flex-end; }
 .input-lock { background-color: #4a5d6e !important; color: #bdc3c7 !important; cursor: not-allowed; border: 1px solid #3e4f5e !important; }
-
-/* ERROR VISUAL EN INPUT */
 .input-error { border: 2px solid #e74c3c !important; background-color: #fab1a0 !important; color: #c0392b !important; }
 
 .grupo-botones-pdf { display: flex; gap: 5px; margin-top: 10px; }
 .btn-imprimir { flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; color: white; }
 .btn-orden { background: #34495e; border: 1px solid #7f8c8d; } .btn-orden:hover { background: #2980b9; }
 .btn-carga { background: #8e44ad; border: 1px solid #9b59b6; } .btn-carga:hover { background: #9b59b6; }
+
+.box-fazon-selector {
+    background-color: #27ae60;
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 10px;
+    border: 1px solid #2ecc71;
+}
+.box-fazon-selector label {
+    color: white !important;
+}
+.select-fazon {
+    background-color: white;
+    font-weight: bold;
+    color: #2c3e50;
+    border: 2px solid #2ecc71;
+}
 
 @media (max-width: 1000px) { 
     .bloque-superior { flex-direction: column; } 

@@ -1,174 +1,233 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
 
 const router = useRouter();
 const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
 
-// --- ESTADO ---
 const listaProductos = ref<any[]>([]);
 const listaClientes = ref<any[]>([]); 
 const busqueda = ref('');
 const cargando = ref(true);
+const importando = ref(false);
 const error = ref('');
+const fileInput = ref<HTMLInputElement | null>(null);
 
-// Pestañas
-const tabActual = ref('MP'); // 'MP' | 'PT' | 'CLI'
-const subTabCliente = ref('MP_CLI'); // 'MP_CLI' | 'SCRAP_CLI' | 'PT_CLI'
+const tabActual = ref('MP'); 
+const subTabCliente = ref('MP_CLI'); 
 const clienteFiltro = ref<number | string>(''); 
+const materialFiltro = ref<string>(''); 
+
+const TIPOS_MATERIALES = [
+    'PAI', 
+    'PEAD', 
+    'PP', 
+    'BIO', 
+    'ABS', 
+    'RESISTENTE FREON', 
+    'POLIETILENO'
+];
 
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
 
-// --- 🛡️ FUNCIONES BLINDADAS (Leen Mayúsculas y Minúsculas) ---
-
 const getSku = (p: any) => (p.codigoSku || p.CodigoSku || '').toUpperCase();
 const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
-
-// Obtener ID (Soporta clienteId, ClienteId o ID null)
 const getClienteId = (p: any) => p.clienteId || p.ClienteId || 0;
 
-// --- DETECTORES DE TIPO (Basados en SKU para máxima seguridad) ---
-const esMpCliente = (p: any) => getSku(p).startsWith('MP-CLI');
-const esServicioFazon = (p: any) => getSku(p).startsWith('FAZ-');
-// 🔥 NUEVO: Detector de Scrap (Por Flag o por SKU)
-const esScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP-CLI');
+const detectarTipo = (p: any) => {
+    if (p.tipoMaterial) {
+        const t = p.tipoMaterial.toUpperCase().trim();
+        if (TIPOS_MATERIALES.includes(t)) return t;
+        if (t.includes('FREON')) return 'RESISTENTE FREON';
+    }
 
-// --- FILTRADO PRINCIPAL ---
+    const n = getNombre(p);
+
+    if (n.includes('FREON') || n.includes('RESISTENTE')) return 'RESISTENTE FREON';
+    if (n.includes('BIO') || n.includes('DEGRADABLE')) return 'BIO';
+    if (n.includes('ABS')) return 'ABS';
+    if (n.includes('PEAD') || n.includes('ALTA') || n.includes('HDPE')) return 'PEAD';
+    if (n.includes('PP') || n.includes('POLIPROPILENO')) return 'PP';
+    if (n.includes('POLIETILENO') || n.includes('PEBD') || n.includes('BAJA') || n.includes('LDPE')) return 'POLIETILENO';
+    if (n.includes('PAI') || n.includes('TUTI') || n.includes('IMPACTO') || n.includes('A.I.')) return 'PAI';
+
+    return 'OTROS';
+};
+
+watch(clienteFiltro, () => { materialFiltro.value = ''; });
+
+const esMpCliente = (p: any) => getSku(p).startsWith('MP-CLI') || (p.esMateriaPrima && getClienteId(p) > 0);
+const esServicioFazon = (p: any) => getSku(p).startsWith('FAZ-') || (p.esFazon);
+const esScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP');
+
 const productosFiltrados = computed(() => {
     let lista = listaProductos.value;
     const tab = tabActual.value;
-
-    // Helper interno para leer propiedad sin importar mayúsculas/minúsculas
     const checkGenerico = (p: any) => !!(p.esGenerico || p.EsGenerico);
-    
-    // Helper para leer propiedad EsScrap (blindado)
     const checkEsScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP');
 
     if (tab === 'MP') {
-        // Pestaña: MATERIAS PRIMAS (Vírgenes de Fábrica)
         lista = lista.filter(p => 
             (p.esMateriaPrima || p.EsMateriaPrima) && 
-            !esMpCliente(p) &&     // No mostrar MP de Clientes
-            !checkEsScrap(p) &&    // ⛔ NO MOSTRAR SCRAP AQUÍ (Ni propio ni ajeno)
-            
-            // Filtros Lógicos (Ocultar bases de sistema)
-            !checkGenerico(p) && 
-            !getNombre(p).includes('GENERICO') &&
-            !getNombre(p).includes('BASE') && 
-            p.id !== 90 
+            !esMpCliente(p) && !checkEsScrap(p) && !checkGenerico(p) && 
+            !getNombre(p).includes('GENERICO') && !getNombre(p).includes('BASE') && p.id !== 90 
         );
     } 
     else if (tab === 'PT') {
-        // Pestaña: PRODUCTOS TERMINADOS (Fábrica)
-        // Aquí mostramos tus productos de venta (aunque sean genéricos)
-        lista = lista.filter(p => 
-            (p.esProductoTerminado || p.EsProductoTerminado) && 
-            !esServicioFazon(p) // Excluir servicios de inyección puro
-        );
+        lista = lista.filter(p => (p.esProductoTerminado || p.EsProductoTerminado) && !esServicioFazon(p));
     } 
     else if (tab === 'CLI') {
-        // --- PESTAÑA CLIENTES ---
+        if (!clienteFiltro.value) return [];
+
+        const idFiltro = Number(clienteFiltro.value);
+        lista = lista.filter(p => getClienteId(p) === idFiltro);
 
         if (subTabCliente.value === 'MP_CLI') {
-            // MODO: Materias Primas Vírgenes del Cliente
             lista = lista.filter(p => esMpCliente(p) && !checkEsScrap(p));
-
-            if (clienteFiltro.value) {
-                const idFiltro = Number(clienteFiltro.value);
-                lista = lista.filter(p => getClienteId(p) === idFiltro);
-            }
-        } 
-        else if (subTabCliente.value === 'SCRAP_CLI') {
-            // MODO: Scrap / Molido / Recuperado
-            // Aquí SI mostramos todo lo que sea Scrap
+        } else if (subTabCliente.value === 'SCRAP_CLI') {
             lista = lista.filter(p => checkEsScrap(p));
-
-            if (clienteFiltro.value) {
-                const idFiltro = Number(clienteFiltro.value);
-                lista = lista.filter(p => getClienteId(p) === idFiltro);
-            }
-        } 
-        else {
-            // MODO: Servicios Fazon
+        } else {
             lista = lista.filter(p => esServicioFazon(p));
+        }
+
+        if (materialFiltro.value) {
+            lista = lista.filter(p => detectingTipo(p) === materialFiltro.value);
         }
     }
 
-    // --- BUSCADOR GLOBAL ---
     if (busqueda.value) {
         const texto = busqueda.value.toUpperCase();
-        lista = lista.filter(p => 
-            getNombre(p).includes(texto) || 
-            getSku(p).includes(texto)
-        );
+        lista = lista.filter(p => getNombre(p).includes(texto) || getSku(p).includes(texto));
     }
-
     return lista;
 });
 
-// --- CONTEOS ---
+const detectingTipo = (p: any) => detectarTipo(p);
+
 const countMP = computed(() => listaProductos.value.filter(p => (p.esMateriaPrima || p.EsMateriaPrima) && !esMpCliente(p) && !esScrap(p)).length);
 const countPT = computed(() => listaProductos.value.filter(p => (p.esProductoTerminado || p.EsProductoTerminado) && !esServicioFazon(p)).length);
-// El contador de clientes suma todo: MP + SCRAP + SERVICIOS
 const countCLI = computed(() => listaProductos.value.filter(p => esMpCliente(p) || esServicioFazon(p) || esScrap(p)).length);
 
 const irAEditar = (id: number) => {
     router.push({ name: 'editar-producto', params: { id } });
 };
 
-// --- CARGA DE DATOS BLINDADA ---
-onMounted(async () => {
+const clickImportar = () => fileInput.value?.click();
+
+const subirArchivoFlexxus = async (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    if (!target.files || target.files.length === 0) return;
+
+    const archivo = target.files[0];
+    if (!archivo) return;
+
+    const esExcel = archivo.name.toLowerCase().endsWith('.xlsx');
+    const esCsv = archivo.name.toLowerCase().endsWith('.csv');
+
+    if (esCsv && tabActual.value === 'CLI' && !clienteFiltro.value) {
+        alert("⚠️ ATENCIÓN:\nPara importar un CSV de stock específico, por favor seleccione primero el CLIENTE en el filtro.");
+        target.value = ''; 
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    
+    if (esCsv && clienteFiltro.value) {
+        formData.append('clienteId', clienteFiltro.value.toString());
+    }
+
+    try {
+        importando.value = true;
+        let urlEndpoint = '';
+
+        if (esExcel) {
+            urlEndpoint = `${apiUrl}/Integration/importar-excel-multicliente`;
+        } else {
+            urlEndpoint = `${apiUrl}/Integration/importar-maestro`;
+        }
+
+        const res = await axios.post(urlEndpoint, formData, {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'multipart/form-data' 
+            }
+        });
+
+        alert(`✅ ÉXITO:\n${res.data.mensaje}`);
+        
+        if (res.data.logs && res.data.logs.length > 0) {
+            console.warn("Reporte de Importación:", res.data.logs);
+            alert("⚠️ Atención: Algunas hojas se saltaron. Revisa la consola (F12) para ver detalles.");
+        }
+
+        await cargarDatos();
+
+    } catch (e: any) {
+        console.error(e);
+        const msg = e.response?.data || "Error al procesar el archivo.";
+        alert(`❌ ERROR: ${msg}`);
+    } finally {
+        importando.value = false;
+        if (fileInput.value) fileInput.value.value = '';
+    }
+};
+
+const cargarDatos = async () => {
     try {
         cargando.value = true;
-        
-        // Hacemos las peticiones
         const [resProd, resCli] = await Promise.all([
             axios.get(`${apiUrl}/Productos`, getAuthConfig()),
             axios.get(`${apiUrl}/Clientes`, getAuthConfig())
         ]);
 
-        // 🛡️ VALIDACIÓN DE SEGURIDAD PARA PRODUCTOS
         if (Array.isArray(resProd.data)) {
-            // Si es un array real, ordenamos y asignamos
-            listaProductos.value = resProd.data.sort((a: any, b: any) => 
-                getNombre(a).localeCompare(getNombre(b))
-            );
+            listaProductos.value = resProd.data.sort((a: any, b: any) => getNombre(a).localeCompare(getNombre(b)));
         } else {
-            // Si NO es un array (es HTML de error), avisamos y evitamos el crash
-            console.error("⚠️ ALERTA API PRODUCTOS: Se esperaba una lista [] pero llegó:", resProd.data);
-            listaProductos.value = []; // Dejamos la lista vacía para que no explote la tabla
+            listaProductos.value = [];
         }
 
-        // 🛡️ VALIDACIÓN DE SEGURIDAD PARA CLIENTES
         if (Array.isArray(resCli.data)) {
             listaClientes.value = resCli.data;
         } else {
-            console.error("⚠️ ALERTA API CLIENTES: Se esperaba una lista [] pero llegó:", resCli.data);
             listaClientes.value = [];
         }
-
     } catch (e: any) {
         error.value = "Error de conexión con el servidor.";
-        console.error("❌ Error Crítico:", e);
-        
-        // Si el error es 401 (No autorizado), mandamos al login
         if (e.response && e.response.status === 401) {
-            alert("Tu sesión ha expirado. Por favor ingresa nuevamente.");
-            // router.push('/login'); // Descomenta si tienes ruta de login
+            alert("Tu sesión ha expirado.");
         }
     } finally {
         cargando.value = false;
     }
+};
+
+onMounted(() => {
+    cargarDatos();
 });
 </script>
 
 <template>
     <div class="contenedor-stock">
         <div class="header-stock">
-            <h2>📦 Gestión de Stock</h2>
-            <div class="buscador">
-                <input type="text" v-model="busqueda" placeholder="🔍 Buscar SKU o Nombre...">
+            <div style="display: flex; flex-direction: column;">
+                <h2>📦 Gestión de Stock</h2>
+                <small style="color: #7f8c8d;">Administración de inventario</small>
+            </div>
+            
+            <div class="acciones-header">
+                <input type="file" ref="fileInput" class="hidden-input" accept=".csv, .xlsx" @change="subirArchivoFlexxus" />
+
+                <button class="btn-importar" @click="clickImportar" :disabled="importando || cargando">
+                    <span v-if="importando">⏳ Procesando...</span>
+                    <span v-else-if="tabActual === 'CLI' && clienteFiltro">📥 Importar Stock {{ listaClientes.find(c => c.id === clienteFiltro)?.razonSocial }}</span>
+                    <span v-else>📥 Importar CSV Flexxus / Excel</span>
+                </button>
+
+                <div class="buscador">
+                    <input type="text" v-model="busqueda" placeholder="🔍 Buscar SKU o Nombre...">
+                </div>
             </div>
         </div>
 
@@ -185,32 +244,28 @@ onMounted(async () => {
         </div>
 
         <div v-if="tabActual === 'CLI'" class="toolbar-clientes">
-            <div class="filtro-cliente">
-                <label>Filtrar por Cliente:</label>
-                <select v-model="clienteFiltro">
-                    <option value="">-- Todos los Clientes --</option>
-                    <option v-for="c in listaClientes" :key="c.id" :value="c.id">{{ c.razonSocial }}</option>
-                </select>
+            <div class="fila-filtros">
+                <div class="filtro-item">
+                    <label>🏢 Cliente:</label>
+                    <select v-model="clienteFiltro">
+                        <option value="">-- Seleccionar Cliente --</option>
+                        <option v-for="c in listaClientes" :key="c.id" :value="c.id">{{ c.razonSocial }}</option>
+                    </select>
+                </div>
+
+                <div class="filtro-item" v-if="clienteFiltro">
+                    <label>🧱 Material:</label>
+                    <select v-model="materialFiltro">
+                        <option value="">-- Todos los Materiales --</option>
+                        <option v-for="mat in TIPOS_MATERIALES" :key="mat" :value="mat">{{ mat }}</option>
+                    </select>
+                </div>
             </div>
 
-            <div class="sub-tabs">
-                <button 
-                    :class="{ 'sub-active': subTabCliente === 'MP_CLI' }" 
-                    @click="subTabCliente = 'MP_CLI'">
-                    📥 Fazon
-                </button>
-                
-                <button 
-                    :class="{ 'sub-active': subTabCliente === 'SCRAP_CLI' }" 
-                    @click="subTabCliente = 'SCRAP_CLI'">
-                    ♻️ Scrap / Molido
-                </button>
-
-                <button 
-                    :class="{ 'sub-active': subTabCliente === 'PT_CLI' }" 
-                    @click="subTabCliente = 'PT_CLI'">
-                    📤 Prod. Terminados
-                </button>
+            <div class="sub-tabs" v-if="clienteFiltro">
+                <button :class="{ 'sub-active': subTabCliente === 'SCRAP_CLI' }" @click="subTabCliente = 'SCRAP_CLI'">♻️ Scrap / MP</button>
+                <button :class="{ 'sub-active': subTabCliente === 'PT_CLI' }" @click="subTabCliente = 'PT_CLI'">📤 Prod. Terminados</button>
+                <button :class="{ 'sub-active': subTabCliente === 'MP_CLI' }" @click="subTabCliente = 'MP_CLI'">📥 Otros</button>
             </div>
         </div>
 
@@ -223,10 +278,8 @@ onMounted(async () => {
                     <tr>
                         <th>SKU</th>
                         <th>Descripción</th>
-                        
-                        <th v-if="tabActual === 'CLI'">Cliente</th>
-                        
-                        <th>Color / Variedad</th>
+                        <th v-if="tabActual === 'CLI'">Material</th> 
+                        <th>Color / Var.</th>
                         <th style="text-align:right">Stock (Kg)</th>
                         <th style="text-align:right">Costo ($)</th>
                         <th style="text-align:center">Acción</th>
@@ -238,32 +291,33 @@ onMounted(async () => {
                         <td>
                             <div class="nombre-prod">{{ p.nombre }}</div>
                             <small v-if="p.esFazon && tabActual !== 'CLI'" class="tag-fazon">FAZON</small>
-                            <small v-if="esScrap(p)" style="color: #d35400; font-weight:bold; margin-left:5px;">(RECUPERADO)</small>
+                            <small v-if="esScrap(p)" style="color: #d35400; font-weight:bold; margin-left:5px;">(SCRAP)</small>
                         </td>
-
+                        
                         <td v-if="tabActual === 'CLI'">
-                            {{ listaClientes.find(c => c.id === p.clienteId)?.razonSocial || 'N/A' }}
+                            <span class="badge-material" v-if="detectingTipo(p) !== 'OTROS'" :class="detectingTipo(p).toLowerCase().replace(' ', '-')">
+                                {{ detectingTipo(p) }}
+                            </span>
                         </td>
 
                         <td>{{ p.color || '-' }}</td>
-                        
-                        <td style="text-align:right; font-weight: bold;" :class="{'text-danger': p.stockActual <= 0}">
-                            {{ p.stockActual }}
-                        </td>
-                        
-                        <td style="text-align:right;">
-                            {{ p.precioCosto ? `$${p.precioCosto}` : '-' }}
-                        </td>
-
+                        <td style="text-align:right; font-weight: bold;" :class="{'text-danger': p.stockActual <= 0}">{{ p.stockActual }}</td>
+                        <td style="text-align:right;">{{ p.precioCosto ? `$${p.precioCosto}` : '-' }}</td>
                         <td style="text-align:center;">
                             <button @click="irAEditar(p.id)" class="btn-editar" title="Editar">✏️</button>
                         </td>
                     </tr>
                 </tbody>
             </table>
-            
+
             <div v-if="productosFiltrados.length === 0" class="vacio">
-                No hay productos que coincidan con los filtros.
+                <div v-if="tabActual === 'CLI' && !clienteFiltro" class="mensaje-guia">
+                    <h3>👈 Comienza seleccionando un Cliente</h3>
+                    <p>Para ver el stock de PAI, ABS o BIO de terceros, selecciona primero la empresa.</p>
+                </div>
+                <div v-else>
+                    No hay productos que coincidan con los filtros.
+                </div>
             </div>
         </div>
     </div>
@@ -272,44 +326,49 @@ onMounted(async () => {
 <style scoped>
 .contenedor-stock { max-width: 1200px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 
-.header-stock { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.header-stock { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
 .header-stock h2 { margin: 0; color: #2c3e50; }
-.buscador input { padding: 10px; width: 300px; border: 1px solid #ccc; border-radius: 5px; font-size: 1rem; }
 
-/* PESTAÑAS PRINCIPALES */
-.tabs-container { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+.acciones-header { display: flex; gap: 10px; align-items: center; }
+.hidden-input { display: none; } 
+
+.btn-importar {
+    background-color: #27ae60; color: white; border: none; padding: 10px 15px;
+    border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s;
+    display: flex; align-items: center; gap: 5px;
+}
+.btn-importar:hover:not(:disabled) { background-color: #2ecc71; }
+.btn-importar:disabled { background-color: #95a5a6; cursor: not-allowed; }
+
+.buscador input { padding: 10px; width: 250px; border: 1px solid #ccc; border-radius: 5px; font-size: 1rem; }
+
+.tabs-container { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px; overflow-x: auto; }
 .tab-btn {
     background: none; border: none; padding: 10px 20px; font-size: 1rem;
     color: #7f8c8d; cursor: pointer; border-radius: 6px; transition: all 0.3s;
-    font-weight: 600; display: flex; align-items: center; gap: 8px;
+    font-weight: 600; display: flex; align-items: center; gap: 8px; white-space: nowrap;
 }
 .tab-btn:hover { background-color: #f7f9fa; color: #34495e; }
 .tab-btn.active { background-color: #e3f2fd; color: #1976d2; }
 .counter { background: #eee; padding: 2px 6px; border-radius: 10px; font-size: 0.8em; color: #555; }
 .tab-btn.active .counter { background: #bbdefb; color: #0d47a1; }
 
-/* BARRA DE CLIENTES */
 .toolbar-clientes {
-    background-color: #f8f9fa;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border: 1px solid #e0e0e0;
+    background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;
+    border: 1px solid #e0e0e0; display: flex; flex-direction: column; gap: 15px;
 }
-.filtro-cliente { display: flex; align-items: center; gap: 10px; font-weight: bold; color: #555; }
-.filtro-cliente select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-width: 200px; }
+.fila-filtros { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; }
+.filtro-item { display: flex; flex-direction: column; gap: 5px; }
+.filtro-item label { font-weight: bold; color: #555; font-size: 0.9rem; }
+.filtro-item select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-width: 220px; font-weight: 500; }
 
-.sub-tabs { display: flex; gap: 5px; background: #e0e0e0; padding: 4px; border-radius: 6px; }
+.sub-tabs { display: flex; gap: 5px; background: #e0e0e0; padding: 4px; border-radius: 6px; width: fit-content; }
 .sub-tabs button {
     border: none; background: transparent; padding: 6px 12px;
     font-size: 0.9rem; color: #666; cursor: pointer; border-radius: 4px; font-weight: 500;
 }
-.sub-tabs button.sub-active { background: white; color: #2c3e50; font-weight: bold; shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.sub-tabs button.sub-active { background: white; color: #2c3e50; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
-/* TABLA */
 .tabla-wrapper { overflow-x: auto; min-height: 300px; }
 table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 th { background: #f8f9fa; text-align: left; padding: 12px; font-weight: 600; color: #555; border-bottom: 2px solid #eee; }
@@ -320,9 +379,17 @@ tr:hover { background-color: #f9f9f9; }
 .nombre-prod { font-weight: 600; color: #2c3e50; }
 .tag-fazon { background: purple; color: white; padding: 2px 4px; border-radius: 4px; font-size: 0.7em; margin-left: 5px; }
 
+.badge-material { background: #95a5a6; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; letter-spacing: 0.5px; }
+.badge-material.pai { background: #e67e22; }
+.badge-material.pead { background: #27ae60; }
+.badge-material.pp { background: #8e44ad; }
+.badge-material.bio { background: #2ecc71; }
+.badge-material.abs { background: #c0392b; }
+.badge-material.resistente-freon { background: #2980b9; }
+.badge-material.polietileno { background: #16a085; }
+
 .bajo-stock td { background-color: #fff5f5; }
 .text-danger { color: #e74c3c; }
-
 .btn-editar { border: none; background: #e3f2fd; color: #1976d2; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; transition: background 0.2s; font-size: 1.1rem; }
 .btn-editar:hover { background: #bbdefb; }
 
@@ -330,10 +397,11 @@ tr:hover { background-color: #f9f9f9; }
 .vacio { text-align: center; padding: 30px; color: #999; font-style: italic; }
 .error { color: red; text-align: center; }
 
+.mensaje-guia { background: #e8f6f3; padding: 20px; border-radius: 8px; border: 2px dashed #1abc9c; color: #16a085; text-align: center; }
+.mensaje-guia h3 { margin: 0 0 10px 0; }
+
 @media (max-width: 768px) {
-    .header-stock, .toolbar-clientes { flex-direction: column; gap: 10px; align-items: flex-start; }
-    .buscador input, .filtro-cliente select { width: 100%; }
-    .tabs-container { overflow-x: auto; padding-bottom: 5px; }
-    .tab-btn { white-space: nowrap; }
+    .header-stock, .fila-filtros { flex-direction: column; align-items: flex-start; }
+    .acciones-header, .filtro-item select, .btn-importar { width: 100%; }
 }
 </style>

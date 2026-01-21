@@ -12,5 +12,7 @@ namespace EstruplastERP.Api.Dtos
 
         [CsvHelper.Configuration.Attributes.Index(4)]
         public string Rubro { get; set; }
+        public string? TipoMaterial { get; set; }
+        public string? Color { get; set; }
     }
 }

@@ -22,7 +22,8 @@ namespace EstruplastERP.Api.Controllers
         {
             return await _context.Clientes
                 .Where(c => c.Activo)
-                .OrderBy(c => c.RazonSocial) 
+                .OrderBy(c => c.RazonSocial)
+                .AsNoTracking() 
                 .ToListAsync();
         }
 
