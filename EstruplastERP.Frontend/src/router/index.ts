@@ -58,6 +58,13 @@ const routes: Array<RouteRecordRaw> = [
         component: GestionProductos, 
         meta: { requiresAuth: true }
     },
+    
+    {
+        path: '/tablero-pedidos',
+        name: 'TableroPedidos',
+        component: () => import('../views/TableroPedidos.vue')
+    },
+
     {
         path: '/editar-producto/:id', 
         name: 'editar-producto',

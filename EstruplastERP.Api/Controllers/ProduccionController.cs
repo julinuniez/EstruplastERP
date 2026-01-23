@@ -216,28 +216,25 @@ namespace EstruplastERP.Api.Controllers
                     await _context.SaveChangesAsync();
                 }
 
-                // Descuento de Stock
                 productoScrap.StockActual -= request.KilosEntrada;
                 productoRecuperado.StockActual += request.KilosObtenidos;
 
                 _context.Entry(productoScrap).State = EntityState.Modified;
                 _context.Entry(productoRecuperado).State = EntityState.Modified;
 
-                // Cálculo de Merma
                 decimal merma = request.KilosEntrada - request.KilosObtenidos;
                 decimal porcentaje = (request.KilosEntrada > 0) ? (merma / request.KilosEntrada) * 100 : 0;
 
-                // Registro en Historial (Producción)
                 var historial = new Produccion
                 {
                     FechaRegistro = DateTime.Now,
-                    ProductoTerminadoId = productoRecuperado.Id, // CORREGIDO: Usando ProductoTerminadoId
+                    ProductoTerminadoId = productoRecuperado.Id,
                     ClienteId = request.ClienteId,
                     Cantidad = 1,
                     Kilos = request.KilosObtenidos,
                     Observacion = $"TRANSFORMACION: {request.KilosEntrada}kg {productoScrap.Nombre} -> {request.KilosObtenidos}kg. Merma: {merma}kg ({porcentaje:N1}%)",
                     Turno = "General",
-                    EmpleadoId = 1 // Asegúrate de tener un empleado con ID 1 en la base de datos
+                    EmpleadoId = 1
                 };
                 _context.Producciones.Add(historial);
 
@@ -278,6 +275,43 @@ namespace EstruplastERP.Api.Controllers
                 .ToListAsync();
 
             return Ok(lista);
+        }
+
+        [HttpGet("tablero-pedidos")]
+        public async Task<ActionResult> GetTableroPedidos([FromQuery] int? clienteId)
+        {
+            var query = _context.Ordenes
+                .Include(o => o.Producto)
+                .Include(o => o.Cliente)
+                .AsQueryable();
+
+            if (clienteId.HasValue && clienteId > 0)
+            {
+                query = query.Where(o => o.ClienteId == clienteId);
+            }
+
+            var ordenes = await query.ToListAsync();
+
+            var pedidosAgrupados = ordenes
+                .GroupBy(o => o.NumeroPedidoCliente)
+                .Select(g => new
+                {
+                    Pedido = g.Key ?? "SIN PEDIDO",
+                    Cliente = g.First().Cliente?.RazonSocial ?? "Varios",
+                    Avance = g.All(o => o.Estado == EstadoOrden.Finalizada) ? 100 :
+                             g.Any(o => o.Estado == EstadoOrden.EnProceso) ? 50 : 0,
+                    Ordenes = g.Select(o => new
+                    {
+                        o.Id,
+                        Producto = o.Producto.Nombre,
+                        Medidas = $"{o.Ancho}mm x {o.Espesor} micrones",
+                        Estado = o.Estado.ToString(),
+                        o.Cantidad
+                    }).ToList()
+                })
+                .OrderByDescending(p => p.Pedido);
+
+            return Ok(pedidosAgrupados);
         }
     }
 }

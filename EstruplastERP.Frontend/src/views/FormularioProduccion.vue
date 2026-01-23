@@ -6,7 +6,6 @@ import HojaImpresion from '../components/HojaImpresion.vue'
 import ListaProduccion from '../components/ListaProduccion.vue'
 import api from '@/services/axiosInstance' 
 
-// --- 1. CONSTANTES Y CONFIGURACIÓN ---
 const DENSIDAD_DEFAULT = 1.1;
 const ID_BRILLO = 1073; 
 const ID_ESTEARATO = 1074; 
@@ -16,7 +15,6 @@ const ID_CARGA = 1077;
 const ID_MASTERBATCH_GENERICO = 90;
 const PORC_ESTEARATO = 0.08; 
 
-// --- 2. INTERFACES ---
 interface Producto {
     id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean;
     esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; rubro?: string;
@@ -33,7 +31,6 @@ interface ItemReceta {
     esFazonInput?: boolean; materialBase?: string;
 }
 
-// --- 3. ESTADO REACTIVO ---
 const loading = ref(false);
 const productos = ref<Producto[]>([])
 const listaInventarioCompleto = ref<any[]>([])
@@ -44,13 +41,11 @@ const clientes = ref<Cliente[]>([])
 const recetaDinamica = ref<ItemReceta[]>([])
 const stockFazonDetectado = ref<number | null>(null);
 
-// Variables FAZON
 const listaLotesCliente = ref<any[]>([]); 
 const loteFazonSeleccionadoId = ref<string | number>('');
 
 const listaProduccionRef = ref<any>(null);
 
-// Variables de Control
 const limiteMinimo = ref(0);
 const limiteMaximo = ref(0);
 const mensaje = ref('');
@@ -60,10 +55,10 @@ const ocultarFormula = ref(false);
 
 const emit = defineEmits(['guardado'])
 
-// Formulario Principal
 const form = ref({
     productoTerminadoId: '' as string | number,
     clienteId: '' as string | number,
+    numeroPedidoCliente: '',
     cantidad: 1,
     empleadoId: '' as string | number,
     observacion: '',
@@ -76,7 +71,6 @@ const form = ref({
     merma: 8, kilosTotales: 0
 })
 
-// --- 💾 AUTO-GUARDADO ---
 const STORAGE_KEY = 'produccion_borrador';
 
 watch(
@@ -96,8 +90,6 @@ const limpiarBorrador = () => {
     localStorage.removeItem(STORAGE_KEY);
 };
 
-// --- 4. PROPIEDADES COMPUTADAS ---
-
 const productoSeleccionado = computed(() => productos.value.find(p => p.id === Number(form.value.productoTerminadoId)) || null);
 const empleadoSeleccionado = computed(() => empleados.value.find(e => e.id === Number(form.value.empleadoId)) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Number(form.value.clienteId)) || null);
@@ -112,7 +104,6 @@ const espesorValido = computed(() => {
     return true;
 });
 
-// Filtra productos terminados disponibles
 const listaProductosDisponibles = computed(() => {
     if (!productos.value || productos.value.length === 0) return [];
     
@@ -134,7 +125,6 @@ const listaProductosDisponibles = computed(() => {
 
         if (esProductoFazon) {
             if (!idClienteSeleccionado) return false;
-            // Solo mostrar si es genérico (Servicio) o si pertenece explícitamente al cliente
             const esPropioDelCliente = p.clienteId && p.clienteId == idClienteSeleccionado;
             const esServicioGenerico = !p.clienteId || p.clienteId === 0;
 
@@ -148,7 +138,6 @@ const listaProductosDisponibles = computed(() => {
     });
 });
 
-// Limpia la lista de MPs para la hoja de impresión (Oculta Scrap si no es Fazón)
 const materiasPrimasLimpias = computed(() => {
     const esFazon = productoSeleccionado.value?.esFazon || 
                     (productoSeleccionado.value?.nombre || '').toUpperCase().includes('FAZON');
@@ -239,8 +228,6 @@ const colorFinalParaPDF = computed(() => {
     return '-';
 });
 
-// --- 5. MÉTODOS ---
-
 function balancearBase() {
     if (recetaDinamica.value.length === 0) return;
     let base = recetaDinamica.value.find(r => r.esBase);
@@ -312,12 +299,9 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
 
     if (!clienteId || !producto) return;
 
-    // 1. VALIDACIÓN INICIAL: Solo procesar si es FAZON
     const esFazon = producto.esFazon || producto.nombre.toUpperCase().includes('FAZON') || producto.nombre.toUpperCase().includes('SERVICIO');
     if (!esFazon) return;
 
-    // 2. OBTENER TODO EL STOCK DEL CLIENTE (Limpio, sin scrap basura)
-    // Esto es lo que tiene el cliente en total.
     const todoElStockCliente = listaInventarioCompleto.value.filter((p: any) => 
         Number(p.clienteId) === Number(clienteId) && 
         p.stockActual > 0 &&
@@ -325,21 +309,17 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
         !p.nombre.toUpperCase().includes('[SCRAP]')
     );
 
-    // 3. DETECTAR EL MATERIAL QUE PIDE EL PRODUCTO
-    // Buscamos pistas en el nombre del producto terminado (Ej: "LAMINADO ABS BLANCO")
     const nombreProd = producto.nombre.toUpperCase();
     const tipoDB = producto.tipoMaterial ? producto.tipoMaterial.toUpperCase() : '';
     
     let materialDetectado = '';
 
-    // Prioridad 1: Base de datos
     if (tipoDB) {
         materialDetectado = tipoDB;
     } 
-    // Prioridad 2: Nombre del producto
     else {
         if (nombreProd.includes("PAI") || nombreProd.includes("IMPACTO") || nombreProd.includes("TUTI")) materialDetectado = 'PAI';
-        else if (nombreProd.includes("ABS")) materialDetectado = 'ABS'; // 👈 AQUÍ DETECTA ABS
+        else if (nombreProd.includes("ABS")) materialDetectado = 'ABS';
         else if (nombreProd.includes("PP") || nombreProd.includes("POLIPROPILENO")) materialDetectado = 'PP';
         else if (nombreProd.includes("PEAD") || nombreProd.includes("ALTA") || nombreProd.includes("HDPE")) materialDetectado = 'PEAD';
         else if (nombreProd.includes("PEBD") || nombreProd.includes("BAJA") || nombreProd.includes("LDPE")) materialDetectado = 'PEBD';
@@ -347,24 +327,16 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
         else if (nombreProd.includes("PS") || nombreProd.includes("ESTIRENO")) materialDetectado = 'PS';
     }
 
-    // 4. 🔥 FILTRADO ESTRICTO 🔥
     if (materialDetectado) {
-        // Si sabemos qué material es, SOLO mostramos eso.
-        // Si el cliente no tiene ese material, la lista quedará VACÍA (Correcto).
         listaLotesCliente.value = todoElStockCliente.filter(lote => {
             const n = lote.nombre.toUpperCase();
             const t = (lote.tipoMaterial || '').toUpperCase();
-            
-            // Regla: El lote debe coincidir con el material detectado
             return n.includes(materialDetectado) || t === materialDetectado;
         });
     } else {
-        // Solo si el sistema NO SABE qué material es el producto (nombre raro),
-        // mostramos todo el stock del cliente para que el operario decida.
         listaLotesCliente.value = todoElStockCliente;
     }
 
-    // 5. AUTO-SELECCIÓN (Si quedó algo en la lista)
     listaLotesCliente.value.sort((a, b) => b.stockActual - a.stockActual);
 
     if (listaLotesCliente.value.length > 0) {
@@ -372,22 +344,16 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
         loteFazonSeleccionadoId.value = mejorOpcion.id;
         aplicarLoteFazonAReceta(mejorOpcion);
     } else {
-        // AVISO DE ERROR: El cliente tiene cosas, pero NO lo que pide el producto.
         const itemFazon = recetaDinamica.value.find(r => r.esFazonInput || r.esBase);
         if (itemFazon) {
             if (todoElStockCliente.length > 0 && materialDetectado) {
-                // Caso: Tiene PAI pero el producto pide ABS
                 itemFazon.nombreInsumo = `⚠️ CLIENTE SIN STOCK DE ${materialDetectado}`;
             } else {
-                // Caso: Cliente vacío
                 itemFazon.nombreInsumo = "⚠️ CLIENTE SIN STOCK DISPONIBLE";
             }
             itemFazon.materiaPrimaId = 0; 
         }
     }
-    
-    // Debug para que veas qué está pasando (abre la consola F12 si falla)
-    console.log(`Fazón Logic: Producto="${nombreProd}" -> Detectado="${materialDetectado}" -> StockFiltrado=${listaLotesCliente.value.length}`);
 }
 
 function alCambiarLoteFazon() {
@@ -429,8 +395,6 @@ function agregarInsumoDesdeHijo(item: { id: number, porcentaje: number }) {
         balancearBase();
     }
 }
-
-// --- 6. API Y CARGAS ---
 
 async function CargarProductosFiltrados(clienteId: number | string = '') {
     try {
@@ -507,7 +471,6 @@ async function CargarDatosProductos(id: number) {
                 };
             });
             
-            // 🔥 SI HAY CLIENTE, BUSCAMOS STOCK SI ES FAZON
             if (form.value.clienteId) {
                 nextTick(async () => { await actualizarRecetaFazonConCliente(form.value.clienteId, prod); });
             }
@@ -557,6 +520,7 @@ async function registrarProduccion() {
         await api.post('/Ordenes', {
             productoTerminadoId: Number(form.value.productoTerminadoId),
             clienteId: form.value.clienteId ? Number(form.value.clienteId) : null,
+            numeroPedidoCliente: form.value.numeroPedidoCliente || '', 
             cantidad: Number(form.value.cantidad),
             empleadoId: Number(form.value.empleadoId),
             turno: form.value.turno,
@@ -772,6 +736,9 @@ onMounted(async () => {
                 <option disabled value="">Cliente...</option>
                 <option v-for="c in clientes" :key="c.id" :value="c.id">{{c.razonSocial}}</option>
             </select>
+
+            <label style="color:#f39c12;">📂 N° Pedido Cliente (OC):</label>
+            <input type="text" v-model="form.numeroPedidoCliente" placeholder="Ej: OC-4455" style="font-weight:bold; border: 1px solid #f39c12; margin-bottom: 5px;">
             
             <select v-model="form.productoTerminadoId">
                 <option disabled value="">Seleccionar Producto...</option>

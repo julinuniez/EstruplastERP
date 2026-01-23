@@ -10,13 +10,16 @@ namespace EstruplastERP.Core
         EnProceso = 1,
         Finalizada = 2
     }
+
     public class OrdenProduccion
     {
-            public int Id { get; set; }
+        public int Id { get; set; }
 
-            public int ProductoId { get; set; }
-            public Producto Producto { get; set; }
-            public decimal Cantidad { get; set; }
+        public string NumeroPedidoCliente { get; set; }
+
+        public int ProductoId { get; set; }
+        public Producto Producto { get; set; }
+        public decimal Cantidad { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal Largo { get; set; }
@@ -27,25 +30,25 @@ namespace EstruplastERP.Core
         [Column(TypeName = "decimal(18,2)")]
         public decimal Espesor { get; set; }
 
-        // --- NUEVOS CAMPOS (Estos son los que te faltan) ---
         public int? ClienteId { get; set; }
         [ForeignKey("ClienteId")]
         public Cliente? Cliente { get; set; }
-        public int? EmpleadoId { get; set; } // Puede ser nulo si nadie la tomó aún
+
+        public int? EmpleadoId { get; set; }
         [ForeignKey("EmpleadoId")]
         public virtual Empleado Empleado { get; set; }
+
         public string Turno { get; set; }
-            public string Observacion { get; set; }
+        public string Observacion { get; set; }
 
-            [Column(TypeName = "decimal(18,4)")]
-            public decimal KilosEstimados { get; set; }
+        [Column(TypeName = "decimal(18,4)")]
+        public decimal KilosEstimados { get; set; }
 
-            // ✅ ESTA ES LA PROPIEDAD QUE TE DA ERROR:
-            public EstadoOrden Estado { get; set; } = EstadoOrden.Pendiente;
+        public EstadoOrden Estado { get; set; } = EstadoOrden.Pendiente;
 
-            public DateTime FechaCreacion { get; set; } = DateTime.Now;
-            public DateTime? FechaFin { get; set; }
+        public DateTime FechaCreacion { get; set; } = DateTime.Now;
+        public DateTime? FechaFin { get; set; }
 
-            public List<ConsumoOrden> Consumos { get; set; } = new List<ConsumoOrden>();
+        public List<ConsumoOrden> Consumos { get; set; } = new List<ConsumoOrden>();
     }
 }

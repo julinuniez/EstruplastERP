@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System;
+using System.Text.RegularExpressions; // Necesario para Regex
 
 namespace EstruplastERP.Api.Controllers
 {
@@ -21,11 +22,38 @@ namespace EstruplastERP.Api.Controllers
         }
 
         // ================================================================
-        // 1. POST: CREAR NUEVO REMITO (DESPACHO)
+        // 1. POST: CREAR NUEVO REMITO (CON VALIDACIÓN DE FORMATO)
         // ================================================================
         [HttpPost]
         public async Task<ActionResult> PostRemito(NuevoRemitoDto dto)
         {
+            // -------------------------------------------------------------
+            // 🔥 1. VALIDACIÓN DE FORMATO (0000-00000000)
+            // -------------------------------------------------------------
+            if (string.IsNullOrWhiteSpace(dto.NumeroRemito))
+                return BadRequest("El número de remito es obligatorio.");
+
+            // Expresión Regular: 4 dígitos, un guion, 8 dígitos.
+            var regexRemito = new Regex(@"^\d{4}-\d{8}$");
+
+            if (!regexRemito.IsMatch(dto.NumeroRemito))
+            {
+                return BadRequest("El formato del remito es inválido. Debe ser: 0000-00000000 (Ej: 0001-00001234).");
+            }
+
+            // -------------------------------------------------------------
+            // 🔥 2. VALIDACIÓN DE DUPLICADOS (Opcional pero recomendado)
+            // Evita que se cargue el mismo remito dos veces para el mismo cliente
+            // -------------------------------------------------------------
+            bool existe = await _context.Remitos.AnyAsync(r => r.NumeroRemito == dto.NumeroRemito && r.ClienteId == dto.ClienteId);
+            if (existe)
+            {
+                return BadRequest($"El remito {dto.NumeroRemito} ya existe para este cliente.");
+            }
+
+            // -------------------------------------------------------------
+            // 3. VALIDACIÓN DE STOCK
+            // -------------------------------------------------------------
             foreach (var itemDto in dto.Items)
             {
                 var producto = await _context.Productos.FindAsync(itemDto.ProductoId);
@@ -41,15 +69,14 @@ namespace EstruplastERP.Api.Controllers
 
             var cliente = await _context.Clientes.FindAsync(dto.ClienteId);
             if (cliente == null) return BadRequest("El cliente seleccionado no existe.");
+
             var nuevoRemito = new Remito
             {
                 ClienteId = dto.ClienteId,
                 NumeroRemito = dto.NumeroRemito,
                 Fecha = dto.Fecha != default ? dto.Fecha : DateTime.Now,
                 Observacion = dto.Observacion,
-
                 ClienteNombre = cliente.RazonSocial,
-
                 Detalles = new List<RemitoDetalle>()
             };
 
@@ -57,24 +84,23 @@ namespace EstruplastERP.Api.Controllers
             {
                 var producto = await _context.Productos.FindAsync(itemDto.ProductoId);
 
-                
+                // Descuento de Stock
                 producto.StockActual -= itemDto.Cantidad;
 
-               
                 nuevoRemito.Detalles.Add(new RemitoDetalle
                 {
                     ProductoId = itemDto.ProductoId,
                     Cantidad = itemDto.Cantidad,
-                    Detalle = itemDto.Detalle, 
-                    PrecioUnitarioSnapshot = 0 
+                    Detalle = itemDto.Detalle,
+                    PrecioUnitarioSnapshot = 0
                 });
 
                 _context.Movimientos.Add(new Movimiento
                 {
                     Fecha = DateTime.Now,
                     ProductoId = producto.Id,
-                    Cantidad = itemDto.Cantidad, 
-                    TipoMovimiento = "SALIDA_REMITO", 
+                    Cantidad = itemDto.Cantidad,
+                    TipoMovimiento = "SALIDA_REMITO",
                     Observacion = $"Remito #{dto.NumeroRemito} -> {cliente.RazonSocial}. ({itemDto.Detalle})",
                     ClienteId = cliente.Id,
                     Turno = "Despacho",
@@ -82,6 +108,7 @@ namespace EstruplastERP.Api.Controllers
                     PrecioTotal = 0
                 });
             }
+
             _context.Remitos.Add(nuevoRemito);
             await _context.SaveChangesAsync();
 
@@ -92,9 +119,9 @@ namespace EstruplastERP.Api.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetHistorial()
         {
             var remitos = await _context.Remitos
-                .Include(r => r.Cliente)              
-                .Include(r => r.Detalles)             
-                    .ThenInclude(d => d.Producto)      
+                .Include(r => r.Cliente)
+                .Include(r => r.Detalles)
+                    .ThenInclude(d => d.Producto)
                 .OrderByDescending(r => r.Fecha)
                 .ThenByDescending(r => r.Id)
                 .ToListAsync();
@@ -106,16 +133,14 @@ namespace EstruplastERP.Api.Controllers
                 r.Fecha,
                 r.Observacion,
 
-                
                 ClienteNombreBackup = r.ClienteNombre,
 
-                
                 Cliente = r.Cliente == null ? null : new
                 {
                     r.Cliente.Id,
                     r.Cliente.RazonSocial,
-                    r.Cliente.Cuit,       
-                    r.Cliente.Direccion   
+                    r.Cliente.Cuit,
+                    r.Cliente.Direccion
                 },
 
                 Items = r.Detalles.Select(d => new {
@@ -123,7 +148,7 @@ namespace EstruplastERP.Api.Controllers
                     ProductoNombre = d.Producto != null ? d.Producto.Nombre : "Producto Eliminado",
                     Sku = d.Producto != null ? d.Producto.CodigoSku : "-",
                     d.Cantidad,
-                    d.Detalle 
+                    d.Detalle
                 }).ToList()
             });
 

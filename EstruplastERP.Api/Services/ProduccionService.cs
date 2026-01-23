@@ -85,10 +85,7 @@ namespace EstruplastERP.Api.Services
             return new { posible = true, mensaje = "✅ Stock Disponible." };
         }
 
-        // ==============================================================================
-        // REGISTRO DE ORDEN (CORREGIDO PARA GUARDAR MEDIDAS)
-        // ==============================================================================
-        public async Task<OrdenProduccion> RegistrarOrden(NuevaOrdenDto request)
+        public async Task<OrdenProduccion> RegistrarOrden(NuevaOrdenDto request) // 👈 Aquí se llama 'request'
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
@@ -101,6 +98,10 @@ namespace EstruplastERP.Api.Services
                     FechaCreacion = DateTime.Now,
                     ProductoId = request.ProductoTerminadoId,
                     ClienteId = request.ClienteId,
+
+                    // ✅ CORRECCIÓN: Usamos 'request', NO 'dto'
+                    NumeroPedidoCliente = request.NumeroPedidoCliente,
+
                     EmpleadoId = request.EmpleadoId,
                     Cantidad = request.Cantidad,
                     KilosEstimados = request.Kilos,
@@ -108,7 +109,7 @@ namespace EstruplastERP.Api.Services
                     Observacion = request.Observacion,
                     Estado = EstadoOrden.Pendiente,
 
-                    // 🔥 GUARDAMOS LAS MEDIDAS HISTÓRICAS AQUÍ
+                    // Guardamos las medidas
                     Largo = request.Largo,
                     Ancho = request.Ancho,
                     Espesor = request.Espesor,
