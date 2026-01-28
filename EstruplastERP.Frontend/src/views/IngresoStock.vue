@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import axios from 'axios'
+import api from '@/services/axiosInstance'; // Usamos la instancia segura
 
 // --- 1. INTERFACES ---
 interface Insumo {
     id: number;
     nombre: string;
     stockActual: number;
+    // Propiedades para filtrar
+    esScrap?: boolean;
+    esMateriaPrima?: boolean;
 }
 
 interface Proveedor {
@@ -46,13 +49,7 @@ const form = ref({
 const mensaje = ref('')
 const error = ref('')
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
-
-const getAuthConfig = () => {
-    const token = localStorage.getItem('token');
-    return { headers: { Authorization: `Bearer ${token}` } };
-};
-
+// Computed: Total Factura
 const totalEstimadoFactura = computed(() => {
     if (form.value.cantidad > 0 && form.value.precioUnitario > 0) {
         return (form.value.cantidad * form.value.precioUnitario).toFixed(2)
@@ -60,15 +57,14 @@ const totalEstimadoFactura = computed(() => {
     return "0.00"
 })
 
-// --- 🔥 COMPUTED: FILTRO SOLO COMPRAS + FECHAS ---
+// --- 🔥 COMPUTED: FILTRO SOLO COMPRAS REALES ---
 const movimientosFiltrados = computed(() => {
     let lista = listaMovimientosBruta.value;
 
-    // 1. FILTRAR SOLO COMPRAS (Excluir Producción)
+    // 1. FILTRAR SOLO COMPRAS (Excluir Producción y Scrap Interno)
     lista = lista.filter(m => 
         m.tipoMovimiento === 'COMPRA' || 
         m.tipoMovimiento === 'ENTRADA'
-        // Se eliminó 'PRODUCCION' para que no aparezca aquí
     );
 
     // 2. Filtro por Fecha DESDE
@@ -95,24 +91,35 @@ onMounted(async () => {
   await cargarHistorialCompras(); 
 })
 
+// 🔥 FILTRO BLINDADO: SOLO MATERIA PRIMA VIRGEN
 async function cargarInsumos() {
     try {
-        const res = await axios.get(`${apiUrl}/Productos/materias-primas`, getAuthConfig())
-        listaInsumos.value = res.data
-    } catch (e: any) { console.error(e) }
+        const res = await api.get('/Productos');
+        
+        // Filtramos para que NO aparezca Scrap, ni Recuperado, ni nada sucio
+        listaInsumos.value = res.data.filter((p: any) => {
+            const nombre = p.nombre ? p.nombre.toUpperCase() : '';
+            return (
+                p.esMateriaPrima === true &&       // Es MP
+                p.esScrap !== true &&              // NO es Scrap
+                !nombre.includes("[SCRAP]") &&     // NO dice Scrap
+                !nombre.includes("RECUPERADO") &&  // NO es Recuperado
+                !nombre.includes("[REC]")          // NO es Recuperado (alias)
+            );
+        });
+    } catch (e) { console.error(e) }
 }
 
 async function cargarProveedores() {
     try {
-        const res = await axios.get(`${apiUrl}/Proveedores`, getAuthConfig())
-        listaProveedores.value = res.data
-    } catch (e: any) { console.error(e) }
+        const res = await api.get('/Proveedores');
+        listaProveedores.value = res.data;
+    } catch (e) { console.error(e) }
 }
 
 async function cargarHistorialCompras() {
     try {
-        // Traemos los movimientos y filtramos en el frontend
-        const res = await axios.get(`${apiUrl}/Movimientos`, getAuthConfig())
+        const res = await api.get('/Movimientos');
         listaMovimientosBruta.value = res.data;
     } catch (e) { console.error(e) }
 }
@@ -136,9 +143,11 @@ async function registrarCompra() {
   }
 
   try {
-    await axios.post(`${apiUrl}/Compras`, payload, getAuthConfig())
-    mensaje.value = `✅ Compra registrada. Stock actualizado.`
+    await api.post('/Compras', payload);
     
+    mensaje.value = `✅ Compra registrada correctamente. Stock Actualizado.`
+    
+    // Resetear formulario
     form.value.cantidad = 0
     form.value.precioUnitario = 0
     form.value.lote = ''
@@ -148,15 +157,15 @@ async function registrarCompra() {
     await cargarHistorialCompras()
 
   } catch (e: any) {
-    const msg = e.response?.data?.mensaje || e.message
-    error.value = "❌ Error: " + msg
+    const msg = e.response?.data?.mensaje || e.message || "Error desconocido";
+    error.value = "❌ Error: " + msg;
   }
 }
 
 async function eliminarMovimiento(id: number) {
     if(!confirm("⚠️ ¿Eliminar este registro de compra? Se descontará el stock.")) return;
     try {
-        await axios.delete(`${apiUrl}/Movimientos/eliminar/${id}`, getAuthConfig());
+        await api.delete(`/Movimientos/eliminar/${id}`);
         alert("✅ Eliminado correctamente.");
         await cargarHistorialCompras();
         await cargarInsumos();
@@ -170,7 +179,7 @@ async function eliminarMovimiento(id: number) {
   <div class="contenedor-ingresos">
       
       <div class="hoja-stock">
-        <h3>🏭 Registro de Compras (Ingreso MP)</h3>
+        <h3>🏭 Registro de Compras (Materia Prima)</h3>
         
         <div class="campo">
           <label>Proveedor:</label>
@@ -196,13 +205,16 @@ async function eliminarMovimiento(id: number) {
         <hr class="separador">
 
         <div class="campo">
-          <label>Materia Prima:</label>
+          <label>Materia Prima (Insumos):</label>
           <select v-model="form.productoId">
             <option value="" disabled>-- Seleccione Material --</option>
             <option v-for="p in listaInsumos" :key="p.id" :value="p.id">
                 {{ p.nombre }} (Stock: {{ p.stockActual }})
             </option>
           </select>
+          <small v-if="listaInsumos.length === 0" style="color:red">
+              No hay materias primas registradas (El scrap está oculto).
+          </small>
         </div>
 
         <div class="fila-doble">
@@ -286,7 +298,6 @@ async function eliminarMovimiento(id: number) {
               </tbody>
           </table>
       </div>
-
   </div>
 </template>
 
@@ -336,29 +347,15 @@ h3 { color: #1f2937; border-bottom: 2px solid #16a34a; padding-bottom: 10px; mar
 .exito { background: #dcfce7; color: #166534; padding: 10px; border-radius: 5px; margin-top: 10px; text-align: center;}
 .error { background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 5px; margin-top: 10px; text-align: center;}
 
-/* ESTILOS NUEVOS PARA HISTORIAL */
+/* Historial */
 .historial-rapido { background: white; padding: 0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eee; }
-
-.header-historial {
-    background: #f9fafb; 
-    padding: 15px; 
-    border-bottom: 1px solid #eee; 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-}
+.header-historial { background: #f9fafb; padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
 .header-historial h4 { margin: 0; color: #374151; }
-
 .filtros-fecha { display: flex; gap: 10px; align-items: center; }
 .filtro-item { display: flex; align-items: center; gap: 5px; }
-.filtro-item input { padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; }
-
 .tabla-mini { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tabla-mini th { background: #f3f4f6; text-align: left; padding: 10px; font-weight: 600; color: #4b5563; }
 .tabla-mini td { border-bottom: 1px solid #f3f4f6; padding: 10px; color: #1f2937; }
-
 .btn-undo { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 1.1rem; }
 .btn-undo:hover { color: #b91c1c; transform: scale(1.1); }
 </style>

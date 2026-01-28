@@ -58,6 +58,11 @@ const routes: Array<RouteRecordRaw> = [
         component: GestionProductos, 
         meta: { requiresAuth: true }
     },
+    {
+  path: '/ingreso-scrap',
+  name: 'ingreso-scrap',
+  component: () => import('../views/IngresoScrap.vue')
+},
     
     {
         path: '/tablero-pedidos',

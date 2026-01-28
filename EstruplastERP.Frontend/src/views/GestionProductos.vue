@@ -35,6 +35,13 @@ const getSku = (p: any) => (p.codigoSku || p.CodigoSku || '').toUpperCase();
 const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
 const getClienteId = (p: any) => p.clienteId || p.ClienteId || 0;
 
+// Helpers booleanos seguros (Manejan mayúsculas/minúsculas de la DB)
+const checkEsPT = (p: any) => !!(p.esProductoTerminado || p.EsProductoTerminado);
+const checkEsMP = (p: any) => !!(p.esMateriaPrima || p.EsMateriaPrima);
+const checkEsFazon = (p: any) => !!(p.esFazon || p.EsFazon);
+const checkEsScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP');
+const checkGenerico = (p: any) => !!(p.esGenerico || p.EsGenerico);
+
 const detectarTipo = (p: any) => {
     if (p.tipoMaterial) {
         const t = p.tipoMaterial.toUpperCase().trim();
@@ -57,25 +64,26 @@ const detectarTipo = (p: any) => {
 
 watch(clienteFiltro, () => { materialFiltro.value = ''; });
 
-const esMpCliente = (p: any) => getSku(p).startsWith('MP-CLI') || (p.esMateriaPrima && getClienteId(p) > 0);
-const esServicioFazon = (p: any) => getSku(p).startsWith('FAZ-') || (p.esFazon);
-const esScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP');
+const esMpCliente = (p: any) => getSku(p).startsWith('MP-CLI') || (checkEsMP(p) && getClienteId(p) > 0);
+const esServicioFazon = (p: any) => getSku(p).startsWith('FAZ-') || checkEsFazon(p);
 
+// 🔥 LÓGICA DE FILTRADO CORREGIDA 🔥
 const productosFiltrados = computed(() => {
     let lista = listaProductos.value;
     const tab = tabActual.value;
-    const checkGenerico = (p: any) => !!(p.esGenerico || p.EsGenerico);
-    const checkEsScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP');
 
     if (tab === 'MP') {
+        // MP PROPIA: Es MP, NO es de cliente, NO es Scrap, NO es Genérico
         lista = lista.filter(p => 
-            (p.esMateriaPrima || p.EsMateriaPrima) && 
+            checkEsMP(p) && 
             !esMpCliente(p) && !checkEsScrap(p) && !checkGenerico(p) && 
             !getNombre(p).includes('GENERICO') && !getNombre(p).includes('BASE') && p.id !== 90 
         );
     } 
     else if (tab === 'PT') {
-        lista = lista.filter(p => (p.esProductoTerminado || p.EsProductoTerminado) && !esServicioFazon(p));
+        // PT GENERAL: Mostramos TODO lo que sea Producto Terminado (Propio o Fazon)
+        // Antes filtrabas !esServicioFazon(p), eso ocultaba tus "Laminados a Fason".
+        lista = lista.filter(p => checkEsPT(p));
     } 
     else if (tab === 'CLI') {
         if (!clienteFiltro.value) return [];
@@ -84,11 +92,13 @@ const productosFiltrados = computed(() => {
         lista = lista.filter(p => getClienteId(p) === idFiltro);
 
         if (subTabCliente.value === 'MP_CLI') {
-            lista = lista.filter(p => esMpCliente(p) && !checkEsScrap(p));
+            lista = lista.filter(p => checkEsMP(p) && !checkEsScrap(p));
         } else if (subTabCliente.value === 'SCRAP_CLI') {
             lista = lista.filter(p => checkEsScrap(p));
         } else {
-            lista = lista.filter(p => esServicioFazon(p));
+            // PT DEL CLIENTE (Fazón):
+            // Traemos si es Fazón explícito O si es Producto Terminado de este cliente
+            lista = lista.filter(p => checkEsFazon(p) || checkEsPT(p));
         }
 
         if (materialFiltro.value) {
@@ -105,9 +115,10 @@ const productosFiltrados = computed(() => {
 
 const detectingTipo = (p: any) => detectarTipo(p);
 
-const countMP = computed(() => listaProductos.value.filter(p => (p.esMateriaPrima || p.EsMateriaPrima) && !esMpCliente(p) && !esScrap(p)).length);
-const countPT = computed(() => listaProductos.value.filter(p => (p.esProductoTerminado || p.EsProductoTerminado) && !esServicioFazon(p)).length);
-const countCLI = computed(() => listaProductos.value.filter(p => esMpCliente(p) || esServicioFazon(p) || esScrap(p)).length);
+// Contadores actualizados con la misma lógica
+const countMP = computed(() => listaProductos.value.filter(p => checkEsMP(p) && !esMpCliente(p) && !checkEsScrap(p)).length);
+const countPT = computed(() => listaProductos.value.filter(p => checkEsPT(p)).length); // Ahora cuenta TODOS los PT
+const countCLI = computed(() => listaProductos.value.filter(p => getClienteId(p) > 0).length);
 
 const irAEditar = (id: number) => {
     router.push({ name: 'editar-producto', params: { id } });
@@ -278,6 +289,9 @@ onMounted(() => {
                     <tr>
                         <th>SKU</th>
                         <th>Descripción</th>
+                        
+                        <th v-if="tabActual === 'PT'">Dueño</th>
+
                         <th v-if="tabActual === 'CLI'">Material</th> 
                         <th>Color / Var.</th>
                         <th style="text-align:right">Stock (Kg)</th>
@@ -290,10 +304,17 @@ onMounted(() => {
                         <td class="sku">{{ p.codigoSku }}</td>
                         <td>
                             <div class="nombre-prod">{{ p.nombre }}</div>
-                            <small v-if="p.esFazon && tabActual !== 'CLI'" class="tag-fazon">FAZON</small>
-                            <small v-if="esScrap(p)" style="color: #d35400; font-weight:bold; margin-left:5px;">(SCRAP)</small>
+                            <small v-if="checkEsFazon(p)" class="tag-fazon">FAZON</small>
+                            <small v-if="checkEsScrap(p)" style="color: #d35400; font-weight:bold; margin-left:5px;">(SCRAP)</small>
                         </td>
                         
+                        <td v-if="tabActual === 'PT'">
+                            <span v-if="getClienteId(p) > 0" class="badge-cliente">
+                                {{ listaClientes.find(c => c.id === getClienteId(p))?.razonSocial || 'Cliente #' + getClienteId(p) }}
+                            </span>
+                            <span v-else class="badge-propio">Propio</span>
+                        </td>
+
                         <td v-if="tabActual === 'CLI'">
                             <span class="badge-material" v-if="detectingTipo(p) !== 'OTROS'" :class="detectingTipo(p).toLowerCase().replace(' ', '-')">
                                 {{ detectingTipo(p) }}
@@ -378,6 +399,10 @@ tr:hover { background-color: #f9f9f9; }
 .sku { font-family: 'Courier New', monospace; font-weight: bold; color: #666; font-size: 0.9em; }
 .nombre-prod { font-weight: 600; color: #2c3e50; }
 .tag-fazon { background: purple; color: white; padding: 2px 4px; border-radius: 4px; font-size: 0.7em; margin-left: 5px; }
+
+/* Badges nuevos */
+.badge-cliente { background: #8e44ad; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+.badge-propio { background: #2980b9; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; opacity: 0.8; }
 
 .badge-material { background: #95a5a6; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; letter-spacing: 0.5px; }
 .badge-material.pai { background: #e67e22; }

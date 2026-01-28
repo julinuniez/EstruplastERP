@@ -142,13 +142,30 @@ const materiasPrimasLimpias = computed(() => {
     const esFazon = productoSeleccionado.value?.esFazon || 
                     (productoSeleccionado.value?.nombre || '').toUpperCase().includes('FAZON');
 
+    const materialesBaseAbstractos = [
+        "POLIPROPILENO", 
+        "PEAD", 
+        "PEBD", 
+        "PAI", 
+        "POLIETILENO", 
+        "ABS", 
+        "RESISTENTE AL FREON", 
+        "ALTO IMPACTO"
+    ];
+
     return listaTodasMateriasPrimas.value.filter(mp => {
-        const nombre = (mp.nombre || '').toUpperCase();
+        const nombre = (mp.nombre || '').toUpperCase().trim();
+
+        if (materialesBaseAbstractos.includes(nombre)) return false;
+        if (mp.esGenerico) return false;
+
+        // 3. Lógica Standard (Tu filtro original)
         if (!esFazon) {
             if (mp.esScrap) return false;
             if (nombre.includes('SCRAP') || nombre.includes('RECUPERADO')) return false;
             if (nombre.includes('FAZON') || mp.esFazon) return false;
         }
+        
         return true; 
     });
 });
@@ -306,7 +323,8 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
         Number(p.clienteId) === Number(clienteId) && 
         p.stockActual > 0 &&
         !p.esScrap && 
-        !p.nombre.toUpperCase().includes('[SCRAP]')
+        !p.nombre.toUpperCase().includes('[SCRAP]') &&
+        p.esMateriaPrima === true
     );
 
     const nombreProd = producto.nombre.toUpperCase();
@@ -524,7 +542,7 @@ async function registrarProduccion() {
             cantidad: Number(form.value.cantidad),
             empleadoId: Number(form.value.empleadoId),
             turno: form.value.turno,
-            observacion: (form.value.observacion || '') + ` | Geo: ${pesoNetoGeometrico}kg | Merma: ${porcentajeMerma}%`,
+            observacion: (form.value.observacion || ''),
             kilos: Number(pesoBrutoExacto.toFixed(3)),
             largo: Number(form.value.largo),
             ancho: Number(form.value.ancho),

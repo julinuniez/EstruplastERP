@@ -7,8 +7,7 @@ import logoImg from '@/assets/estruplast-logo.png';
 const route = useRoute();
 const router = useRouter();
 const sesion = useSesionStore();
-
-// Estado del menú (false = expandido, true = solo iconos)
+const version = __APP_VERSION__;
 const menuReducido = ref(false); 
 
 const mostrarMenu = computed(() => route.name !== 'login');
@@ -48,6 +47,7 @@ function toggleMenu() {
           <span class="icon">📋</span>
           <span class="text" v-show="!menuReducido">Pedidos</span>
         </router-link>
+        
         <router-link :to="{ name: 'inventario' }" class="nav-btn" active-class="activo" title="Inventario">
           <span class="icon">📦</span>
           <span class="text" v-show="!menuReducido">Inventario</span>
@@ -58,6 +58,10 @@ function toggleMenu() {
           <span class="text" v-show="!menuReducido">Compras MP</span>
         </router-link>
 
+        <router-link :to="{ name: 'ingreso-scrap' }" class="nav-btn" active-class="activo" title="Ingreso Scrap">
+          <span class="icon">🗑️</span>
+          <span class="text" v-show="!menuReducido">Ingreso Scrap</span>
+        </router-link>
         <router-link :to="{ name: 'scrap' }" class="nav-btn" active-class="activo" title="Recuperado">
           <span class="icon">♻️</span>
           <span class="text" v-show="!menuReducido">Recuperado</span>
@@ -73,6 +77,9 @@ function toggleMenu() {
           <span class="text" v-show="!menuReducido">Configuración</span>
         </router-link>
       </div>
+      <div style="margin-top: auto; padding: 10px; font-size: 0.8rem; text-align: center; color: #666; border-top: 1px solid #444;">
+        v{{ version }}
+     </div>
     </nav>
 
     <div class="main-wrapper" :class="{ 'margen-reducido': menuReducido, 'margen-normal': !menuReducido, 'full-screen': !mostrarMenu }">

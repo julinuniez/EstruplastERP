@@ -174,67 +174,101 @@ namespace EstruplastERP.Api.Controllers
             using var transaction = _context.Database.BeginTransaction();
             try
             {
+                // 1. Validaciones Básicas
                 if (request.KilosObtenidos > request.KilosEntrada)
-                    return BadRequest("Error: No puedes obtener más kilos de salida que de entrada.");
+                    return BadRequest("Error físico: No puedes crear materia de la nada (Salida > Entrada).");
 
                 var productoScrap = await _context.Productos.FindAsync(request.ProductoScrapId);
                 if (productoScrap == null) return BadRequest("El producto Scrap no existe.");
 
                 if (productoScrap.StockActual < request.KilosEntrada)
-                    return BadRequest($"Stock insuficiente. Disponible: {productoScrap.StockActual} kg.");
+                    return BadRequest($"Stock insuficiente. Tienes {productoScrap.StockActual} kg, intentas usar {request.KilosEntrada} kg.");
 
-                string skuRecuperado = productoScrap.CodigoSku.Replace("SCRAP", "REC");
-                if (!skuRecuperado.Contains("REC")) skuRecuperado = $"REC-{productoScrap.CodigoSku}";
+                // 2. Generación Inteligente de SKU para el Recuperado
+                // Si el SKU era "SCRAP-PP-ROJO", intentamos que sea "REC-PP-ROJO"
+                string skuRecuperado = productoScrap.CodigoSku.Replace("SCRAP", "REC").Replace("scrap", "rec");
 
+                // Si el SKU original no tenía la palabra SCRAP, le anteponemos el prefijo
+                if (!skuRecuperado.ToUpper().Contains("REC"))
+                    skuRecuperado = $"REC-{skuRecuperado}";
+
+                // 3. Buscar si ya existe el producto Recuperado (Mismo SKU + Mismo Cliente)
                 var productoRecuperado = await _context.Productos
                     .FirstOrDefaultAsync(p => p.CodigoSku == skuRecuperado && p.ClienteId == request.ClienteId);
 
+                // 4. SI NO EXISTE, LO CREAMOS (Aquí está la mejora del Color)
                 if (productoRecuperado == null)
                 {
+                    // Limpieza del nombre base
+                    string nombreBase = productoScrap.Nombre
+                        .Replace("[SCRAP]", "")
+                        .Replace("SCRAP", "")
+                        .Replace("Scrap", "")
+                        .Trim();
+
+                    // Construimos el nombre nuevo
+                    string nombreFinal = $"[RECUPERADO] {nombreBase}";
+
+                    // 🔥 LÓGICA DE COLOR: Si el producto tiene color, lo agregamos al nombre
+                    // para que en la lista se vea: "[RECUPERADO] POLIPROPILENO ROJO"
+                    if (!string.IsNullOrEmpty(productoScrap.Color))
+                    {
+                        // Solo lo agregamos si no está ya escrito en el nombre
+                        if (!nombreFinal.ToUpper().Contains(productoScrap.Color.ToUpper()))
+                        {
+                            nombreFinal += $" {productoScrap.Color.ToUpper()}";
+                        }
+                    }
+
                     productoRecuperado = new Producto
                     {
                         CodigoSku = skuRecuperado,
-                        Nombre = productoScrap.Nombre.Replace("[SCRAP]", "[RECUPERADO]"),
+                        Nombre = nombreFinal, // Usamos el nombre con color
                         Rubro = "MATERIA PRIMA RECUPERADA",
                         TipoMaterial = productoScrap.TipoMaterial,
-                        Color = productoScrap.Color,
+                        Color = productoScrap.Color, // Copiamos el dato técnico
                         ClienteId = request.ClienteId,
+
+                        // Flags importantes
                         EsScrap = false,
                         EsMateriaPrima = true,
                         EsProductoTerminado = false,
+
                         StockActual = 0,
                         StockMinimo = 0,
                         Activo = true,
                         FechaCreacion = DateTime.Now,
-                        PesoEspecifico = 1
+                        PesoEspecifico = productoScrap.PesoEspecifico > 0 ? productoScrap.PesoEspecifico : 1
                     };
 
-                    if (!productoRecuperado.Nombre.Contains("[RECUPERADO]"))
-                        productoRecuperado.Nombre = $"[RECUPERADO] {productoScrap.Nombre}";
-
                     _context.Productos.Add(productoRecuperado);
-                    await _context.SaveChangesAsync();
+                    await _context.SaveChangesAsync(); // Guardamos para generar el ID
                 }
 
+                // 5. MOVIMIENTOS DE STOCK (Resta al Sucio, Suma al Limpio)
                 productoScrap.StockActual -= request.KilosEntrada;
                 productoRecuperado.StockActual += request.KilosObtenidos;
 
+                // Forzamos el estado modificado por seguridad
                 _context.Entry(productoScrap).State = EntityState.Modified;
                 _context.Entry(productoRecuperado).State = EntityState.Modified;
 
+                // 6. CÁLCULO DE MERMA
                 decimal merma = request.KilosEntrada - request.KilosObtenidos;
                 decimal porcentaje = (request.KilosEntrada > 0) ? (merma / request.KilosEntrada) * 100 : 0;
 
+                // 7. HISTORIAL (Kardex de Producción)
                 var historial = new Produccion
                 {
                     FechaRegistro = DateTime.Now,
-                    ProductoTerminadoId = productoRecuperado.Id,
+                    ProductoTerminadoId = productoRecuperado.Id, // El producto resultante
                     ClienteId = request.ClienteId,
-                    Cantidad = 1,
+                    Cantidad = 1, // Es 1 lote
                     Kilos = request.KilosObtenidos,
-                    Observacion = $"TRANSFORMACION: {request.KilosEntrada}kg {productoScrap.Nombre} -> {request.KilosObtenidos}kg. Merma: {merma}kg ({porcentaje:N1}%)",
-                    Turno = "General",
-                    EmpleadoId = 1
+                    // Guardamos detalle rico en la observación
+                    Observacion = $"TRANSFORMACION: {request.KilosEntrada}kg de '{productoScrap.Nombre}' -> {request.KilosObtenidos}kg de '{productoRecuperado.Nombre}'. Merma: {merma}kg ({porcentaje:N1}%)",
+                    Turno = "Recuperado", // Identificador para reportes
+                    EmpleadoId = 1 // O el ID del usuario logueado si lo tienes
                 };
                 _context.Producciones.Add(historial);
 
@@ -244,15 +278,15 @@ namespace EstruplastERP.Api.Controllers
                 return Ok(new
                 {
                     mensaje = "Transformación registrada con éxito.",
-                    stockScrap = productoScrap.StockActual,
-                    stockRecuperado = productoRecuperado.StockActual,
+                    producto = productoRecuperado.Nombre, // Devolvemos el nombre para feedback visual
+                    stockNuevo = productoRecuperado.StockActual,
                     merma = merma
                 });
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                return BadRequest($"Error: {ex.Message}");
+                return BadRequest($"Error en transformación: {ex.Message}");
             }
         }
 
