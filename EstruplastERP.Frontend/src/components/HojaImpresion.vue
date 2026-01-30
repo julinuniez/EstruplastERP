@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import logoImg from '@/assets/estruplast-logo.png';
+
 const props = defineProps<{
   form: any;
   producto: any;
-  cliente: any;
+  cliente: any; 
   empleado: any;
   receta: any[];
   colorFinal: string;
@@ -31,38 +32,31 @@ const pesoBrutoExacto = computed(() => {
 
 const pesoVisualRedondeado = computed(() => Math.ceil(pesoBrutoExacto.value));
 
-// --- 🔥 NUEVO: RECETA ORDENADA Y LIMPIA ---
 const recetaVisual = computed(() => {
-    // 1. Hacemos una copia superficial para no mutar props directamente al ordenar
     let lista = [...props.receta];
-
-    // 2. Filtramos lo que sea 0 o negativo
     lista = lista.filter(item => {
         const cant = parseFloat(item.cantidad);
         return cant > 0;
     });
-
-    // 3. Ordenamos de Mayor a Menor Porcentaje (El base 98% queda arriba)
     lista.sort((a, b) => {
         const cantA = parseFloat(a.cantidad) || 0;
         const cantB = parseFloat(b.cantidad) || 0;
         return cantB - cantA; 
     });
-
     return lista;
 });
 
-// --- FILTRO DE INSUMOS ---
 const sugerenciasFiltradas = computed(() => {
     const texto = insumoBusquedaTexto.value.trim().toUpperCase();
     let lista = props.materiasPrimas || [];
 
-    // 1. Detectar contexto del Producto
-    const nombreProd = (props.producto?.nombre || '').toUpperCase();
-    const esFazon = props.producto?.esFazon || nombreProd.includes('FAZON');
+    const idClienteOrden = props.cliente ? props.cliente.id : 0;
+    const esClienteFazon = props.cliente && props.cliente.esFazon === true;
 
     let materialRequerido = '';
-    if (nombreProd.includes('PAI') || nombreProd.includes('IMPACTO')) materialRequerido = 'PAI';
+    const nombreProd = (props.producto?.nombre || '').toUpperCase();
+    
+    if (nombreProd.includes('PAI') || nombreProd.includes('IMPACTO') || nombreProd.includes('A.I.') || nombreProd.includes('AI ')) materialRequerido = 'PAI';
     else if (nombreProd.includes('PP') || nombreProd.includes('POLIPROPILENO')) materialRequerido = 'PP';
     else if (nombreProd.includes('PEAD') || nombreProd.includes('ALTA')) materialRequerido = 'PEAD';
     else if (nombreProd.includes('PEBD') || nombreProd.includes('BAJA')) materialRequerido = 'PEBD';
@@ -70,20 +64,32 @@ const sugerenciasFiltradas = computed(() => {
     lista = lista.filter(mp => {
         const nombreMP = (mp.nombre || '').toUpperCase();
         const rubroMP = (mp.rubro || '').toUpperCase();
+        const idDuenioMaterial = mp.clienteId || 0;
         
-        // A. BLOQUEO DE BASURA
-        if (mp.esScrap) return false;
-        if (nombreMP.includes('SCRAP')) return false;
-        if (nombreMP.includes('SUCIO')) return false;
-        if (nombreMP.includes('MOLIDO') && !nombreMP.includes('RECUPERADO')) return false;
+        // --- 1. FILTRO DE CALIDAD ---
+        if (nombreMP.includes('SCRAP') || nombreMP.includes('SUCIO')) return false;
+        if (mp.esScrap) {
+            const esProcesado = nombreMP.includes('MOLIDO') || nombreMP.includes('RECUPERADO');
+            if (!esProcesado) return false;
+        }
 
-        // B. FILTROS GENÉRICOS
+        // --- 2. LÓGICA DE CLIENTE ---
+        const esDelClienteActual = (idClienteOrden > 0 && idDuenioMaterial === idClienteOrden);
+
+        if (esDelClienteActual) {
+            if (materialRequerido) {
+                if (materialRequerido === 'PP' && (nombreMP.includes('PAI') || nombreMP.includes('IMPACTO'))) return false;
+                if (materialRequerido === 'PAI' && (nombreMP.includes('PP') || nombreMP.includes('POLIPROPILENO'))) return false;
+            }
+            return true;
+        }
+
+        // --- 3. FILTROS GENERALES ---
+        if (idDuenioMaterial > 0 && idDuenioMaterial !== idClienteOrden) return false;
         if (nombreMP.includes('BASE') && !nombreMP.includes('ALTA')) return false; 
         if (nombreMP.includes('GENERICO') || nombreMP.includes('GENÉRICO')) return false;
-        if (nombreMP.includes('MATERIAL DE CLIENTE') && !esFazon) return false;
         if (mp.id >= 990 && mp.id <= 999) return false;
 
-        // C. FILTRO INTELIGENTE
         if (materialRequerido) {
             const esAditivo = rubroMP.includes('ADITIVO') || rubroMP.includes('MASTER') || nombreMP.includes('MASTER') || nombreMP.includes('COLOR') || nombreMP.includes('CARGA');
             if (!esAditivo) {
@@ -92,17 +98,6 @@ const sugerenciasFiltradas = computed(() => {
             }
         }
 
-        // D. LÓGICA DE PROPIEDAD
-        const esPrivado = mp.clienteId || nombreMP.includes('PROPIEDAD DE') || nombreMP.includes('(FAZON)') || nombreMP.startsWith('MP:');
-
-        if (esPrivado) {
-            if (!props.cliente || !props.cliente.id) return false; 
-            if (mp.clienteId && mp.clienteId != props.cliente.id) return false;
-            if (nombreMP.includes('PROPIEDAD DE')) {
-                 const nombreClienteActual = (props.cliente.razonSocial || '').toUpperCase();
-                 if (!nombreMP.includes(nombreClienteActual.split(' ')[0])) return false;
-            }
-        }
         return true;
     });
 
@@ -113,7 +108,13 @@ const sugerenciasFiltradas = computed(() => {
             return nombre.includes(texto) || rubro.includes(texto);
         });
     }
-    return [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre));
+    
+    return [...lista].sort((a, b) => {
+        const aEsCliente = a.clienteId === idClienteOrden ? 1 : 0;
+        const bEsCliente = b.clienteId === idClienteOrden ? 1 : 0;
+        if (aEsCliente !== bEsCliente) return bEsCliente - aEsCliente; 
+        return a.nombre.localeCompare(b.nombre);
+    });
 });
 
 const seleccionarInsumo = (mp: any) => {
@@ -139,9 +140,7 @@ const solicitarAgregar = () => {
     }
 };
 
-// 🔥 CAMBIO CLAVE: Buscamos el índice original porque la lista visual está reordenada
 const solicitarQuitar = (item: any) => { 
-    // Buscamos en la prop original 'receta' dónde está este item
     const indexReal = props.receta.indexOf(item);
     if (indexReal !== -1) {
         emit('remove-insumo', indexReal); 
@@ -236,7 +235,7 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
                 </thead>
                 <tbody>
                     <template v-for="(r, i) in recetaVisual" :key="i">
-                        <tr v-if="!r.esEstearato">
+                        <tr>
                             <td>{{ r.nombreInsumo }}</td>
                             <td style="text-align:center; vertical-align: middle;">
                                 <div>
@@ -280,7 +279,10 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
                             @click="seleccionarInsumo(mp)"
                         >
                             <div style="font-weight:bold;">{{ mp.nombre }}</div>
-                            <div style="font-size:10px; color:#666;">{{ mp.rubro }}</div>
+                            <div style="font-size:10px; color:#666;">
+                                <span v-if="mp.clienteId" style="color:#8e44ad; font-weight:bold;">★ PROPIO (CLIENTE)</span>
+                                <span v-else>{{ mp.rubro }}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -308,43 +310,28 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
 </template>
 
 <style>
-/* ... TUS ESTILOS SE MANTIENEN IGUAL ... */
-/* Estructura A4 */
-.contenedor-principal-pdf { 
-    background: white; width: 209mm; min-height: 290mm; padding: 0; 
-    box-sizing: border-box; color: black; font-family: Arial, sans-serif; 
-    position: relative; 
-}
-.pagina-copia { 
-    padding: 15mm; box-sizing: border-box; width: 100%; height: 290mm; 
-    display: flex; flex-direction: column; position: relative; 
-}
-.pagina-copia.modo-mitad { 
-    height: 145mm; padding: 5mm 15mm; border-bottom: 1px dashed #999; 
-    display: block; 
-}
+/* ... MISMOS ESTILOS DE SIEMPRE ... */
+.contenedor-principal-pdf { background: white; width: 209mm; min-height: 290mm; padding: 0; box-sizing: border-box; color: black; font-family: Arial, sans-serif; position: relative; }
+.pagina-copia { padding: 15mm; box-sizing: border-box; width: 100%; height: 290mm; display: flex; flex-direction: column; position: relative; }
+.pagina-copia.modo-mitad { height: 145mm; padding: 5mm 15mm; border-bottom: 1px dashed #999; display: block; }
 .modo-mitad .header-pdf { margin-bottom: 5px; padding-bottom: 5px; }
 .modo-mitad .producto-nombre-pdf { font-size: 16px; }
 .modo-mitad .recuadro-gigante-pdf { height: 25px; font-size: 16px; }
 
-/* Header */
 .header-pdf { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 10px; }
-.logo-img-pdf { max-height: 60px; max-width: 200px; object-fit: contain; } 
+.logo-central { max-height: 50px; max-width: 180px; }
 .datos-orden { text-align: right; }
 .datos-orden h3 { margin: 0; text-decoration: underline; font-size: 18px; font-weight: 900; }
 .datos-orden p { margin: 2px 0; font-size: 12px; }
 
-/* Filas y Datos */
 .fila-pdf { margin-bottom: 10px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
 .dato-relleno { font-family: 'Courier New', monospace; font-size: 16px; font-weight: bold; margin-left: 10px; text-transform: uppercase; }
 
-/* Caja Producto */
 .caja-producto-pdf { border: 2px solid black; padding: 8px; margin-bottom: 8px; text-align: center; background: #f9f9f9; }
 .titulo-seccion-pdf { font-size: 10px; font-weight: bold; margin-bottom: 2px; letter-spacing: 1px; }
 .producto-nombre-pdf { font-size: 18px; font-weight: 900; }
 .producto-sku-pdf { font-size: 12px; margin-top: 2px; }
 
-/* Ficha Técnica */
 .ficha-tecnica-pdf { display: flex; border: 2px solid black; margin-bottom: 8px; }
 .dato-box-pdf { flex: 1; border-right: 1px solid black; text-align: center; padding: 4px; }
 .dato-box-pdf:last-child { border-right: none; }
@@ -352,40 +339,18 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
 .label-tech-pdf { display: block; font-size: 9px; font-weight: bold; color: #333; }
 .valor-tech-pdf { font-size: 14px; font-weight: bold; margin-top: 2px; display: block; }
 
-/* Receta */
 .seccion-receta-pdf { margin-top: 10px; border: 2px solid black; font-size: 14px; }
 .titulo-receta-pdf { background: #e0e0e0; padding: 5px; font-weight: 900; text-align: center; border-bottom: 2px solid black; font-size: 14px; }
 .tabla-receta-pdf { width: 100%; border-collapse: collapse; }
 .tabla-receta-pdf th { border-right: 1px solid black; border-bottom: 2px solid black; padding: 5px; background: #f4f4f4; font-size: 11px; }
 .tabla-receta-pdf td { border-right: 1px solid black; padding: 5px; font-size: 12px; border-bottom: 1px solid #ccc; }
 
-.input-print { 
-    border: none; 
-    background: transparent; 
-    font-weight: bold; 
-    color: inherit; 
-    width: 60px;
-    text-align: center; 
-    font-size: 12px; 
-    padding: 0;
-    margin: 0;
-    height: 20px; 
-    line-height: 20px;
-    vertical-align: middle;
-    display: inline-block;
-    -moz-appearance: textfield; 
-    appearance: none;
-}
-.input-print::-webkit-outer-spin-button,
-.input-print::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
+.input-print { border: none; background: transparent; font-weight: bold; color: inherit; width: 60px; text-align: center; font-size: 12px; padding: 0; margin: 0; height: 20px; line-height: 20px; vertical-align: middle; display: inline-block; -moz-appearance: textfield; appearance: none;}
+.input-print::-webkit-outer-spin-button, .input-print::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .input-print:focus { border-bottom: 1px solid black; outline: none; }
 
 .btn-borrar-insumo { background:none; border:none; color:red; cursor:pointer; font-weight:bold; }
 
-/* Buscador */
 .agregar-fila-pdf { padding: 5px; border-top: 1px solid #ccc; display: flex; gap: 5px; align-items: center; justify-content: flex-end; background: #f9f9f9; }
 .btn-add-insumo { background:#2ecc71; color:white; border:none; padding:5px 10px; cursor:pointer; }
 .buscador-wrapper { position: relative; width: 250px; }
@@ -394,7 +359,6 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
 .item-resultado { padding: 5px; border-bottom: 1px solid #eee; cursor: pointer; text-align: left; font-size: 12px; }
 .item-resultado:hover { background-color: #f0f0f0; }
 
-/* Pie y Firma */
 .fila-lotes-pdf { display: flex; gap: 15px; margin-top: 5px; margin-bottom: 10px; }
 .mitad-pdf { flex: 1; }
 .recuadro-gigante-pdf { border: 2px solid black; height: 35px; font-size: 20px; display: flex; align-items: center; justify-content: center; margin-top: 2px; font-weight: 900; overflow: hidden; white-space: nowrap; }
@@ -402,9 +366,7 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
 .pie-firma-pdf { margin-top: auto; padding-top: 60px; display: flex; justify-content: space-around; }
 .linea-firma-pdf { border-top: 2px solid black; width: 40%; text-align: center; font-size: 11px; padding-top: 2px; font-weight: bold; }
 
-/* Marca de Agua y Corte */
 .marca-agua { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 50px; color: rgba(0,0,0,0.03); font-weight: 900; border: 5px solid rgba(0,0,0,0.03); padding: 10px 40px; border-radius: 20px; z-index: 0; pointer-events: none; }
 .linea-corte-pdf { position: absolute; bottom: -12px; left: 0; width: 100%; text-align: center; font-size: 10px; color: #999; z-index: 10; }
 .linea-corte-pdf span { background: white; padding: 0 10px; }
-
 </style>

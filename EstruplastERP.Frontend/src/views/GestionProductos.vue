@@ -20,13 +20,7 @@ const clienteFiltro = ref<number | string>('');
 const materialFiltro = ref<string>(''); 
 
 const TIPOS_MATERIALES = [
-    'PAI', 
-    'PEAD', 
-    'PP', 
-    'BIO', 
-    'ABS', 
-    'RESISTENTE FREON', 
-    'POLIETILENO'
+    'PAI', 'PEAD', 'PP', 'BIO', 'ABS', 'RESISTENTE FREON', 'POLIETILENO'
 ];
 
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
@@ -35,7 +29,6 @@ const getSku = (p: any) => (p.codigoSku || p.CodigoSku || '').toUpperCase();
 const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
 const getClienteId = (p: any) => p.clienteId || p.ClienteId || 0;
 
-// Helpers booleanos seguros (Manejan mayúsculas/minúsculas de la DB)
 const checkEsPT = (p: any) => !!(p.esProductoTerminado || p.EsProductoTerminado);
 const checkEsMP = (p: any) => !!(p.esMateriaPrima || p.EsMateriaPrima);
 const checkEsFazon = (p: any) => !!(p.esFazon || p.EsFazon);
@@ -46,11 +39,8 @@ const detectarTipo = (p: any) => {
     if (p.tipoMaterial) {
         const t = p.tipoMaterial.toUpperCase().trim();
         if (TIPOS_MATERIALES.includes(t)) return t;
-        if (t.includes('FREON')) return 'RESISTENTE FREON';
     }
-
     const n = getNombre(p);
-
     if (n.includes('FREON') || n.includes('RESISTENTE')) return 'RESISTENTE FREON';
     if (n.includes('BIO') || n.includes('DEGRADABLE')) return 'BIO';
     if (n.includes('ABS')) return 'ABS';
@@ -58,22 +48,22 @@ const detectarTipo = (p: any) => {
     if (n.includes('PP') || n.includes('POLIPROPILENO')) return 'PP';
     if (n.includes('POLIETILENO') || n.includes('PEBD') || n.includes('BAJA') || n.includes('LDPE')) return 'POLIETILENO';
     if (n.includes('PAI') || n.includes('TUTI') || n.includes('IMPACTO') || n.includes('A.I.')) return 'PAI';
-
     return 'OTROS';
 };
 
 watch(clienteFiltro, () => { materialFiltro.value = ''; });
 
 const esMpCliente = (p: any) => getSku(p).startsWith('MP-CLI') || (checkEsMP(p) && getClienteId(p) > 0);
-const esServicioFazon = (p: any) => getSku(p).startsWith('FAZ-') || checkEsFazon(p);
 
-// 🔥 LÓGICA DE FILTRADO CORREGIDA 🔥
+const clientesFazon = computed(() => {
+    return listaClientes.value.filter(c => c.esFazon === true);
+});
+
 const productosFiltrados = computed(() => {
     let lista = listaProductos.value;
     const tab = tabActual.value;
 
     if (tab === 'MP') {
-        // MP PROPIA: Es MP, NO es de cliente, NO es Scrap, NO es Genérico
         lista = lista.filter(p => 
             checkEsMP(p) && 
             !esMpCliente(p) && !checkEsScrap(p) && !checkGenerico(p) && 
@@ -81,8 +71,6 @@ const productosFiltrados = computed(() => {
         );
     } 
     else if (tab === 'PT') {
-        // PT GENERAL: Mostramos TODO lo que sea Producto Terminado (Propio o Fazon)
-        // Antes filtrabas !esServicioFazon(p), eso ocultaba tus "Laminados a Fason".
         lista = lista.filter(p => checkEsPT(p));
     } 
     else if (tab === 'CLI') {
@@ -96,8 +84,6 @@ const productosFiltrados = computed(() => {
         } else if (subTabCliente.value === 'SCRAP_CLI') {
             lista = lista.filter(p => checkEsScrap(p));
         } else {
-            // PT DEL CLIENTE (Fazón):
-            // Traemos si es Fazón explícito O si es Producto Terminado de este cliente
             lista = lista.filter(p => checkEsFazon(p) || checkEsPT(p));
         }
 
@@ -115,9 +101,8 @@ const productosFiltrados = computed(() => {
 
 const detectingTipo = (p: any) => detectarTipo(p);
 
-// Contadores actualizados con la misma lógica
 const countMP = computed(() => listaProductos.value.filter(p => checkEsMP(p) && !esMpCliente(p) && !checkEsScrap(p)).length);
-const countPT = computed(() => listaProductos.value.filter(p => checkEsPT(p)).length); // Ahora cuenta TODOS los PT
+const countPT = computed(() => listaProductos.value.filter(p => checkEsPT(p)).length);
 const countCLI = computed(() => listaProductos.value.filter(p => getClienteId(p) > 0).length);
 
 const irAEditar = (id: number) => {
@@ -205,7 +190,7 @@ const cargarDatos = async () => {
             listaClientes.value = [];
         }
     } catch (e: any) {
-        error.value = "Error de conexión con el servidor.";
+        error.value = "Error de conexión con el servidor. (Verifica que la API esté corriendo)";
         if (e.response && e.response.status === 401) {
             alert("Tu sesión ha expirado.");
         }
@@ -232,7 +217,9 @@ onMounted(() => {
 
                 <button class="btn-importar" @click="clickImportar" :disabled="importando || cargando">
                     <span v-if="importando">⏳ Procesando...</span>
-                    <span v-else-if="tabActual === 'CLI' && clienteFiltro">📥 Importar Stock {{ listaClientes.find(c => c.id === clienteFiltro)?.razonSocial }}</span>
+                    <span v-else-if="tabActual === 'CLI' && clienteFiltro">
+                        📥 Importar Stock {{ listaClientes.find(c => c.id === clienteFiltro)?.razonSocial }}
+                    </span>
                     <span v-else>📥 Importar CSV Flexxus / Excel</span>
                 </button>
 
@@ -260,7 +247,7 @@ onMounted(() => {
                     <label>🏢 Cliente:</label>
                     <select v-model="clienteFiltro">
                         <option value="">-- Seleccionar Cliente --</option>
-                        <option v-for="c in listaClientes" :key="c.id" :value="c.id">{{ c.razonSocial }}</option>
+                        <option v-for="c in clientesFazon" :key="c.id" :value="c.id">{{ c.razonSocial }}</option>
                     </select>
                 </div>
 
@@ -333,8 +320,8 @@ onMounted(() => {
 
             <div v-if="productosFiltrados.length === 0" class="vacio">
                 <div v-if="tabActual === 'CLI' && !clienteFiltro" class="mensaje-guia">
-                    <h3>👈 Comienza seleccionando un Cliente</h3>
-                    <p>Para ver el stock de PAI, ABS o BIO de terceros, selecciona primero la empresa.</p>
+                    <h3>👈 Selecciona un Cliente</h3>
+                    <p>Elige un cliente para ver su stock de Scrap, MP o Productos.</p>
                 </div>
                 <div v-else>
                     No hay productos que coincidan con los filtros.
@@ -400,7 +387,6 @@ tr:hover { background-color: #f9f9f9; }
 .nombre-prod { font-weight: 600; color: #2c3e50; }
 .tag-fazon { background: purple; color: white; padding: 2px 4px; border-radius: 4px; font-size: 0.7em; margin-left: 5px; }
 
-/* Badges nuevos */
 .badge-cliente { background: #8e44ad; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
 .badge-propio { background: #2980b9; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; opacity: 0.8; }
 

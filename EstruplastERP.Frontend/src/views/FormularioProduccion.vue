@@ -23,7 +23,7 @@ interface Producto {
     tipoMaterial?: string;
 }
 interface Empleado { id: number; nombreCompleto: string; }
-interface Cliente { id: number; razonSocial: string; }
+interface Cliente { id: number; razonSocial: string; esFazon?: boolean; }
 interface ItemReceta {
     id: number | string; cantidad: number; nombreInsumo: string; densidad: number;
     materiaPrimaId: number; esColor?: boolean; esCarga?: boolean; esBase?: boolean;
@@ -94,6 +94,15 @@ const productoSeleccionado = computed(() => productos.value.find(p => p.id === N
 const empleadoSeleccionado = computed(() => empleados.value.find(e => e.id === Number(form.value.empleadoId)) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Number(form.value.clienteId)) || null);
 
+const clienteTieneFazonActivo = computed(() => {
+    if (!clienteSeleccionado.value) return false;
+    return clienteSeleccionado.value.esFazon === true;
+});
+
+const clientesHabilitados = computed(() => {
+    return clientes.value.filter(c => c.esFazon === true);
+});
+
 const medidasBloqueadas = computed(() => !productoSeleccionado.value || !productoSeleccionado.value.esGenerico);
 
 const espesorValido = computed(() => {
@@ -124,17 +133,19 @@ const listaProductosDisponibles = computed(() => {
         const esProductoFazon = p.esFazon || nombre.includes('FAZON') || nombre.includes('SERVICIO');
 
         if (esProductoFazon) {
+            if (idClienteSeleccionado && !clienteTieneFazonActivo.value) return false;
             if (!idClienteSeleccionado) return false;
+            
             const esPropioDelCliente = p.clienteId && p.clienteId == idClienteSeleccionado;
             const esServicioGenerico = !p.clienteId || p.clienteId === 0;
 
-            if (esPropioDelCliente || esServicioGenerico) {
+            if ((esPropioDelCliente || esServicioGenerico) && clienteTieneFazonActivo.value) {
                 return true; 
             } else {
                 return false; 
             }
         }
-        return true;
+        return true; 
     });
 });
 
@@ -143,14 +154,8 @@ const materiasPrimasLimpias = computed(() => {
                     (productoSeleccionado.value?.nombre || '').toUpperCase().includes('FAZON');
 
     const materialesBaseAbstractos = [
-        "POLIPROPILENO", 
-        "PEAD", 
-        "PEBD", 
-        "PAI", 
-        "POLIETILENO", 
-        "ABS", 
-        "RESISTENTE AL FREON", 
-        "ALTO IMPACTO"
+        "POLIPROPILENO", "PEAD", "PEBD", "PAI", "POLIETILENO", 
+        "ABS", "RESISTENTE AL FREON", "ALTO IMPACTO"
     ];
 
     return listaTodasMateriasPrimas.value.filter(mp => {
@@ -159,13 +164,17 @@ const materiasPrimasLimpias = computed(() => {
         if (materialesBaseAbstractos.includes(nombre)) return false;
         if (mp.esGenerico) return false;
 
-        // 3. Lógica Standard (Tu filtro original)
+        if (!clienteTieneFazonActivo.value) {
+            if (mp.esScrap) return false;
+            if (nombre.includes('SCRAP') || nombre.includes('RECUPERADO')) return false;
+            if (nombre.includes('FAZON') || mp.esFazon) return false;
+        }
+
         if (!esFazon) {
             if (mp.esScrap) return false;
             if (nombre.includes('SCRAP') || nombre.includes('RECUPERADO')) return false;
             if (nombre.includes('FAZON') || mp.esFazon) return false;
         }
-        
         return true; 
     });
 });
@@ -245,21 +254,33 @@ const colorFinalParaPDF = computed(() => {
     return '-';
 });
 
+// 🔥 BALANCEO DE BASE CORREGIDO Y AGRESIVO 🔥
 function balancearBase() {
     if (recetaDinamica.value.length === 0) return;
-    let base = recetaDinamica.value.find(r => r.esBase);
-    if (!base && recetaDinamica.value.length > 0) {
-        base = recetaDinamica.value.reduce((prev, current) => 
-            (parseFloat(prev.cantidad.toString()) > parseFloat(current.cantidad.toString())) ? prev : current
-        );
-        base.esBase = true;
-    }
-    if (base) {
+
+    // 1. Reseteamos quien es la base para recalcular
+    recetaDinamica.value.forEach(r => r.esBase = false);
+
+    // 2. Encontramos el material DOMINANTE (Mayor porcentaje actual)
+    // Esto asegura que si cambias manualmente el material, el nuevo mayoritario pase a ser la base
+    const sorted = [...recetaDinamica.value].sort((a, b) => Number(b.cantidad) - Number(a.cantidad));
+    const nuevaBase = sorted[0];
+
+    if (nuevaBase) {
+        nuevaBase.esBase = true; // Lo marcamos como el "colchón"
+
+        // 3. Sumamos TODO lo demás (Aditivos, Colores, Cargas)
         const sumaOtros = recetaDinamica.value.reduce((acc, item) => {
-            if (item === base) return acc;
+            if (item === nuevaBase) return acc;
             return acc + (parseFloat(item.cantidad.toString()) || 0);
         }, 0);
-        base.cantidad = parseFloat((Math.max(0, 100 - sumaOtros)).toFixed(2));
+
+        // 4. El material base es simplemente 100 - Todo lo demás
+        // Esto arregla el bug de que no descontaba el brillo.
+        const nuevoPorcentajeBase = 100 - sumaOtros;
+        
+        // Evitamos negativos
+        nuevaBase.cantidad = parseFloat(Math.max(0, nuevoPorcentajeBase).toFixed(2));
     }
 }
 
@@ -288,12 +309,14 @@ function recalcularFormulaAutomatica() {
             densidad: m ? (m.pesoEspecifico || dens) : dens,
             materiaPrimaId: m ? m.id : mpId,
             [tipo]: true,
-            esColor: tipo === 'esColor'
+            esColor: tipo === 'esColor',
+            esEstearato: tipo === 'esEstearato' // Aseguramos el flag
         });
     };
 
     if (form.value.conBrillo) add('BRILLO', form.value.porcBrillo, 'esBrillo', ID_BRILLO);
     
+    // Aquí está el Estearato:
     if (form.value.conEstearato) add('ESTEARATO', PORC_ESTEARATO, 'esEstearato', ID_ESTEARATO);
     
     if (form.value.aditivoUV) add('UV', form.value.porcentajeUv, 'esUv', ID_UV);
@@ -307,6 +330,8 @@ function recalcularFormulaAutomatica() {
     if (form.value.aditivoCarga > 0) add('CARGA', form.value.aditivoCarga, 'esCarga', ID_CARGA);
 
     recetaDinamica.value = nueva;
+    
+    // Llamamos al balanceo agresivo
     balancearBase();
 }
 
@@ -317,7 +342,8 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
     if (!clienteId || !producto) return;
 
     const esFazon = producto.esFazon || producto.nombre.toUpperCase().includes('FAZON') || producto.nombre.toUpperCase().includes('SERVICIO');
-    if (!esFazon) return;
+    
+    if (!esFazon || !clienteTieneFazonActivo.value) return;
 
     const todoElStockCliente = listaInventarioCompleto.value.filter((p: any) => 
         Number(p.clienteId) === Number(clienteId) && 
@@ -514,7 +540,10 @@ async function registrarProduccion() {
 
     const pesoNetoGeometrico = kilosCalculados.value;
     if (pesoNetoGeometrico <= 0) return error.value = "El peso calculado es 0. Revise las medidas.";
-    if (productoSeleccionado.value?.esFazon && !form.value.clienteId) return error.value = "Seleccione Cliente.";
+    if (productoSeleccionado.value?.esFazon) {
+        if (!form.value.clienteId) return error.value = "Seleccione Cliente.";
+        if (!clienteTieneFazonActivo.value) return error.value = "⛔ ERROR: El cliente seleccionado NO tiene servicio de Fazón habilitado.";
+    }
     if (hayBloqueoDeStock.value) return error.value = "STOCK INSUFICIENTE (Revise faltantes).";
     
     const tieneProhibido = recetaDinamica.value.some(r => r.materiaPrimaId === ID_MASTERBATCH_GENERICO);
@@ -752,7 +781,9 @@ onMounted(async () => {
             <label>Cliente / Producto:</label>
             <select v-model="form.clienteId" style="margin-bottom:5px">
                 <option disabled value="">Cliente...</option>
-                <option v-for="c in clientes" :key="c.id" :value="c.id">{{c.razonSocial}}</option>
+                <option v-for="c in clientes" :key="c.id" :value="c.id">
+                    {{c.razonSocial}} {{ c.esFazon ? '' : '(Venta)' }}
+                </option>
             </select>
 
             <label style="color:#f39c12;">📂 N° Pedido Cliente (OC):</label>

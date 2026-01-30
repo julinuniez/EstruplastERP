@@ -2,7 +2,6 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import api from '@/services/axiosInstance';
 
-// ... (resto de las variables igual) ...
 const clientes = ref<any[]>([]);
 const materialesBase = ref<any[]>([]);
 const todosLosProductos = ref<any[]>([]); 
@@ -10,7 +9,13 @@ const loading = ref(false);
 const mensaje = ref('');
 const advertencia = ref(''); 
 
-// Nombres exactos de las familias
+// Colores/Variantes estándar para el Datalist
+const variantesEstandar = [
+    'BLANCO', 'NEGRO', 'NATURAL', 'AZUL', 'ROJO', 
+    'VERDE', 'AMARILLO', 'GRIS', 'NARANJA', 'MULTICOLOR',
+    'SILLAS', 'BALDES', 'PARAGOLPES', 'CAJONES'
+];
+
 const nombresExactos = [
     "POLIPROPILENO", "PEAD", "PEBD", "PAI", 
     "POLIETILENO", "ABS", "RESISTENTE AL FREON"
@@ -21,17 +26,13 @@ const form = ref({
     materialBaseId: '',
     variedad: '',
     kilos: 0,
-    productoExistenteId: null as number | null // 👈 NUEVO CAMPO
+    productoExistenteId: null as number | null 
 });
 
-// WATCH: Si el usuario escribe manualmente, borramos el ID para evitar errores
 watch(() => form.value.variedad, () => {
-    // Si escribe, asumimos que puede estar cambiando la variante, así que soltamos el ID
-    // a menos que coincida exactamente con lo que seleccionó (opcional, mejor limpiar por seguridad)
     form.value.productoExistenteId = null; 
 });
 
-// ... (onMounted igual que antes) ...
 onMounted(async () => {
     try {
         const [resCli, resProd] = await Promise.all([
@@ -52,7 +53,6 @@ onMounted(async () => {
     } catch (e) { console.error(e); }
 });
 
-// ... (variantesExistentes igual que antes) ...
 const variantesExistentes = computed(() => {
     if (!form.value.materialBaseId) return [];
     const materialPadre = materialesBase.value.find(m => m.id === Number(form.value.materialBaseId));
@@ -89,17 +89,12 @@ const variantesExistentes = computed(() => {
         .sort((a, b) => b.stock - a.stock);
 });
 
-// 👇 ACTUALIZADO: Ahora recibe ID y Nombre
 const usarVariante = (variedad: string, id: number) => {
-    // Primero seteamos el ID, luego el texto (para que el Watch no nos borre el ID inmediatamente, 
-    // aunque como JS es síncrono en este bloque, mejor asignamos todo junto o controlamos el orden)
     form.value.variedad = variedad === '(GENÉRICO)' ? '' : variedad;
     
-    // Forzamos el ID después de asignar el texto, usando nextTick si fuera necesario, 
-    // pero aquí basta con setearlo. El watch se disparará, así que hacemos un pequeño truco:
     setTimeout(() => {
         form.value.productoExistenteId = id; 
-    }, 50); // Pequeño delay para sobreescribir el Watch que limpia
+    }, 50); 
 };
 
 const guardar = async () => {
@@ -116,7 +111,7 @@ const guardar = async () => {
             MaterialBaseId: Number(form.value.materialBaseId),
             Variedad: form.value.variedad,
             Kilos: Number(form.value.kilos),
-            ProductoExistenteId: form.value.productoExistenteId // 👇 ENVIAMOS EL ID
+            ProductoExistenteId: form.value.productoExistenteId 
         };
 
         const res = await api.post('/Movimientos/ingresar-scrap-sucio', payload);
@@ -124,8 +119,8 @@ const guardar = async () => {
         mensaje.value = `✅ ÉXITO: Ingresados ${form.value.kilos}kg a "${res.data.producto}"`;
         
         form.value.kilos = 0; 
-        form.value.productoExistenteId = null; // Reset
-        form.value.variedad = ''; // Reset
+        form.value.productoExistenteId = null; 
+        form.value.variedad = ''; 
 
         const resProd = await api.get('/Productos');
         todosLosProductos.value = resProd.data;
@@ -149,13 +144,13 @@ const guardar = async () => {
             <label>Origen (Dueño):</label>
             <select v-model="form.clienteId">
                 <option value="">🏭 Material Propio (Interno)</option>
-                <option v-for="c in clientes" :value="c.id">{{ c.razonSocial }}</option>
+                <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.razonSocial }}</option>
             </select>
 
             <label>Familia Base:</label>
             <select v-model="form.materialBaseId">
                 <option value="" disabled>-- Seleccione Familia --</option>
-                <option v-for="m in materialesBase" :value="m.id">{{ m.nombre }}</option>
+                <option v-for="m in materialesBase" :key="m.id" :value="m.id">{{ m.nombre }}</option>
             </select>
 
             <div class="seccion-variedad">
@@ -182,7 +177,12 @@ const guardar = async () => {
                     v-model="form.variedad" 
                     placeholder="Ej: Rojo, Sillas, Baldes..."
                     class="input-variedad"
+                    list="lista-sugerencias"
                 >
+                <datalist id="lista-sugerencias">
+                    <option v-for="v in variantesEstandar" :key="v" :value="v"></option>
+                </datalist>
+
                 <small v-if="advertencia" class="texto-advertencia">{{ advertencia }}</small>
             </div>
 
@@ -210,7 +210,6 @@ const guardar = async () => {
 </template>
 
 <style scoped>
-/* Copia los mismos estilos de la versión anterior */
 .contenedor-scrap { display: flex; justify-content: center; padding: 40px; background: #f4f6f9; min-height: 90vh; }
 .card { background: white; padding: 30px; border-radius: 12px; width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); height: fit-content; }
 .header { border-bottom: 2px solid #e67e22; margin-bottom: 20px; padding-bottom: 10px; text-align: center; }
