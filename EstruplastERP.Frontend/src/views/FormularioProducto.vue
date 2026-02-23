@@ -35,7 +35,7 @@ onMounted(async () => {
 async function cargarDatosProducto(id: string | number) {
   try {
     // Ajusta la URL a tu API real
-    const { data } = await axios.get(`https://localhost:7244/api/Productos/${id}`)
+    const { data } = await axios.get(`https://localhost:5122/api/Productos/${id}`)
     
     // Rellenamos el formulario con los datos que vinieron
     form.value = { ...data } 
@@ -51,10 +51,10 @@ async function guardar() {
   try {
     if (esModoEdicion.value) {
         // EDITAR (PUT)
-        await axios.put(`https://localhost:7244/api/Productos/${props.id}`, form.value)
+        await axios.put(`https://localhost:5122/api/Productos/${props.id}`, form.value)
     } else {
         // CREAR (POST)
-        await axios.post(`https://localhost:7244/api/Productos`, form.value)
+        await axios.post(`https://localhost:5122/api/Productos`, form.value)
     }
     router.push('/productos') // Volver a la lista
   } catch (e) {

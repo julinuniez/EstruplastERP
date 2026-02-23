@@ -38,7 +38,7 @@ const itemForm = ref({
 })
 
 const modoEdicion = ref(false)
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api'; 
 
 const getAuthConfig = () => {
   const token = localStorage.getItem('token');

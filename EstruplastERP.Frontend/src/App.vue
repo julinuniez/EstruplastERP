@@ -43,6 +43,11 @@ function toggleMenu() {
           <span class="text" v-show="!menuReducido">Producción</span>
         </router-link>
 
+        <router-link :to="{ name: 'planificacion' }" class="nav-btn" active-class="activo" title="Planificación">
+          <span class="icon">📅</span>
+          <span class="text" v-show="!menuReducido">Planificación</span>
+        </router-link>
+
         <router-link to="/tablero-pedidos" class="nav-btn" active-class="activo" title="Pedidos">
           <span class="icon">📋</span>
           <span class="text" v-show="!menuReducido">Pedidos</span>

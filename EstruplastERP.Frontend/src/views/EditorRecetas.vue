@@ -30,7 +30,7 @@ const formIngrediente = ref({
 const error = ref('')
 const cargando = ref(false)
 
-const apiUrl = 'https://localhost:7244/api' 
+const apiUrl = 'https://localhost:5122/api' 
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');

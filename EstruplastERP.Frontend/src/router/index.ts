@@ -11,6 +11,7 @@ import VistaRemitos from '../views/VistaRemitos.vue';
 import DespachoRemitos from '../views/DespachoRemitos.vue';
 import Administracion from '../views/Administracion.vue';
 import EditarProducto from '../views/EditarProducto.vue';
+import PlanificacionProduccion from '../views/PlanificacionProduccion.vue';
 
 const routes: Array<RouteRecordRaw> = [
     // --- LOGIN ---
@@ -34,6 +35,12 @@ const routes: Array<RouteRecordRaw> = [
         component: FormularioProduccion,
         meta: { requiresAuth: true } 
     },
+    {
+        path: '/produccion/planificacion', // 2. La URL del navegador
+        name: 'planificacion',
+        component: PlanificacionProduccion,
+        meta: { requiresAuth: true } // Si tienes protección de login
+      },
 
     // --- DASHBOARD (BI) ---
     { 

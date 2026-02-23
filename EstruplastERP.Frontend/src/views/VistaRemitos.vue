@@ -35,7 +35,7 @@ const cargando = ref(false)
 const error = ref('')
 const remitoParaImprimir = ref<Remito | null>(null)
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');

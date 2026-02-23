@@ -10,11 +10,11 @@ const sesion = useSesionStore()
 const form = ref({ usuario: '', password: '' })
 const error = ref('')
 
-let urlBase = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
+let urlBase = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
 
 if (urlBase === '/api' && window.location.port === '5173') {
-    console.warn("⚠️ Detectado entorno DEV con ruta relativa. Forzando https://localhost:7244/api");
-    urlBase = 'https://localhost:7244/api';
+    console.warn("⚠️ Detectado entorno DEV con ruta relativa. Forzando https://localhost:5122/api");
+    urlBase = 'https://localhost:5122/api';
 }
 
 const apiUrl = urlBase;

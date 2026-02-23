@@ -10,7 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['close', 'confirmar'])
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
 
 const formCierre = ref({
   adiciones: [] as { materiaPrimaId: number, nombre: string, cantidad: number, motivo: string }[],

@@ -29,7 +29,7 @@ const getConfig = () => {
 };
 
 const cargarInventario = async () => {
-    const API_URL = 'https://localhost:7244/api/Productos/inventario-completo'; 
+    const API_URL = 'https://localhost:5122/api/Productos/inventario-completo'; 
     try {
         const res = await axios.get(API_URL, getConfig());
         const datosReales = res.data;
@@ -115,7 +115,7 @@ const guardarAjuste = async () => {
             motivo: itemAjustar.value.motivo
         };
         
-        await axios.post('https://localhost:7244/api/Stock/ajuste', payload, getConfig());
+        await axios.post('https://localhost:5122/api/Stock/ajuste', payload, getConfig());
         
         // Actualización visual optimista
         const productoEnTabla = listaInventario.value.find(p => p.id === itemAjustar.value.id);
@@ -141,7 +141,7 @@ const guardarAjuste = async () => {
 const eliminarProducto = async (id, nombre) => {
     if (confirm(`¿Eliminar ${nombre}?`)) {
         try {
-            await axios.delete(`https://localhost:7244/api/Productos/eliminar/${id}`, getConfig());
+            await axios.delete(`https://localhost:5122/api/Productos/eliminar/${id}`, getConfig());
             listaInventario.value = listaInventario.value.filter(item => item.id !== id);
             mostrandoModal.value = false;
         } catch (error) {
@@ -198,7 +198,7 @@ const enviarArchivo = async () => {
     config.headers['Content-Type'] = 'multipart/form-data';
 
     try {
-        const res = await axios.post('https://localhost:7244/api/Integration/importar-maestro', formData, config);
+        const res = await axios.post('https://localhost:5122/api/Integration/importar-maestro', formData, config);
         
         resultadoImportacion.value = res.data.mensaje; 
         

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import axios from 'axios';
+// 👇 IMPORTANTE: Importamos tu instancia configurada
+import api from '@/services/axiosInstance'; 
+// Si tu archivo se llama axios.js y está en src, usa: import api from '@/axios';
 
 const router = useRouter();
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api';
+
+// 🗑️ BORRAMOS ESTO: const apiUrl = ... (Ya no lo necesitamos)
 
 const listaProductos = ref<any[]>([]);
 const listaClientes = ref<any[]>([]); 
@@ -23,7 +26,7 @@ const TIPOS_MATERIALES = [
     'PAI', 'PEAD', 'PP', 'BIO', 'ABS', 'RESISTENTE FREON', 'POLIETILENO'
 ];
 
-const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+// 🗑️ BORRAMOS ESTO: const getAuthConfig = ... (El interceptor ya lo hace)
 
 const getSku = (p: any) => (p.codigoSku || p.CodigoSku || '').toUpperCase();
 const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
@@ -139,14 +142,13 @@ const subirArchivoFlexxus = async (event: Event) => {
         let urlEndpoint = '';
 
         if (esExcel) {
-            urlEndpoint = `${apiUrl}/Integration/importar-excel-multicliente`;
+            urlEndpoint = `/Integration/importar-excel-multicliente`;
         } else {
-            urlEndpoint = `${apiUrl}/Integration/importar-maestro`;
+            urlEndpoint = `/Integration/importar-maestro`;
         }
 
-        const res = await axios.post(urlEndpoint, formData, {
+        const res = await api.post(urlEndpoint, formData, {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('token')}`,
                 'Content-Type': 'multipart/form-data' 
             }
         });
@@ -170,12 +172,14 @@ const subirArchivoFlexxus = async (event: Event) => {
     }
 };
 
+// 👇 AQUÍ ESTABA EL PROBLEMA PRINCIPAL:
 const cargarDatos = async () => {
     try {
         cargando.value = true;
+        // 👇 Usamos 'api' y la ruta relativa (sin http://localhost...)
         const [resProd, resCli] = await Promise.all([
-            axios.get(`${apiUrl}/Productos`, getAuthConfig()),
-            axios.get(`${apiUrl}/Clientes`, getAuthConfig())
+            api.get('/Productos'),
+            api.get('/Clientes')
         ]);
 
         if (Array.isArray(resProd.data)) {
@@ -190,9 +194,13 @@ const cargarDatos = async () => {
             listaClientes.value = [];
         }
     } catch (e: any) {
-        error.value = "Error de conexión con el servidor. (Verifica que la API esté corriendo)";
+        // Mejor manejo de error para saber qué pasa
+        console.error("Error cargando datos:", e);
+        error.value = "Error conectando al servidor. Revisa la consola.";
+        
         if (e.response && e.response.status === 401) {
-            alert("Tu sesión ha expirado.");
+             // El interceptor redirige, pero por si acaso:
+             error.value = "Sesión caducada.";
         }
     } finally {
         cargando.value = false;

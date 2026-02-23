@@ -1,8 +1,8 @@
-import axios from 'axios';
+  import axios from 'axios';
 
 // Crea una instancia base (opcional, pero recomendado)
 const api = axios.create({
-  baseURL: 'http://localhost:5123/api' // <--- TU URL BASE AQUÍ
+  baseURL: 'http://localhost:5122/api' // <--- TU URL BASE AQUÍ
 });
 
 // INTERCEPTOR DE PETICIONES (REQUEST)

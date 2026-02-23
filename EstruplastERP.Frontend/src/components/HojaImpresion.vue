@@ -164,6 +164,7 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
             <div class="datos-orden">
                 <h3>{{ ocultarFormula ? 'ORDEN DE PRODUCCIÓN' : 'HOJA DE CARGA' }}</h3>
                 <p>FECHA: <strong>{{ fechaHoy }}</strong></p>
+                <p>NOTA PEDIDO: <strong>{{ form?.notaPedido || '-' }}</strong></p>
                 <p>TURNO: <strong>{{ form.turno ? form.turno.toUpperCase() : '-' }}</strong></p>
             </div>
         </div>

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+npm<script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 // @ts-ignore
 import html2pdf from 'html2pdf.js'
@@ -59,6 +59,7 @@ const form = ref({
     productoTerminadoId: '' as string | number,
     clienteId: '' as string | number,
     numeroPedidoCliente: '',
+    notaPedido: '', // Nota de pedido (correlativo sugerido, editable)
     cantidad: 1,
     empleadoId: '' as string | number,
     observacion: '',
@@ -72,6 +73,32 @@ const form = ref({
 })
 
 const STORAGE_KEY = 'produccion_borrador';
+
+const notaPedidoSugerida = ref<string>('');
+
+async function cargarNotaPedidoSugerida() {
+    try {
+        const res = await api.get('/Ordenes/recientes');
+        if (!Array.isArray(res.data) || res.data.length === 0) {
+            notaPedidoSugerida.value = '1';
+        } else {
+            const maxId = Math.max(...res.data.map((o: any) => Number(o?.id || 0)).filter((n: number) => !isNaN(n)));
+            notaPedidoSugerida.value = String((maxId || 0) + 1);
+        }
+
+        // Si el usuario no cargó nada todavía, autocompletamos con sugerencia
+        if (!form.value.notaPedido || String(form.value.notaPedido).trim() === '') {
+            form.value.notaPedido = notaPedidoSugerida.value;
+        }
+    } catch (e) {
+        // Si falla, no bloqueamos: la nota sigue siendo manual
+        notaPedidoSugerida.value = '';
+    }
+}
+
+function aplicarNotaPedidoSugerida() {
+    if (notaPedidoSugerida.value) form.value.notaPedido = notaPedidoSugerida.value;
+}
 
 watch(
     [form, recetaDinamica], 
@@ -605,6 +632,10 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
         form.value.observacion = orden.observacion || '';
         form.value.cantidad = orden.cantidad;
         form.value.kilosTotales = orden.kilos;
+
+        // Para reimpresión: por defecto usamos el ID de la orden como correlativo,
+        // pero el usuario puede editarlo manualmente antes de guardar el PDF.
+        form.value.notaPedido = String(orden?.id ?? '');
         
         form.value.clienteId = orden.clienteId;
         form.value.empleadoId = orden.empleadoId;
@@ -745,6 +776,9 @@ onMounted(async () => {
     } finally {
         loading.value = false;
     }
+
+    // Sugerencia de correlativo para Nota de Pedido
+    await cargarNotaPedidoSugerida();
 });
 </script>
 
@@ -788,6 +822,25 @@ onMounted(async () => {
 
             <label style="color:#f39c12;">📂 N° Pedido Cliente (OC):</label>
             <input type="text" v-model="form.numeroPedidoCliente" placeholder="Ej: OC-4455" style="font-weight:bold; border: 1px solid #f39c12; margin-bottom: 5px;">
+
+            <label style="color:#1abc9c;">🧾 Nota de Pedido (Flexxus):</label>
+            <div class="fila-input" style="margin-bottom: 5px;">
+                <input
+                    type="text"
+                    v-model="form.notaPedido"
+                    placeholder="Ej: 12345"
+                    style="font-weight:bold; border: 1px solid #1abc9c;"
+                >
+                <button
+                    type="button"
+                    class="btn-sugerido"
+                    :disabled="!notaPedidoSugerida"
+                    @click="aplicarNotaPedidoSugerida"
+                    :title="notaPedidoSugerida ? `Usar sugerido: ${notaPedidoSugerida}` : 'Sin sugerencia'"
+                >
+                    Usar {{ notaPedidoSugerida || '-' }}
+                </button>
+            </div>
             
             <select v-model="form.productoTerminadoId">
                 <option disabled value="">Seleccionar Producto...</option>
@@ -930,6 +983,22 @@ onMounted(async () => {
 label { display: block; margin-top: 8px; font-size: 13px; color: #bdc3c7; font-weight: 600; }
 select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; border: none; font-size: 13px; box-sizing: border-box; background: #ecf0f1; color: #2c3e50; }
 .fila-input { display: flex; gap: 8px; margin-bottom: 5px; }
+.btn-sugerido {
+    width: 130px;
+    margin-top: 2px;
+    border-radius: 4px;
+    border: 1px solid #1abc9c;
+    background: transparent;
+    color: #1abc9c;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 8px;
+}
+.btn-sugerido:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 .seccion-medidas-editables { background: #34495e; padding: 12px; border-radius: 6px; margin-top: 15px; border: 1px solid #4e6475; }
 .box-color { margin-bottom: 15px; border: 1px dashed #f39c12; padding: 5px; border-radius: 4px; }
 .lbl-sep { color: #f1c40f !important; font-weight: bold; border-bottom: 1px dashed #7f8c8d; padding-bottom: 3px; margin-top: 15px !important; margin-bottom: 5px; }

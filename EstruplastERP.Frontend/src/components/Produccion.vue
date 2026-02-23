@@ -6,7 +6,7 @@ import axios from 'axios'
 // Asegúrate de que la ruta sea correcta según dónde lo guardaste
 import FormularioProduccion from './FormularioProduccion.vue' 
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api'; 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');
     return { headers: { Authorization: `Bearer ${token}` } };

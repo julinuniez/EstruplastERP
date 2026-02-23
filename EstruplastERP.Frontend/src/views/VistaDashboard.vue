@@ -11,7 +11,7 @@ const kpis = ref({ produccionMes: 0, pendientes: 0 });
 const cargando = ref(true);
 const error = ref('');
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:7244/api'; 
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api'; 
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
 
 // --- CARGA DE DATOS ---
