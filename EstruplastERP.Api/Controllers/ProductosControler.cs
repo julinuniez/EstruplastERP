@@ -21,7 +21,7 @@ namespace EstruplastERP.Api.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetInventarioCompleto()
         {
             var productos = await _context.Productos
-                .Where(p => p.Activo) 
+                .Where(p => p.Activo)
                 .OrderBy(p => p.Nombre)
                 .Select(p => new
                 {
@@ -31,10 +31,12 @@ namespace EstruplastERP.Api.Controllers
                     p.StockActual,
                     p.StockMinimo,
                     p.PesoEspecifico,
-                    p.EsMateriaPrima,       
-                    p.EsProductoTerminado,  
+                    p.EsMateriaPrima,
+                    p.EsProductoTerminado,
                     p.EsFazon,
-                    p.PrecioCosto
+                    p.PrecioCosto,
+                    ClienteId = p.ClienteId,
+                    EsScrap = p.EsScrap
                 })
                 .ToListAsync();
 

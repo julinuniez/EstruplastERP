@@ -30,7 +30,7 @@ const cargando = ref(false)
 const error = ref('')
 
 // --- VARIABLES DE FILTRO ---
-const filtroEstado = ref('Todos');
+const filtroEstado = ref('Pendientes');
 const filtroFecha = ref(''); // YYYY-MM-DD
 
 // --- COMPUTED PARA FILTRAR ---

@@ -372,56 +372,31 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
     
     if (!esFazon || !clienteTieneFazonActivo.value) return;
 
-    const todoElStockCliente = listaInventarioCompleto.value.filter((p: any) => 
-        Number(p.clienteId) === Number(clienteId) && 
-        p.stockActual > 0 &&
-        !p.esScrap && 
-        !p.nombre.toUpperCase().includes('[SCRAP]') &&
-        p.esMateriaPrima === true
-    );
+    //  BÚSQUEDA AJUSTADA (Molido/Recuperado SÍ, Scrap NO) 
+    const todoElStockCliente = listaInventarioCompleto.value.filter((p: any) => {
+        const esDelCliente = Number(p.clienteId) === Number(clienteId);
+        const tieneStock = p.stockActual > 0;
+        
+        // Detectamos si es Scrap puro (por el tilde en la BD o por el nombre)
+        const nombreMaterial = (p.nombre || '').toUpperCase();
+        const esScrapPuro = p.esScrap === true || nombreMaterial.includes('SCRAP');
 
-    const nombreProd = producto.nombre.toUpperCase();
-    const tipoDB = producto.tipoMaterial ? producto.tipoMaterial.toUpperCase() : '';
-    
-    let materialDetectado = '';
+        // Pasa si es del cliente, tiene stock, y NO es scrap
+        return esDelCliente && tieneStock && !esScrapPuro;
+    });
 
-    if (tipoDB) {
-        materialDetectado = tipoDB;
-    } 
-    else {
-        if (nombreProd.includes("PAI") || nombreProd.includes("IMPACTO") || nombreProd.includes("TUTI")) materialDetectado = 'PAI';
-        else if (nombreProd.includes("ABS")) materialDetectado = 'ABS';
-        else if (nombreProd.includes("PP") || nombreProd.includes("POLIPROPILENO")) materialDetectado = 'PP';
-        else if (nombreProd.includes("PEAD") || nombreProd.includes("ALTA") || nombreProd.includes("HDPE")) materialDetectado = 'PEAD';
-        else if (nombreProd.includes("PEBD") || nombreProd.includes("BAJA") || nombreProd.includes("LDPE")) materialDetectado = 'PEBD';
-        else if (nombreProd.includes("PVC")) materialDetectado = 'PVC';
-        else if (nombreProd.includes("PS") || nombreProd.includes("ESTIRENO")) materialDetectado = 'PS';
-    }
-
-    if (materialDetectado) {
-        listaLotesCliente.value = todoElStockCliente.filter(lote => {
-            const n = lote.nombre.toUpperCase();
-            const t = (lote.tipoMaterial || '').toUpperCase();
-            return n.includes(materialDetectado) || t === materialDetectado;
-        });
-    } else {
-        listaLotesCliente.value = todoElStockCliente;
-    }
-
-    listaLotesCliente.value.sort((a, b) => b.stockActual - a.stockActual);
+    // Asignamos directamente todo lo que encontramos, ordenado por el que tiene más stock
+    listaLotesCliente.value = todoElStockCliente.sort((a, b) => b.stockActual - a.stockActual);
 
     if (listaLotesCliente.value.length > 0) {
+        // Autoseleccionamos el primero de la lista
         const mejorOpcion = listaLotesCliente.value[0];
         loteFazonSeleccionadoId.value = mejorOpcion.id;
         aplicarLoteFazonAReceta(mejorOpcion);
     } else {
         const itemFazon = recetaDinamica.value.find(r => r.esFazonInput || r.esBase);
         if (itemFazon) {
-            if (todoElStockCliente.length > 0 && materialDetectado) {
-                itemFazon.nombreInsumo = `⚠️ CLIENTE SIN STOCK DE ${materialDetectado}`;
-            } else {
-                itemFazon.nombreInsumo = "⚠️ CLIENTE SIN STOCK DISPONIBLE";
-            }
+            itemFazon.nombreInsumo = "⚠️ CLIENTE SIN MATERIAL RECUPERADO/MOLIDO";
             itemFazon.materiaPrimaId = 0; 
         }
     }
@@ -433,16 +408,26 @@ function alCambiarLoteFazon() {
 }
 
 function aplicarLoteFazonAReceta(lote: any) {
-    let itemFazon = recetaDinamica.value.find(r => r.esFazonInput);
-    if (!itemFazon) itemFazon = recetaDinamica.value.find(r => r.esBase);
+    let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || r.esBase);
 
     if (itemFazon && lote) {
         itemFazon.materiaPrimaId = lote.id;
         itemFazon.nombreInsumo = `MP: ${lote.nombre}`; 
         itemFazon.densidad = lote.pesoEspecifico || 1;
-        stockFazonDetectado.value = lote.stockActual;
-        balancearBase(); 
+    } else if (!itemFazon && lote) {
+        recetaDinamica.value.push({
+            id: Date.now(),
+            materiaPrimaId: lote.id,
+            nombreInsumo: `MP: ${lote.nombre}`,
+            cantidad: 100,
+            densidad: lote.pesoEspecifico || 1,
+            esBase: true,
+            esFazonInput: true
+        });
     }
+
+    stockFazonDetectado.value = lote?.stockActual || null;
+    balancearBase(); 
 }
 
 function quitarInsumoManual(index: number) {
@@ -575,6 +560,9 @@ async function registrarProduccion() {
     
     const tieneProhibido = recetaDinamica.value.some(r => r.materiaPrimaId === ID_MASTERBATCH_GENERICO);
     if (tieneProhibido) return error.value = "⛔ ERROR: Reemplaza el 'Masterbatch Varios' por un color real.";
+
+    const tieneCero = recetaDinamica.value.some(r => Number(r.materiaPrimaId) === 0);
+    if (tieneCero) return error.value = "⛔ ERROR: Hay un material en la fórmula sin asignar. Verifique que el cliente tenga stock válido o agregue la MP manualmente.";
 
     const porcentajeMerma = Number(form.value.merma || 0);
     const factorMermaCalc = 1 + (porcentajeMerma / 100);
