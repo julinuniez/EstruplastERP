@@ -14,6 +14,11 @@ interface ProduccionItem {
   estado: string;
   esFinalizada: boolean;
   
+  // Agregamos los campos de Cliente y OC por si vienen del backend
+  clienteNombre?: string; 
+  cliente?: string;
+  numeroPedidoCliente?: string;
+  
   largo?: number;
   ancho?: number;
   espesor?: number;
@@ -29,7 +34,7 @@ const producciones = ref<ProduccionItem[]>([])
 const cargando = ref(false)
 const error = ref('')
 
-// --- VARIABLES DE FILTRO ---
+// --- VARIABLES DE FILTRO (Arranca en Pendientes por defecto) ---
 const filtroEstado = ref('Pendientes');
 const filtroFecha = ref(''); // YYYY-MM-DD
 
@@ -41,22 +46,13 @@ const produccionesFiltradas = computed(() => {
         if (filtroEstado.value === 'Pendientes') pasaEstado = !item.esFinalizada && item.estado !== 'Cancelada';
         else if (filtroEstado.value === 'Finalizadas') pasaEstado = item.esFinalizada;
         else if (filtroEstado.value === 'Canceladas') pasaEstado = item.estado === 'Cancelada';
+        else if (filtroEstado.value === 'Todos') pasaEstado = true;
 
         // 2. Filtro por Fecha
         let pasaFecha = true;
         if (filtroFecha.value) {
-            // Convertimos la fecha del item (DD/MM HH:mm) a comparable o usamos substring simple si coincide el formato visual
-            // Como tu backend devuelve "dd/MM HH:mm", la comparación directa es difícil.
-            // Lo ideal sería que el backend devuelva la fecha ISO en otro campo, pero trabajaremos con lo que hay.
-            // Asumiremos que el filtro busca coincidencia de texto parcial o parseamos.
-            
-            // Opción robusta: Parsear la fecha del item (asumiendo año actual si no viene)
-            // O mejor: Usar string includes para simplicidad si el formato visual coincide
-            // Pero como el input date es YYYY-MM-DD y tu tabla es DD/MM... hay que convertir.
-            
             const [year, month, day] = filtroFecha.value.split('-');
             const fechaBuscada = `${day}/${month}`; // "15/01"
-            
             pasaFecha = item.fecha.startsWith(fechaBuscada);
         }
 
@@ -72,10 +68,7 @@ async function cargarHistorial() {
     const res = await api.get('/Ordenes/recientes')
     
     if (Array.isArray(res.data)) {
-        producciones.value = res.data.sort((a: any, b: any) => 
-            // Truco para ordenar por fecha string DD/MM HH:mm asumiendo año actual o comparando IDs que es más seguro
-            b.id - a.id 
-        );
+        producciones.value = res.data.sort((a: any, b: any) => b.id - a.id);
     } else {
         console.error("⚠️ La API devolvió HTML basura:", res.data);
         error.value = "Error de conexión con el servidor.";
@@ -127,7 +120,6 @@ const solicitarImpresion = (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
 };
 
 const imprimirEtiqueta = (item: any) => {
-    const fechaLimpia = new Date().toLocaleDateString();
     const ventana = window.open('', 'PRINT', 'height=600,width=800');
     if (ventana) {
         ventana.document.write(`
@@ -169,14 +161,16 @@ defineExpose({ cargarHistorial })
 <template>
   <div class="historial-wrapper">
     <div class="header-tabla">
-        <h3>📋 Últimos Movimientos</h3>
+        <h3 :style="{ color: filtroEstado === 'Pendientes' ? '#2c3e50' : '#7f8c8d' }">
+            {{ filtroEstado === 'Pendientes' ? '🔥 Órdenes en Curso' : '🗄️ Archivo Histórico (' + filtroEstado + ')' }}
+        </h3>
         
         <div class="filtros-container">
             <select v-model="filtroEstado" class="input-filtro">
-                <option value="Todos">Todos</option>
                 <option value="Pendientes">Pendientes</option>
                 <option value="Finalizadas">Finalizadas</option>
                 <option value="Canceladas">Canceladas</option>
+                <option value="Todos">Todos</option>
             </select>
             
             <input type="date" v-model="filtroFecha" class="input-filtro" title="Filtrar por fecha">
@@ -194,7 +188,7 @@ defineExpose({ cargarHistorial })
             <thead>
                 <tr>
                     <th>Fecha</th>
-                    <th>Producto</th>
+                    <th>Cliente / OC</th> <th>Producto</th>
                     <th>Cant.</th>
                     <th>Kilos</th>
                     <th>Operario</th>
@@ -206,6 +200,15 @@ defineExpose({ cargarHistorial })
                 <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-ok': p.esFinalizada, 'fila-cancel': p.estado === 'Cancelada'}">
                     <td>{{ p.fecha }}</td>
                     
+                    <td>
+                        <div style="font-weight: bold; color: #2980b9;">
+                            {{ p.clienteNombre || p.cliente || 'Stock / Interno' }}
+                        </div>
+                        <div v-if="p.numeroPedidoCliente" style="font-size: 0.75rem; color: #e67e22; font-weight: bold;">
+                            OC: {{ p.numeroPedidoCliente }}
+                        </div>
+                    </td>
+
                     <td class="td-prod">{{ p.producto }}</td>
                     <td style="text-align: center;">{{ p.cantidad }}</td>
                     <td style="text-align: right; font-weight: bold;">{{ p.kilos }}</td>
@@ -257,7 +260,7 @@ defineExpose({ cargarHistorial })
                     </td>
                 </tr>
                 <tr v-if="produccionesFiltradas.length === 0 && !cargando">
-                    <td colspan="7" class="vacio">No hay órdenes que coincidan con los filtros.</td>
+                    <td colspan="8" class="vacio">No hay órdenes en esta bandeja.</td>
                 </tr>
             </tbody>
         </table>
@@ -269,14 +272,15 @@ defineExpose({ cargarHistorial })
 <style scoped>
 .historial-wrapper { background: white; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; height: 100%; display: flex; flex-direction: column; position: relative; }
 .header-tabla { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 2px solid #f1c40f; padding-bottom: 5px; flex-wrap: wrap; gap: 10px; }
-.header-tabla h3 { margin: 0; color: #2c3e50; font-size: 1.1rem; }
+.header-tabla h3 { margin: 0; font-size: 1.1rem; transition: color 0.3s ease; }
 
-/* NUEVOS ESTILOS PARA FILTROS */
 .filtros-container { display: flex; gap: 8px; align-items: center; }
-.input-filtro { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; color: #555; outline: none; }
+.input-filtro { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; color: #555; outline: none; background: #fff; cursor: pointer; }
 .input-filtro:focus { border-color: #3498db; }
 
 .btn-refresh { background: none; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 4px 10px; font-size: 1rem; }
+.btn-refresh:hover { background: #f0f8ff; }
+
 .tabla-scroll { overflow-y: auto; flex: 1; }
 .tabla-custom { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tabla-custom th { background: #2c3e50; color: white; padding: 8px; text-align: left; position: sticky; top: 0; z-index: 5; }
