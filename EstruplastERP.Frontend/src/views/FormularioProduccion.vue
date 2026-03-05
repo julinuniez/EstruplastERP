@@ -1,4 +1,4 @@
-npm<script setup lang="ts">
+<script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 // @ts-ignore
 import html2pdf from 'html2pdf.js'
@@ -7,7 +7,10 @@ import ListaProduccion from '../components/ListaProduccion.vue'
 import api from '@/services/axiosInstance' 
 
 const DENSIDAD_DEFAULT = 1.1;
-const ID_BRILLO = 1073; 
+
+// ID del Brillo Estándar (Verificar si es correcto)
+const ID_BRILLO_777 = 1073; 
+
 const ID_ESTEARATO = 1074; 
 const ID_UV = 1075; 
 const ID_CAUCHO = 1076; 
@@ -36,6 +39,15 @@ const productos = ref<Producto[]>([])
 const listaInventarioCompleto = ref<any[]>([])
 const listaMasterbatches = ref<any[]>([])
 const listaTodasMateriasPrimas = ref<any[]>([])
+
+// Buscador Dinámico para Cristal 555 (Independiente de la BD)
+const idCristal555 = computed(() => {
+    const material = listaTodasMateriasPrimas.value.find(m => 
+        m.codigoSku === 'MP-CRI-555' || m.nombre === 'CRISTAL 555'
+    );
+    return material ? material.id : 0;
+});
+
 const empleados = ref<Empleado[]>([])
 const clientes = ref<Cliente[]>([])
 const recetaDinamica = ref<ItemReceta[]>([])
@@ -59,13 +71,18 @@ const form = ref({
     productoTerminadoId: '' as string | number,
     clienteId: '' as string | number,
     numeroPedidoCliente: '',
-    notaPedido: '', // Nota de pedido (correlativo sugerido, editable)
+    notaPedido: '',
     cantidad: 1,
     empleadoId: '' as string | number,
     observacion: '',
     turno: 'Mañana',
     largo: 0, ancho: 0, espesor: 0,
-    conBrillo: false, porcBrillo: 2.00, llevaFilm: false, tipoCorona: 'Ninguno',
+    
+    conBrillo: false, 
+    tipoBrillo: '777',
+    porcBrillo: 2.00, 
+    
+    llevaFilm: false, tipoCorona: 'Ninguno',
     conEstearato: false, esProductoColor: false, masterbatchId: '' as string | number, colorTexto: '',
     aditivoUV: false, porcentajeUv: 1.00, aditivoCaucho: false, porcentajeCaucho: 1.00,
     aditivoCarga: 0,
@@ -73,32 +90,74 @@ const form = ref({
 })
 
 const STORAGE_KEY = 'produccion_borrador';
+const STORAGE_NOTA_PEDIDO_NEXT = 'produccion_notaPedido_siguiente';
 
 const notaPedidoSugerida = ref<string>('');
+
+const detectarMaterial = (nombre: string) => {
+    if (!nombre) return '';
+    const n = nombre.toUpperCase();
+    if (n.includes('PAI') || n.includes('IMPACTO') || n.includes('A.I.')) return 'PAI';
+    if (n.includes('PP') || n.includes('POLIPROPILENO')) return 'PP';
+    if (n.includes('PEAD') || n.includes('ALTA') || n.includes('HDPE')) return 'PEAD';
+    if (n.includes('PEBD') || n.includes('BAJA') || n.includes('LDPE') || n.includes('POLIETILENO')) return 'PEBD';
+    if (n.includes('ABS')) return 'ABS';
+    if (n.includes('FREON') || n.includes('RESISTENTE')) return 'FREON';
+    return '';
+};
 
 async function cargarNotaPedidoSugerida() {
     try {
         const res = await api.get('/Ordenes/recientes');
-        if (!Array.isArray(res.data) || res.data.length === 0) {
-            notaPedidoSugerida.value = '1';
-        } else {
-            const maxId = Math.max(...res.data.map((o: any) => Number(o?.id || 0)).filter((n: number) => !isNaN(n)));
-            notaPedidoSugerida.value = String((maxId || 0) + 1);
+        let siguiente = 1;
+
+        if (Array.isArray(res.data) && res.data.length > 0) {
+            const candidatos = res.data
+                .map((o: any) => o?.notaPedido ?? o?.numeroPedidoCliente ?? o?.id)
+                .map((v: any) => Number(v))
+                .filter((n: number) => !isNaN(n) && n > 0);
+
+            if (candidatos.length > 0) {
+                const maxNota = Math.max(...candidatos);
+                siguiente = maxNota + 1;
+            }
         }
 
-        // Si el usuario no cargó nada todavía, autocompletamos con sugerencia
+        notaPedidoSugerida.value = String(siguiente);
+        localStorage.setItem(STORAGE_NOTA_PEDIDO_NEXT, notaPedidoSugerida.value);
+
         if (!form.value.notaPedido || String(form.value.notaPedido).trim() === '') {
             form.value.notaPedido = notaPedidoSugerida.value;
         }
     } catch (e) {
-        // Si falla, no bloqueamos: la nota sigue siendo manual
-        notaPedidoSugerida.value = '';
+        const nextGuardadoRaw = localStorage.getItem(STORAGE_NOTA_PEDIDO_NEXT);
+        const nextGuardado = nextGuardadoRaw ? Number(nextGuardadoRaw) : NaN;
+        if (!isNaN(nextGuardado) && nextGuardado > 0) {
+            notaPedidoSugerida.value = String(Math.trunc(nextGuardado));
+            if (!form.value.notaPedido || String(form.value.notaPedido).trim() === '') {
+                form.value.notaPedido = notaPedidoSugerida.value;
+            }
+        } else {
+            notaPedidoSugerida.value = '';
+        }
     }
 }
 
 function aplicarNotaPedidoSugerida() {
     if (notaPedidoSugerida.value) form.value.notaPedido = notaPedidoSugerida.value;
 }
+
+watch(
+    () => form.value.notaPedido,
+    (v) => {
+        const num = Number(v);
+        if (!isNaN(num) && num > 0) {
+            const siguiente = Math.trunc(num) + 1;
+            notaPedidoSugerida.value = String(siguiente);
+            localStorage.setItem(STORAGE_NOTA_PEDIDO_NEXT, String(siguiente));
+        }
+    }
+);
 
 watch(
     [form, recetaDinamica], 
@@ -223,7 +282,7 @@ const kilosCalculados = computed(() => {
     if (!productoSeleccionado.value) return 0;
     const L = (Number(form.value.largo) || 0) / 1000; 
     const A = (Number(form.value.ancho) || 0) / 1000; 
-    const E = Number(form.value.espesor) || 0;        
+    const E = Number(form.value.espesor) || 0;         
     const Cant = Number(form.value.cantidad) || 1;
     const Dens = Number(densidadMezcla.value);
     return parseFloat((L * A * E * Dens * Cant).toFixed(4));
@@ -281,32 +340,24 @@ const colorFinalParaPDF = computed(() => {
     return '-';
 });
 
-// 🔥 BALANCEO DE BASE CORREGIDO Y AGRESIVO 🔥
 function balancearBase() {
     if (recetaDinamica.value.length === 0) return;
 
-    // 1. Reseteamos quien es la base para recalcular
     recetaDinamica.value.forEach(r => r.esBase = false);
 
-    // 2. Encontramos el material DOMINANTE (Mayor porcentaje actual)
-    // Esto asegura que si cambias manualmente el material, el nuevo mayoritario pase a ser la base
     const sorted = [...recetaDinamica.value].sort((a, b) => Number(b.cantidad) - Number(a.cantidad));
     const nuevaBase = sorted[0];
 
     if (nuevaBase) {
-        nuevaBase.esBase = true; // Lo marcamos como el "colchón"
+        nuevaBase.esBase = true; 
 
-        // 3. Sumamos TODO lo demás (Aditivos, Colores, Cargas)
         const sumaOtros = recetaDinamica.value.reduce((acc, item) => {
             if (item === nuevaBase) return acc;
             return acc + (parseFloat(item.cantidad.toString()) || 0);
         }, 0);
 
-        // 4. El material base es simplemente 100 - Todo lo demás
-        // Esto arregla el bug de que no descontaba el brillo.
         const nuevoPorcentajeBase = 100 - sumaOtros;
         
-        // Evitamos negativos
         nuevaBase.cantidad = parseFloat(Math.max(0, nuevoPorcentajeBase).toFixed(2));
     }
 }
@@ -337,28 +388,28 @@ function recalcularFormulaAutomatica() {
             materiaPrimaId: m ? m.id : mpId,
             [tipo]: true,
             esColor: tipo === 'esColor',
-            esEstearato: tipo === 'esEstearato' // Aseguramos el flag
+            esEstearato: tipo === 'esEstearato' 
         });
     };
 
-    if (form.value.conBrillo) add('BRILLO', form.value.porcBrillo, 'esBrillo', ID_BRILLO);
+    // LOGICA NUEVA DE BRILLO DINAMICA (777 o Cristal 555)
+    if (form.value.conBrillo) {
+        const idBrillo = form.value.tipoBrillo === '777' ? ID_BRILLO_777 : idCristal555.value;
+        const nombreBrillo = form.value.tipoBrillo === '777' ? 'BRILLO 777' : 'CRISTAL 555';
+        add(nombreBrillo, form.value.porcBrillo, 'esBrillo', idBrillo);
+    }
     
-    // Aquí está el Estearato:
     if (form.value.conEstearato) add('ESTEARATO', PORC_ESTEARATO, 'esEstearato', ID_ESTEARATO);
-    
     if (form.value.aditivoUV) add('UV', form.value.porcentajeUv, 'esUv', ID_UV);
     if (form.value.aditivoCaucho) add('CAUCHO', form.value.porcentajeCaucho, 'esCaucho', ID_CAUCHO);
-    
     if (form.value.esProductoColor && form.value.masterbatchId) {
         const mb = listaMasterbatches.value.find(m => m.id === form.value.masterbatchId);
         if (mb) add('COLOR', porcentajeColor, 'esColor', mb.id, mb.pesoEspecifico);
     }
-    
     if (form.value.aditivoCarga > 0) add('CARGA', form.value.aditivoCarga, 'esCarga', ID_CARGA);
 
     recetaDinamica.value = nueva;
     
-    // Llamamos al balanceo agresivo
     balancearBase();
 }
 
@@ -372,24 +423,30 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
     
     if (!esFazon || !clienteTieneFazonActivo.value) return;
 
-    //  BÚSQUEDA AJUSTADA (Molido/Recuperado SÍ, Scrap NO) 
+    const materialPT = detectarMaterial(producto.nombre);
+
     const todoElStockCliente = listaInventarioCompleto.value.filter((p: any) => {
         const esDelCliente = Number(p.clienteId) === Number(clienteId);
         const tieneStock = p.stockActual > 0;
         
-        // Detectamos si es Scrap puro (por el tilde en la BD o por el nombre)
         const nombreMaterial = (p.nombre || '').toUpperCase();
         const esScrapPuro = p.esScrap === true || nombreMaterial.includes('SCRAP');
 
-        // Pasa si es del cliente, tiene stock, y NO es scrap
-        return esDelCliente && tieneStock && !esScrapPuro;
+        if (!esDelCliente || !tieneStock || esScrapPuro) return false;
+
+        if (materialPT) {
+            const materialLote = detectarMaterial(nombreMaterial);
+            if (materialLote && materialLote !== materialPT) {
+                return false;
+            }
+        }
+
+        return true;
     });
 
-    // Asignamos directamente todo lo que encontramos, ordenado por el que tiene más stock
     listaLotesCliente.value = todoElStockCliente.sort((a, b) => b.stockActual - a.stockActual);
 
     if (listaLotesCliente.value.length > 0) {
-        // Autoseleccionamos el primero de la lista
         const mejorOpcion = listaLotesCliente.value[0];
         loteFazonSeleccionadoId.value = mejorOpcion.id;
         aplicarLoteFazonAReceta(mejorOpcion);
@@ -583,6 +640,7 @@ async function registrarProduccion() {
             productoTerminadoId: Number(form.value.productoTerminadoId),
             clienteId: form.value.clienteId ? Number(form.value.clienteId) : null,
             numeroPedidoCliente: form.value.numeroPedidoCliente || '', 
+            notaPedido: form.value.notaPedido || '',
             cantidad: Number(form.value.cantidad),
             empleadoId: Number(form.value.empleadoId),
             turno: form.value.turno,
@@ -619,10 +677,12 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
         form.value.turno = orden.turno || 'Mañana';
         form.value.observacion = orden.observacion || '';
         form.value.cantidad = orden.cantidad;
-        form.value.kilosTotales = orden.kilos;
+        const mermaOrden = Number(orden?.merma ?? form.value.merma ?? 0) || 0;
+        form.value.merma = mermaOrden;
+        const factor = 1 + (mermaOrden / 100);
+        const kilosBrutos = Number(orden?.kilos) || 0;
+        form.value.kilosTotales = factor > 0 ? Number((kilosBrutos / factor).toFixed(4)) : 0;
 
-        // Para reimpresión: por defecto usamos el ID de la orden como correlativo,
-        // pero el usuario puede editarlo manualmente antes de guardar el PDF.
         form.value.notaPedido = String(orden?.id ?? '');
         
         form.value.clienteId = orden.clienteId;
@@ -636,7 +696,9 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
                 const esColor = c.materiaPrimaId === ID_MASTERBATCH_GENERICO || 
                                 (c.nombreMateriaPrima && c.nombreMateriaPrima.toUpperCase().includes('MASTER'));
                 
-                const porcentajeCalc = c.cantidadKilos ? ((c.cantidadKilos / orden.kilos) * 100).toFixed(2) : 0;
+                const porcentajeCalc = c.cantidadKilos && kilosBrutos > 0
+                    ? ((c.cantidadKilos / kilosBrutos) * 100).toFixed(2)
+                    : 0;
 
                 return {
                     id: Date.now() + Math.random(),
@@ -712,7 +774,7 @@ watch(
         () => form.value.porcBrillo, () => form.value.conEstearato, 
         () => form.value.aditivoUV, () => form.value.porcentajeUv, 
         () => form.value.aditivoCaucho, () => form.value.porcentajeCaucho,
-        () => form.value.conBrillo
+        () => form.value.conBrillo, () => form.value.tipoBrillo
     ],
     recalcularFormulaAutomatica
 );
@@ -765,7 +827,6 @@ onMounted(async () => {
         loading.value = false;
     }
 
-    // Sugerencia de correlativo para Nota de Pedido
     await cargarNotaPedidoSugerida();
 });
 </script>
@@ -903,7 +964,22 @@ onMounted(async () => {
                 <div class="resumen-peso">Peso Final PT: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +{{ form.merma }}%)</small></div>
                 
                 <label class="lbl-sep">Aditivos:</label>
-                <div class="fila-control-aditivo"><label class="check-container" :class="{ 'disabled': form.espesor < 1 }"><input type="checkbox" v-model="form.conBrillo" :disabled="form.espesor < 1"> ✨ Brillo</label><div v-if="form.conBrillo" class="bloque-derecha"><div class="input-porcentaje"><input type="number" v-model="form.porcBrillo" step="0.01" min="0"> %</div></div></div>
+                
+                <div class="fila-control-aditivo" style="align-items: flex-start;">
+                    <label class="check-container" :class="{ 'disabled': form.espesor < 1 }" style="margin-top: 5px !important;">
+                        <input type="checkbox" v-model="form.conBrillo" :disabled="form.espesor < 1"> ✨ Brillo
+                    </label>
+                    <div v-if="form.conBrillo" class="bloque-derecha-brillo">
+                        <select v-model="form.tipoBrillo" class="select-brillo">
+                            <option value="777">Brillo 777</option>
+                            <option value="555">Brillo 555 (Cristal)</option>
+                        </select>
+                        <div class="input-porcentaje">
+                            <input type="number" v-model="form.porcBrillo" step="0.01" min="0"> %
+                        </div>
+                    </div>
+                </div>
+
                 <div class="fila-control-aditivo"><label class="check-container" :class="{ 'disabled': !form.conBrillo }"><input type="checkbox" v-model="form.llevaFilm" :disabled="!form.conBrillo"> 🛡️ Con Film</label></div>
                 <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.conEstearato"> 🧪 Estearato</label></div>
                 <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.aditivoUV"> ☀️ UV</label><div v-if="form.aditivoUV" class="bloque-derecha"><div class="input-porcentaje"><input type="number" v-model="form.porcentajeUv" step="0.01" min="0"> %</div></div></div>
@@ -1004,6 +1080,10 @@ select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; 
 .fila-control-aditivo { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
 .input-porcentaje { display: flex; align-items: center; background: #ecf0f1; border-radius: 4px; padding-right: 5px; color: #333; }
 .input-porcentaje input { width: 45px !important; margin: 0 !important; text-align: right; background: transparent; color: #333; }
+
+.bloque-derecha-brillo { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.select-brillo { width: 130px; padding: 4px; font-size: 11px; margin: 0; background: #ecf0f1; border-radius: 4px; border: none; color: #2c3e50; font-weight: bold; }
+
 .alerta-stock { background-color: #ffebee; border: 1px solid #ef5350; color: #c62828; padding: 10px; border-radius: 6px; margin-top: 15px; font-size: 12px; text-align: left; }
 .bloque-derecha { display: flex; flex-direction: column; align-items: flex-end; }
 .input-lock { background-color: #4a5d6e !important; color: #bdc3c7 !important; cursor: not-allowed; border: 1px solid #3e4f5e !important; }

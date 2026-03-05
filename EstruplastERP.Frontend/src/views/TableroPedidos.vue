@@ -11,9 +11,10 @@ interface OrdenResumen {
 }
 
 interface PedidoAgrupado {
-    pedido: string;
+    notaPedido: string;      
+    pedido: string;          
     cliente: string;
-    avance: number; // 0 a 100
+    avance: number;          
     ordenes: OrdenResumen[];
 }
 
@@ -22,11 +23,9 @@ const cargando = ref(false);
 const clienteFiltro = ref('');
 const mostrarSoloPendientes = ref(false);
 
-// Cargar datos del backend
 const cargarTablero = async () => {
     cargando.value = true;
     try {
-        // Llamamos al endpoint nuevo que creamos en ProduccionController
         const res = await api.get('/Produccion/tablero-pedidos');
         listaPedidos.value = res.data;
     } catch (e) {
@@ -36,11 +35,13 @@ const cargarTablero = async () => {
     }
 };
 
-// Filtros visuales
 const pedidosFiltrados = computed(() => {
     return listaPedidos.value.filter(p => {
-        const matchCliente = p.cliente.toLowerCase().includes(clienteFiltro.value.toLowerCase()) || 
-                             p.pedido.toLowerCase().includes(clienteFiltro.value.toLowerCase());
+        const busqueda = clienteFiltro.value.toLowerCase();
+        
+        const matchCliente = p.cliente.toLowerCase().includes(busqueda) || 
+                             (p.notaPedido && p.notaPedido.toLowerCase().includes(busqueda)) ||
+                             (p.pedido && p.pedido.toLowerCase().includes(busqueda));
         
         const matchPendiente = mostrarSoloPendientes.value ? p.avance < 100 : true;
 
@@ -48,7 +49,6 @@ const pedidosFiltrados = computed(() => {
     });
 });
 
-// Colores para estados
 const claseEstado = (estado: string) => {
     if (estado === 'Pendiente') return 'badge-gris';
     if (estado === 'EnProceso') return 'badge-azul';
@@ -66,7 +66,7 @@ onMounted(() => {
         <div class="header-tablero">
             <h2>📋 Tablero de Pedidos</h2>
             <div class="filtros">
-                <input v-model="clienteFiltro" placeholder="🔍 Buscar Cliente o N° Pedido..." class="input-busqueda">
+                <input v-model="clienteFiltro" placeholder="🔍 Buscar Cliente o N° Nota..." class="input-busqueda">
                 <label class="check-pendientes">
                     <input type="checkbox" v-model="mostrarSoloPendientes"> Ocultar Terminados
                 </label>
@@ -80,7 +80,8 @@ onMounted(() => {
             <div v-for="(p, index) in pedidosFiltrados" :key="index" class="card-pedido">
                 <div class="card-header">
                     <div class="titulo-pedido">
-                        <span class="lbl-oc">{{ p.pedido }}</span>
+                        <span class="lbl-nota">Nota: {{ p.notaPedido || 'Sin Nota' }}</span>
+                        <span v-if="p.pedido" class="lbl-oc">OC: {{ p.pedido }}</span>
                         <span class="lbl-cli">{{ p.cliente }}</span>
                     </div>
                     <div class="badge-avance" :class="{'full': p.avance === 100}">
@@ -131,8 +132,9 @@ onMounted(() => {
 
 .card-header { padding: 15px; display: flex; justify-content: space-between; align-items: flex-start; background: #fff; }
 .titulo-pedido { display: flex; flex-direction: column; }
-.lbl-oc { font-size: 1.1rem; font-weight: bold; color: #2c3e50; }
-.lbl-cli { font-size: 0.9rem; color: #7f8c8d; }
+.lbl-nota { font-size: 1.15rem; font-weight: 900; color: #2980b9; }
+.lbl-oc { font-size: 0.85rem; color: #f39c12; font-weight: 600; margin-top: 2px; }
+.lbl-cli { font-size: 0.95rem; color: #34495e; margin-top: 4px; }
 
 .badge-avance { background: #ecf0f1; color: #7f8c8d; padding: 5px 10px; border-radius: 12px; font-weight: bold; font-size: 0.9rem; }
 .badge-avance.full { background: #2ecc71; color: white; }

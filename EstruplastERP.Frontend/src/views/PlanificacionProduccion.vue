@@ -89,18 +89,24 @@ const onDrop = (evt: DragEvent, fechaDestino: string) => {
     const relativeX = evt.clientX - rect.left;
     const nuevaMaquinaId = (relativeX > rect.width / 2) ? 2 : 1;
 
-    if (origen === 'pendiente') {
+   if (origen === 'pendiente') {
         // PENDIENTE -> CALENDARIO
         const index = tareasPendientes.value.findIndex(t => t.id === tareaId);
         if (index !== -1) {
-            const t = tareasPendientes.value[index];
-            tareasPendientes.value.splice(index, 1);
-            tareasPlanificadas.value.push({
-                ...t, fecha: fechaDestino, horaInicio: Math.max(0, nuevaHora), maquinaId: nuevaMaquinaId, duracion: t.duracionEstimada
-            });
+            const t = tareasPendientes.value[index] as any; 
+            
+            if (t) {
+                tareasPendientes.value.splice(index, 1);
+                tareasPlanificadas.value.push({
+                    ...t, 
+                    fecha: fechaDestino, 
+                    horaInicio: Math.max(0, nuevaHora), 
+                    maquinaId: nuevaMaquinaId, 
+                    duracion: t.duracionEstimada || 1 
+                } as any); 
+            }
         }
     } else {
-        // MOVER DENTRO DEL CALENDARIO
         const t = tareasPlanificadas.value.find(x => x.id === tareaId);
         if (t) {
             t.fecha = fechaDestino;

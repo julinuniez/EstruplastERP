@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EstruplastERP.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20251219190850_AgregarFasonCliente")]
-    partial class AgregarFasonCliente
+    [Migration("20260305161352_LimpiezaFinal")]
+    partial class LimpiezaFinal
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -46,6 +46,9 @@ namespace EstruplastERP.Data.Migrations
                     b.Property<string>("Email")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("EsFazon")
+                        .HasColumnType("bit");
+
                     b.Property<string>("RazonSocial")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -57,6 +60,34 @@ namespace EstruplastERP.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Clientes");
+                });
+
+            modelBuilder.Entity("EstruplastERP.Core.ClienteMaterialFazon", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClienteId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaterialGenericoId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaterialRealId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId");
+
+                    b.HasIndex("MaterialGenericoId");
+
+                    b.HasIndex("MaterialRealId");
+
+                    b.ToTable("ClientesMaterialesFazon");
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.ConsumoOrden", b =>
@@ -143,86 +174,23 @@ namespace EstruplastERP.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = 1,
-                            Cantidad = 96m,
-                            MateriaPrimaId = 1,
-                            ProductoTerminadoId = 100
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Cantidad = 4m,
-                            MateriaPrimaId = 20,
-                            ProductoTerminadoId = 100
-                        },
-                        new
-                        {
-                            Id = 3,
-                            Cantidad = 98m,
-                            MateriaPrimaId = 1,
-                            ProductoTerminadoId = 102
-                        },
-                        new
-                        {
-                            Id = 4,
-                            Cantidad = 2m,
-                            MateriaPrimaId = 22,
-                            ProductoTerminadoId = 102
-                        },
-                        new
-                        {
-                            Id = 5,
-                            Cantidad = 98m,
-                            MateriaPrimaId = 2,
-                            ProductoTerminadoId = 200
-                        },
-                        new
-                        {
-                            Id = 6,
-                            Cantidad = 2m,
-                            MateriaPrimaId = 20,
-                            ProductoTerminadoId = 200
-                        },
-                        new
-                        {
-                            Id = 7,
-                            Cantidad = 100m,
-                            MateriaPrimaId = 3,
-                            ProductoTerminadoId = 300
-                        },
-                        new
-                        {
-                            Id = 8,
-                            Cantidad = 100m,
-                            MateriaPrimaId = 4,
-                            ProductoTerminadoId = 400
-                        },
-                        new
-                        {
-                            Id = 9,
-                            Cantidad = 100m,
-                            MateriaPrimaId = 7,
-                            ProductoTerminadoId = 106
-                        },
-                        new
-                        {
                             Id = 50,
                             Cantidad = 100m,
-                            MateriaPrimaId = 999,
+                            MateriaPrimaId = 990,
                             ProductoTerminadoId = 900
                         },
                         new
                         {
                             Id = 51,
                             Cantidad = 100m,
-                            MateriaPrimaId = 999,
+                            MateriaPrimaId = 990,
                             ProductoTerminadoId = 901
                         },
                         new
                         {
                             Id = 52,
                             Cantidad = 98m,
-                            MateriaPrimaId = 999,
+                            MateriaPrimaId = 990,
                             ProductoTerminadoId = 902
                         },
                         new
@@ -236,7 +204,7 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 54,
                             Cantidad = 98m,
-                            MateriaPrimaId = 999,
+                            MateriaPrimaId = 990,
                             ProductoTerminadoId = 903
                         },
                         new
@@ -250,29 +218,57 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 56,
                             Cantidad = 100m,
-                            MateriaPrimaId = 999,
+                            MateriaPrimaId = 990,
                             ProductoTerminadoId = 904
                         },
                         new
                         {
                             Id = 57,
                             Cantidad = 100m,
-                            MateriaPrimaId = 999,
+                            MateriaPrimaId = 990,
                             ProductoTerminadoId = 905
                         },
                         new
                         {
                             Id = 58,
                             Cantidad = 100m,
-                            MateriaPrimaId = 999,
+                            MateriaPrimaId = 990,
                             ProductoTerminadoId = 906
                         },
                         new
                         {
                             Id = 59,
                             Cantidad = 100m,
-                            MateriaPrimaId = 999,
+                            MateriaPrimaId = 990,
                             ProductoTerminadoId = 907
+                        },
+                        new
+                        {
+                            Id = 60,
+                            Cantidad = 100m,
+                            MateriaPrimaId = 991,
+                            ProductoTerminadoId = 908
+                        },
+                        new
+                        {
+                            Id = 61,
+                            Cantidad = 100m,
+                            MateriaPrimaId = 992,
+                            ProductoTerminadoId = 909
+                        },
+                        new
+                        {
+                            Id = 62,
+                            Cantidad = 100m,
+                            MateriaPrimaId = 992,
+                            ProductoTerminadoId = 910
+                        },
+                        new
+                        {
+                            Id = 63,
+                            Cantidad = 100m,
+                            MateriaPrimaId = 993,
+                            ProductoTerminadoId = 911
                         });
                 });
 
@@ -353,6 +349,9 @@ namespace EstruplastERP.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal>("Ancho")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("Cantidad")
                         .HasColumnType("decimal(18,2)");
 
@@ -361,6 +360,9 @@ namespace EstruplastERP.Data.Migrations
 
                     b.Property<int?>("EmpleadoId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("Espesor")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("Estado")
                         .HasColumnType("int");
@@ -373,6 +375,16 @@ namespace EstruplastERP.Data.Migrations
 
                     b.Property<decimal>("KilosEstimados")
                         .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("Largo")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("NotaPedido")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("NumeroPedidoCliente")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Observacion")
                         .IsRequired()
@@ -455,16 +467,8 @@ namespace EstruplastERP.Data.Migrations
                     b.Property<bool>("Activo")
                         .HasColumnType("bit");
 
-                    b.Property<decimal>("Ancho")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<int?>("ClienteId")
                         .HasColumnType("int");
-
-                    b.Property<string>("CodigoBarras")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("CodigoSku")
                         .HasMaxLength(50)
@@ -473,10 +477,6 @@ namespace EstruplastERP.Data.Migrations
                     b.Property<string>("Color")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("Descripcion")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
 
                     b.Property<bool>("EsFazon")
                         .HasColumnType("bit");
@@ -487,12 +487,14 @@ namespace EstruplastERP.Data.Migrations
                     b.Property<bool>("EsMateriaPrima")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("EsPremezcla")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("EsProductoTerminado")
                         .HasColumnType("bit");
 
-                    b.Property<decimal>("Espesor")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
+                    b.Property<bool>("EsScrap")
+                        .HasColumnType("bit");
 
                     b.Property<decimal?>("EspesorMaximo")
                         .HasPrecision(18, 2)
@@ -502,15 +504,11 @@ namespace EstruplastERP.Data.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int?>("FamiliaId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("ImagenUrl")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("Largo")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Nombre")
                         .IsRequired()
@@ -525,350 +523,143 @@ namespace EstruplastERP.Data.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<int?>("ProductoPadreId")
-                        .HasColumnType("int");
+                    b.Property<string>("Rubro")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("StockActual")
                         .HasPrecision(18, 3)
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18,3)");
 
                     b.Property<decimal>("StockMinimo")
                         .HasPrecision(18, 3)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("TipoMaterial")
+                        .HasColumnType("nvarchar(max)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClienteId");
-
-                    b.HasIndex("ProductoPadreId");
 
                     b.ToTable("Productos");
 
                     b.HasData(
                         new
                         {
-                            Id = 1,
+                            Id = 999,
                             Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-PAI",
+                            CodigoSku = "MP-FAZON-GEN",
                             EsFazon = false,
                             EsGenerico = false,
                             EsMateriaPrima = true,
+                            EsPremezcla = false,
                             EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(4990),
-                            Largo = 0m,
-                            Nombre = "Poliestireno Alto Impacto (AI/PAI)",
-                            PesoEspecifico = 1.05m,
+                            EsScrap = false,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5305),
+                            Nombre = "MATERIAL DE CLIENTE (GENÉRICO)",
+                            PesoEspecifico = 1.00m,
                             PrecioCosto = 0m,
-                            StockActual = 1000m,
-                            StockMinimo = 1000m
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
                         },
                         new
                         {
-                            Id = 2,
+                            Id = 990,
                             Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-ABS",
+                            CodigoSku = "MP-FAZ-AI",
                             EsFazon = false,
                             EsGenerico = false,
                             EsMateriaPrima = true,
+                            EsPremezcla = false,
                             EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(4997),
-                            Largo = 0m,
-                            Nombre = "ABS",
+                            EsScrap = false,
+                            FamiliaId = 10,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5310),
+                            Nombre = "MP FAZÓN ALTO IMPACTO (BASE)",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
-                            StockActual = 1000m,
-                            StockMinimo = 500m
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
                         },
                         new
                         {
-                            Id = 3,
+                            Id = 991,
                             Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-PP",
+                            CodigoSku = "MP-FAZ-ABS",
                             EsFazon = false,
                             EsGenerico = false,
                             EsMateriaPrima = true,
+                            EsPremezcla = false,
                             EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5000),
-                            Largo = 0m,
-                            Nombre = "Polipropileno (PP)",
+                            EsScrap = false,
+                            FamiliaId = 20,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5314),
+                            Nombre = "MP FAZÓN ABS (BASE)",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 992,
+                            Activo = true,
+                            CodigoSku = "MP-FAZ-PP",
+                            EsFazon = false,
+                            EsGenerico = false,
+                            EsMateriaPrima = true,
+                            EsPremezcla = false,
+                            EsProductoTerminado = false,
+                            EsScrap = false,
+                            FamiliaId = 30,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5317),
+                            Nombre = "MP FAZÓN POLIPROPILENO (BASE)",
                             PesoEspecifico = 0.91m,
                             PrecioCosto = 0m,
-                            StockActual = 1000m,
-                            StockMinimo = 1000m
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
                         },
                         new
                         {
-                            Id = 4,
+                            Id = 993,
                             Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-PEAD",
+                            CodigoSku = "MP-FAZ-PE",
                             EsFazon = false,
                             EsGenerico = false,
                             EsMateriaPrima = true,
+                            EsPremezcla = false,
                             EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5004),
-                            Largo = 0m,
-                            Nombre = "Polietileno Alta Densidad (PEAD)",
+                            EsScrap = false,
+                            FamiliaId = 40,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5416),
+                            Nombre = "MP FAZÓN PEAD/PEBD (BASE)",
                             PesoEspecifico = 0.96m,
                             PrecioCosto = 0m,
-                            StockActual = 1000m,
-                            StockMinimo = 1000m
-                        },
-                        new
-                        {
-                            Id = 5,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-PEBD",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5007),
-                            Largo = 0m,
-                            Nombre = "Polietileno Baja Densidad (PEBD)",
-                            PesoEspecifico = 0.92m,
-                            PrecioCosto = 0m,
-                            StockActual = 1000m,
-                            StockMinimo = 1000m
-                        },
-                        new
-                        {
-                            Id = 6,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-BIO",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5011),
-                            Largo = 0m,
-                            Nombre = "Bioplástico",
-                            PesoEspecifico = 1.25m,
-                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
                             StockActual = 0m,
-                            StockMinimo = 200m
-                        },
-                        new
-                        {
-                            Id = 7,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-TUTI-FINO",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            EspesorMaximo = 0.90m,
-                            EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5016),
-                            Largo = 0m,
-                            Nombre = "Tuti Fino",
-                            PesoEspecifico = 1.05m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 8,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-TUTI-GRUESO",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            EspesorMaximo = 5.00m,
-                            EspesorMinimo = 0.91m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5020),
-                            Largo = 0m,
-                            Nombre = "Tuti Grueso",
-                            PesoEspecifico = 1.05m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 20,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-MB-BLA",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5024),
-                            Largo = 0m,
-                            Nombre = "Masterbatch Blanco",
-                            PesoEspecifico = 1.80m,
-                            PrecioCosto = 0m,
-                            StockActual = 200m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 21,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-MB-NEG",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5028),
-                            Largo = 0m,
-                            Nombre = "Masterbatch Negro",
-                            PesoEspecifico = 1.20m,
-                            PrecioCosto = 0m,
-                            StockActual = 200m,
                             StockMinimo = 0m
                         },
                         new
                         {
                             Id = 22,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "MP-MB-COL",
                             EsFazon = false,
                             EsGenerico = false,
                             EsMateriaPrima = true,
+                            EsPremezcla = false,
                             EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5030),
-                            Largo = 0m,
+                            EsScrap = false,
+                            FamiliaId = 50,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5420),
                             Nombre = "Masterbatch Color (Varios)",
                             PesoEspecifico = 1.20m,
                             PrecioCosto = 0m,
-                            StockActual = 200m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 23,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-CARGA",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5033),
-                            Largo = 0m,
-                            Nombre = "Carga Mineral",
-                            PesoEspecifico = 1.80m,
-                            PrecioCosto = 0m,
-                            StockActual = 1000m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 24,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-UV",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5037),
-                            Largo = 0m,
-                            Nombre = "Aditivo UV",
-                            PesoEspecifico = 0.95m,
-                            PrecioCosto = 0m,
-                            StockActual = 100m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 25,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-CAUCHO",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5040),
-                            Largo = 0m,
-                            Nombre = "Aditivo Caucho",
-                            PesoEspecifico = 0.94m,
-                            PrecioCosto = 0m,
-                            StockActual = 100m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 26,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-ESTEARATO",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5042),
-                            Largo = 0m,
-                            Nombre = "Estearato",
-                            PesoEspecifico = 0.35m,
-                            PrecioCosto = 0m,
-                            StockActual = 50m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 27,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-BRILLO",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5048),
-                            Largo = 0m,
-                            Nombre = "Brillo",
-                            PesoEspecifico = 1.00m,
-                            PrecioCosto = 0m,
-                            StockActual = 50m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 999,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "MP-FAZON-GEN",
-                            EsFazon = false,
-                            EsGenerico = false,
-                            EsMateriaPrima = true,
-                            EsProductoTerminado = false,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5050),
-                            Largo = 0m,
-                            Nombre = "MATERIAL DE CLIENTE (FAZÓN)",
-                            PesoEspecifico = 1.00m,
-                            PrecioCosto = 0m,
+                            Rubro = "MATERIA PRIMA",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -876,40 +667,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 100,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "AI-FINO",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
+                            EsScrap = false,
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5189),
-                            Largo = 0m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5428),
                             Nombre = "A.I. FINO (0.40 - 0.90 mm)",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 101,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "AI-GRUESO",
-                            EsFazon = false,
-                            EsGenerico = true,
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            EspesorMinimo = 0.91m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5193),
-                            Largo = 0m,
-                            Nombre = "A.I. GRUESO",
-                            PesoEspecifico = 1.05m,
-                            PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -917,80 +688,21 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 102,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "AI-FINO-COL",
                             Color = "A Elección",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
+                            EsScrap = false,
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5199),
-                            Largo = 0m,
-                            Nombre = "A.I. FINO COLOR (0.40 - 0.90 mm)",
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5433),
+                            Nombre = "A.I. FINO COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 103,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "AI-GRUESO-COL",
-                            Color = "A Elección",
-                            EsFazon = false,
-                            EsGenerico = true,
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            EspesorMinimo = 0.91m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5204),
-                            Largo = 0m,
-                            Nombre = "A.I. GRUESO COLOR",
-                            PesoEspecifico = 1.05m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 104,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "AI-BICAPA",
-                            EsFazon = false,
-                            EsGenerico = true,
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5208),
-                            Largo = 0m,
-                            Nombre = "A.I. BICAPA",
-                            PesoEspecifico = 1.05m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 105,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "AI-TRICAPA",
-                            EsFazon = false,
-                            EsGenerico = true,
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5210),
-                            Largo = 0m,
-                            Nombre = "A.I. TRICAPA",
-                            PesoEspecifico = 1.05m,
-                            PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -998,20 +710,105 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 106,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "AI-TUTTI-FINO",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
+                            EsScrap = false,
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5214),
-                            Largo = 0m,
-                            Nombre = "A.I. TUTTI FINO (0.40 - 0.90 mm)",
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5437),
+                            Nombre = "A.I. TUTTI FINO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 101,
+                            Activo = true,
+                            CodigoSku = "AI-GRUESO",
+                            EsFazon = false,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5440),
+                            Nombre = "A.I. GRUESO",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 103,
+                            Activo = true,
+                            CodigoSku = "AI-GRUESO-COL",
+                            Color = "A Elección",
+                            EsFazon = false,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5444),
+                            Nombre = "A.I. GRUESO COLOR",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 104,
+                            Activo = true,
+                            CodigoSku = "AI-BICAPA",
+                            EsFazon = false,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5448),
+                            Nombre = "A.I. BICAPA",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 105,
+                            Activo = true,
+                            CodigoSku = "AI-TRICAPA",
+                            EsFazon = false,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5452),
+                            Nombre = "A.I. TRICAPA",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1019,19 +816,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 107,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "AI-TUTTI-GRUESO",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            EspesorMinimo = 0.91m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5218),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5456),
                             Nombre = "A.I. TUTTI GRUESO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1039,18 +837,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 108,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "AI-FREON",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5221),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5460),
                             Nombre = "A.I. RESISTENTE AL FREON",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1058,19 +858,21 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 109,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "AI-FREON-COL",
                             Color = "A Elección",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5225),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5464),
                             Nombre = "A.I. RESISTENTE AL FREON COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1078,19 +880,21 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 200,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "ABS-BLA",
                             Color = "Blanco",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5228),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5467),
                             Nombre = "ABS BLANCO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1098,19 +902,21 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 201,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "ABS-COL",
                             Color = "A Elección",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5230),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5471),
                             Nombre = "ABS COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1118,19 +924,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 202,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "ABS-GRUESO",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
                             EspesorMinimo = 1.00m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5234),
-                            Largo = 0m,
-                            Nombre = "ABS GRUESO",
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5475),
+                            Nombre = "ABS GRUESO (Min 1mm)",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1138,18 +945,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 300,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "PP-STD",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5236),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5479),
                             Nombre = "PP (POLIPROPILENO)",
                             PesoEspecifico = 0.91m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1157,19 +966,21 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 301,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "PP-COL",
                             Color = "A Elección",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5239),
-                            Largo = 0m,
-                            Nombre = "PP (POLIPROPILENO) COLOR",
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5483),
+                            Nombre = "PP COLOR",
                             PesoEspecifico = 0.91m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1177,18 +988,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 400,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "PE-MIX",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5241),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5486),
                             Nombre = "PEAD / PEBD",
                             PesoEspecifico = 0.94m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1196,18 +1009,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 401,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "PEBD-GOF",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5244),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5490),
                             Nombre = "PEBD GOFRADO",
                             PesoEspecifico = 0.92m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1215,18 +1030,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 402,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "PEAD-BIC",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5246),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5494),
                             Nombre = "PEAD BICAPA",
                             PesoEspecifico = 0.96m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1234,18 +1051,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 500,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "BIO-LAM",
                             EsFazon = false,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5249),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5498),
                             Nombre = "BIOPLASTICO",
                             PesoEspecifico = 1.25m,
                             PrecioCosto = 0m,
+                            Rubro = "PRODUCTO TERMINADO",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1253,37 +1072,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 900,
                             Activo = true,
-                            Ancho = 0m,
                             CodigoSku = "FAZ-AI-FIN",
                             EsFazon = true,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5252),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0.90m,
+                            EspesorMinimo = 0.40m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5507),
                             Nombre = "LAMINADO A FAZON - A.I. FINO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 901,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "FAZ-AI-GRU",
-                            EsFazon = true,
-                            EsGenerico = true,
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5256),
-                            Largo = 0m,
-                            Nombre = "LAMINADO A FAZON - A.I. GRUESO",
-                            PesoEspecifico = 1.05m,
-                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1291,75 +1093,20 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 902,
                             Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "FAZ-AI-BIC",
+                            CodigoSku = "FAZ-AI-FIN-COL",
                             EsFazon = true,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5259),
-                            Largo = 0m,
-                            Nombre = "LAMINADO A FAZON - A.I. BICAPA",
+                            EsScrap = false,
+                            EspesorMaximo = 0.90m,
+                            EspesorMinimo = 0.40m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5510),
+                            Nombre = "LAMINADO A FAZON - A.I. FINO COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 903,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "FAZ-AI-TRI",
-                            EsFazon = true,
-                            EsGenerico = true,
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5262),
-                            Largo = 0m,
-                            Nombre = "LAMINADO A FAZON - A.I. TRICAPA",
-                            PesoEspecifico = 1.05m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 904,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "FAZ-ABS-GRU",
-                            EsFazon = true,
-                            EsGenerico = true,
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5381),
-                            Largo = 0m,
-                            Nombre = "LAMINADO A FAZON - ABS GRUESO",
-                            PesoEspecifico = 1.05m,
-                            PrecioCosto = 0m,
-                            StockActual = 0m,
-                            StockMinimo = 0m
-                        },
-                        new
-                        {
-                            Id = 905,
-                            Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "FAZ-POLI-FIN",
-                            EsFazon = true,
-                            EsGenerico = true,
-                            EsMateriaPrima = false,
-                            EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5384),
-                            Largo = 0m,
-                            Nombre = "LAMINADO A FAZON - PEAD/PP/BIO FINO",
-                            PesoEspecifico = 0.95m,
-                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1367,18 +1114,125 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 906,
                             Activo = true,
-                            Ancho = 0m,
-                            CodigoSku = "FAZ-POLI-GRU",
+                            CodigoSku = "FAZ-AI-TUT-FIN",
                             EsFazon = true,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5387),
-                            Largo = 0m,
-                            Nombre = "LAMINADO A FAZON - PEAD/PP/BIO GRUESO",
+                            EsScrap = false,
+                            EspesorMaximo = 0.90m,
+                            EspesorMinimo = 0.40m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5514),
+                            Nombre = "LAMINADO A FAZON - A.I. TUTTI FINO",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 909,
+                            Activo = true,
+                            CodigoSku = "FAZ-POLI-FIN",
+                            EsFazon = true,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0.90m,
+                            EspesorMinimo = 0.40m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5518),
+                            Nombre = "LAMINADO A FAZON - PEAD/PP/BIO FINO",
                             PesoEspecifico = 0.95m,
                             PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 901,
+                            Activo = true,
+                            CodigoSku = "FAZ-AI-GRU",
+                            EsFazon = true,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5522),
+                            Nombre = "LAMINADO A FAZON - A.I. GRUESO",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 903,
+                            Activo = true,
+                            CodigoSku = "FAZ-AI-GRU-COL",
+                            EsFazon = true,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5527),
+                            Nombre = "LAMINADO A FAZON - A.I. GRUESO COLOR",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 904,
+                            Activo = true,
+                            CodigoSku = "FAZ-AI-BIC",
+                            EsFazon = true,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5530),
+                            Nombre = "LAMINADO A FAZON - A.I. BICAPA",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 905,
+                            Activo = true,
+                            CodigoSku = "FAZ-AI-TRI",
+                            EsFazon = true,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5534),
+                            Nombre = "LAMINADO A FAZON - A.I. TRICAPA",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
                             StockActual = 0m,
                             StockMinimo = 0m
                         },
@@ -1386,18 +1240,83 @@ namespace EstruplastERP.Data.Migrations
                         {
                             Id = 907,
                             Activo = true,
-                            Ancho = 0m,
+                            CodigoSku = "FAZ-AI-TUT-GRU",
+                            EsFazon = true,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5538),
+                            Nombre = "LAMINADO A FAZON - A.I. TUTTI GRUESO",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 908,
+                            Activo = true,
+                            CodigoSku = "FAZ-ABS-GRU",
+                            EsFazon = true,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5541),
+                            Nombre = "LAMINADO A FAZON - ABS GRUESO",
+                            PesoEspecifico = 1.05m,
+                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 910,
+                            Activo = true,
+                            CodigoSku = "FAZ-POLI-GRU",
+                            EsFazon = true,
+                            EsGenerico = true,
+                            EsMateriaPrima = false,
+                            EsPremezcla = false,
+                            EsProductoTerminado = true,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5545),
+                            Nombre = "LAMINADO A FAZON - PEAD/PP/BIO GRUESO",
+                            PesoEspecifico = 0.95m,
+                            PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
+                            StockActual = 0m,
+                            StockMinimo = 0m
+                        },
+                        new
+                        {
+                            Id = 911,
+                            Activo = true,
                             CodigoSku = "FAZ-PEAD-BIC",
                             EsFazon = true,
                             EsGenerico = true,
                             EsMateriaPrima = false,
+                            EsPremezcla = false,
                             EsProductoTerminado = true,
-                            Espesor = 0m,
-                            FechaCreacion = new DateTime(2025, 12, 19, 16, 8, 49, 387, DateTimeKind.Local).AddTicks(5390),
-                            Largo = 0m,
+                            EsScrap = false,
+                            EspesorMaximo = 0m,
+                            EspesorMinimo = 0.90m,
+                            FechaCreacion = new DateTime(2026, 3, 5, 13, 13, 51, 54, DateTimeKind.Local).AddTicks(5609),
                             Nombre = "LAMINADO A FAZON - PEAD BICAPA",
                             PesoEspecifico = 0.96m,
                             PrecioCosto = 0m,
+                            Rubro = "SERVICIO FAZON",
                             StockActual = 0m,
                             StockMinimo = 0m
                         });
@@ -1546,6 +1465,33 @@ namespace EstruplastERP.Data.Migrations
                     b.ToTable("Usuarios");
                 });
 
+            modelBuilder.Entity("EstruplastERP.Core.ClienteMaterialFazon", b =>
+                {
+                    b.HasOne("EstruplastERP.Core.Cliente", "Cliente")
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EstruplastERP.Core.Producto", "MaterialGenerico")
+                        .WithMany()
+                        .HasForeignKey("MaterialGenericoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EstruplastERP.Core.Producto", "MaterialReal")
+                        .WithMany()
+                        .HasForeignKey("MaterialRealId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Cliente");
+
+                    b.Navigation("MaterialGenerico");
+
+                    b.Navigation("MaterialReal");
+                });
+
             modelBuilder.Entity("EstruplastERP.Core.ConsumoOrden", b =>
                 {
                     b.HasOne("EstruplastERP.Core.Producto", "MateriaPrima")
@@ -1569,7 +1515,7 @@ namespace EstruplastERP.Data.Migrations
                     b.HasOne("EstruplastERP.Core.Producto", "MateriaPrima")
                         .WithMany()
                         .HasForeignKey("MateriaPrimaId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("EstruplastERP.Core.Producto", "ProductoTerminado")
@@ -1667,14 +1613,7 @@ namespace EstruplastERP.Data.Migrations
                         .HasForeignKey("ClienteId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("EstruplastERP.Core.Producto", "ProductoPadre")
-                        .WithMany()
-                        .HasForeignKey("ProductoPadreId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
                     b.Navigation("Cliente");
-
-                    b.Navigation("ProductoPadre");
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.Remito", b =>

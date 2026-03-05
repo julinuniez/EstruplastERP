@@ -13,12 +13,10 @@ interface ProduccionItem {
   operario: string;
   estado: string;
   esFinalizada: boolean;
-  
-  // Agregamos los campos de Cliente y OC por si vienen del backend
+  notaPedido?: string;
+  numeroPedidoCliente?: string;
   clienteNombre?: string; 
   cliente?: string;
-  numeroPedidoCliente?: string;
-  
   largo?: number;
   ancho?: number;
   espesor?: number;
@@ -34,25 +32,21 @@ const producciones = ref<ProduccionItem[]>([])
 const cargando = ref(false)
 const error = ref('')
 
-// --- VARIABLES DE FILTRO (Arranca en Pendientes por defecto) ---
 const filtroEstado = ref('Pendientes');
-const filtroFecha = ref(''); // YYYY-MM-DD
+const filtroFecha = ref(''); 
 
-// --- COMPUTED PARA FILTRAR ---
 const produccionesFiltradas = computed(() => {
     return producciones.value.filter(item => {
-        // 1. Filtro por Estado
         let pasaEstado = true;
         if (filtroEstado.value === 'Pendientes') pasaEstado = !item.esFinalizada && item.estado !== 'Cancelada';
         else if (filtroEstado.value === 'Finalizadas') pasaEstado = item.esFinalizada;
         else if (filtroEstado.value === 'Canceladas') pasaEstado = item.estado === 'Cancelada';
         else if (filtroEstado.value === 'Todos') pasaEstado = true;
 
-        // 2. Filtro por Fecha
         let pasaFecha = true;
         if (filtroFecha.value) {
             const [year, month, day] = filtroFecha.value.split('-');
-            const fechaBuscada = `${day}/${month}`; // "15/01"
+            const fechaBuscada = `${day}/${month}`; 
             pasaFecha = item.fecha.startsWith(fechaBuscada);
         }
 
@@ -63,19 +57,14 @@ const produccionesFiltradas = computed(() => {
 async function cargarHistorial() {
   cargando.value = true
   error.value = ''
-  
   try {
     const res = await api.get('/Ordenes/recientes')
-    
     if (Array.isArray(res.data)) {
         producciones.value = res.data.sort((a: any, b: any) => b.id - a.id);
     } else {
-        console.error("⚠️ La API devolvió HTML basura:", res.data);
         error.value = "Error de conexión con el servidor.";
     }
-
   } catch (e: any) {
-    console.error("Error cargando historial:", e)
     error.value = "No se pudieron cargar las órdenes."
   } finally {
     cargando.value = false
@@ -84,14 +73,11 @@ async function cargarHistorial() {
 
 async function confirmarOrdenRapida(item: ProduccionItem) {
     if(!confirm(`¿Confirmar orden #${item.id}? Se sumará al stock.`)) return;
-
     try {
         await api.post(`/Ordenes/confirmar/${item.id}`)
-
         item.esFinalizada = true;
         item.estado = "Finalizada";
         alert("✅ Confirmado.");
-
     } catch (e: any) {
         const msg = e.response?.data?.mensaje || "Error de conexión";
         alert("❌ Error: " + msg);
@@ -100,14 +86,10 @@ async function confirmarOrdenRapida(item: ProduccionItem) {
 
 async function cancelarOrden(item: ProduccionItem) {
     if (!confirm(`⚠️ ¿Estás seguro de CANCELAR la Orden #${item.id}?\n\nSe devolverán los materiales al stock.`)) return;
-
     try {
         await api.post(`/Ordenes/cancelar/${item.id}`);
-        
         item.estado = "Cancelada";
-        
         await cargarHistorial();
-        
         alert("✅ Orden cancelada correctamente.");
     } catch (e: any) {
         const msg = e.response?.data || "Error al cancelar";
@@ -164,7 +146,6 @@ defineExpose({ cargarHistorial })
         <h3 :style="{ color: filtroEstado === 'Pendientes' ? '#2c3e50' : '#7f8c8d' }">
             {{ filtroEstado === 'Pendientes' ? '🔥 Órdenes en Curso' : '🗄️ Archivo Histórico (' + filtroEstado + ')' }}
         </h3>
-        
         <div class="filtros-container">
             <select v-model="filtroEstado" class="input-filtro">
                 <option value="Pendientes">Pendientes</option>
@@ -172,10 +153,8 @@ defineExpose({ cargarHistorial })
                 <option value="Canceladas">Canceladas</option>
                 <option value="Todos">Todos</option>
             </select>
-            
-            <input type="date" v-model="filtroFecha" class="input-filtro" title="Filtrar por fecha">
-            
-            <button @click="cargarHistorial" class="btn-refresh" :disabled="cargando" title="Recargar datos">
+            <input type="date" v-model="filtroFecha" class="input-filtro">
+            <button @click="cargarHistorial" class="btn-refresh" :disabled="cargando">
                 {{ cargando ? '⏳' : '🔄' }}
             </button>
         </div>
@@ -188,7 +167,8 @@ defineExpose({ cargarHistorial })
             <thead>
                 <tr>
                     <th>Fecha</th>
-                    <th>Cliente / OC</th> <th>Producto</th>
+                    <th>Nota Pedido</th>
+                    <th>Producto</th>
                     <th>Cant.</th>
                     <th>Kilos</th>
                     <th>Operario</th>
@@ -199,16 +179,14 @@ defineExpose({ cargarHistorial })
             <tbody>
                 <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-ok': p.esFinalizada, 'fila-cancel': p.estado === 'Cancelada'}">
                     <td>{{ p.fecha }}</td>
-                    
                     <td>
-                        <div style="font-weight: bold; color: #2980b9;">
-                            {{ p.clienteNombre || p.cliente || 'Stock / Interno' }}
+                        <div style="font-weight: bold; color: #2c3e50;">
+                            {{ p.notaPedido || '-' }}
                         </div>
-                        <div v-if="p.numeroPedidoCliente" style="font-size: 0.75rem; color: #e67e22; font-weight: bold;">
+                        <small v-if="p.numeroPedidoCliente" style="color: #7f8c8d; display: block; font-size: 0.7rem; margin-top: 2px;">
                             OC: {{ p.numeroPedidoCliente }}
-                        </div>
+                        </small>
                     </td>
-
                     <td class="td-prod">{{ p.producto }}</td>
                     <td style="text-align: center;">{{ p.cantidad }}</td>
                     <td style="text-align: right; font-weight: bold;">{{ p.kilos }}</td>
@@ -223,40 +201,13 @@ defineExpose({ cargarHistorial })
                         </span>
                     </td>
                     <td class="td-acciones">
-                        
                         <template v-if="!p.esFinalizada && p.estado !== 'Cancelada'">
-                            <button 
-                                @click="confirmarOrdenRapida(p)" 
-                                class="btn-action btn-check" 
-                                title="Confirmar">
-                                ✅
-                            </button>
-
-                            <button 
-                                @click="solicitarImpresion(p, 'orden')" 
-                                class="btn-action btn-orden" 
-                                title="Orden">
-                                📄
-                            </button>
-                            <button 
-                                @click="solicitarImpresion(p, 'carga')" 
-                                class="btn-action btn-carga" 
-                                title="Carga">
-                                🧪
-                            </button>
-
-                            <button 
-                                @click="cancelarOrden(p)" 
-                                class="btn-action btn-cancel" 
-                                title="Cancelar Orden"
-                                style="color:red; border-color: #ffcccc;">
-                                ❌
-                            </button>
+                            <button @click="confirmarOrdenRapida(p)" class="btn-action btn-check">✅</button>
+                            <button @click="solicitarImpresion(p, 'orden')" class="btn-action btn-orden">📄</button>
+                            <button @click="solicitarImpresion(p, 'carga')" class="btn-action btn-carga">🧪</button>
+                            <button @click="cancelarOrden(p)" class="btn-action btn-cancel" style="color:red; border-color: #ffcccc;">❌</button>
                         </template>
-                        
-                        <button @click="imprimirEtiqueta(p)" class="btn-action btn-print" title="Etiqueta">
-                            🖨️
-                        </button>
+                        <button @click="imprimirEtiqueta(p)" class="btn-action btn-print">🖨️</button>
                     </td>
                 </tr>
                 <tr v-if="produccionesFiltradas.length === 0 && !cargando">
@@ -272,39 +223,25 @@ defineExpose({ cargarHistorial })
 <style scoped>
 .historial-wrapper { background: white; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; height: 100%; display: flex; flex-direction: column; position: relative; }
 .header-tabla { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 2px solid #f1c40f; padding-bottom: 5px; flex-wrap: wrap; gap: 10px; }
-.header-tabla h3 { margin: 0; font-size: 1.1rem; transition: color 0.3s ease; }
-
+.header-tabla h3 { margin: 0; font-size: 1.1rem; }
 .filtros-container { display: flex; gap: 8px; align-items: center; }
-.input-filtro { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; color: #555; outline: none; background: #fff; cursor: pointer; }
-.input-filtro:focus { border-color: #3498db; }
-
+.input-filtro { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; background: #fff; cursor: pointer; }
 .btn-refresh { background: none; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 4px 10px; font-size: 1rem; }
-.btn-refresh:hover { background: #f0f8ff; }
-
 .tabla-scroll { overflow-y: auto; flex: 1; }
 .tabla-custom { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tabla-custom th { background: #2c3e50; color: white; padding: 8px; text-align: left; position: sticky; top: 0; z-index: 5; }
 .tabla-custom td { padding: 8px; border-bottom: 1px solid #eee; color: #333; }
 .td-prod { font-weight: 600; color: #2c3e50; }
-
 .fila-ok { background-color: #f8fff9; color: #888; }
 .fila-ok .td-prod { text-decoration: line-through; } 
-
 .fila-cancel { background-color: #fff5f5; color: #999; }
 .fila-cancel .td-prod { text-decoration: line-through; color: #c0392b; }
-
 .badge-ok { background: #d4edda; color: #155724; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #c3e6cb; }
 .badge-pend { background: #fff3cd; color: #856404; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #ffeeba; }
 .badge-cancel { background: #f8d7da; color: #721c24; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #f5c6cb; }
-
 .td-acciones { display: flex; gap: 4px; justify-content: center; }
-.btn-action { border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; padding: 4px 6px; font-size: 1.1rem; transition: transform 0.1s; }
+.btn-action { border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; padding: 4px 6px; font-size: 1.1rem; }
 .btn-action:hover { transform: scale(1.1); background: #f0f8ff; }
-.btn-check { color: green; border-color: #c3e6cb; }
-.btn-orden { color: #2980b9; border-color: #a9cce3; }
-.btn-carga { color: #8e44ad; border-color: #d2b4de; }
-.btn-cancel:hover { background: #ffebeb; }
-
 .vacio { text-align: center; padding: 20px; color: #aaa; font-style: italic; }
 .loading-overlay { position: absolute; top: 50px; left: 0; width: 100%; text-align: center; background: rgba(255,255,255,0.8); padding: 20px; color: #3498db; font-weight: bold; }
 .error-msg { text-align: center; padding: 10px; color: #e74c3c; background: #fadbd8; margin-bottom: 10px; border-radius: 4px; }

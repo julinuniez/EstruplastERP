@@ -324,26 +324,40 @@ namespace EstruplastERP.Api.Controllers
                 query = query.Where(o => o.ClienteId == clienteId);
             }
 
+            // Traemos todo a memoria primero
             var ordenes = await query.ToListAsync();
 
+            // AGRUPAMIENTO INTELIGENTE A PRUEBA DE BALAS
             var pedidosAgrupados = ordenes
-                .GroupBy(o => o.NumeroPedidoCliente)
+                .GroupBy(o =>
+                    !string.IsNullOrWhiteSpace(o.NotaPedido) ? o.NotaPedido.Trim().ToUpper() :
+                    !string.IsNullOrWhiteSpace(o.NumeroPedidoCliente) ? o.NumeroPedidoCliente.Trim().ToUpper() :
+                    "OP_AISLADA_" + o.Id.ToString() // Si no tiene ni Nota ni OC, queda sola
+                )
                 .Select(g => new
                 {
-                    Pedido = g.Key ?? "SIN PEDIDO",
-                    Cliente = g.First().Cliente?.RazonSocial ?? "Varios",
+                    // Buscamos el primer valor válido dentro del grupo para mostrar en los subtítulos
+                    NotaPedido = g.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.NotaPedido))?.NotaPedido ?? "",
+                    Pedido = g.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.NumeroPedidoCliente))?.NumeroPedidoCliente ?? "",
+                    Cliente = g.FirstOrDefault(o => o.Cliente != null)?.Cliente?.RazonSocial ?? "Stock Propio",
+
+                    // Calculamos el avance: si todas están finalizadas es 100%, si hay alguna en proceso es 50%, sino 0%
                     Avance = g.All(o => o.Estado == EstadoOrden.Finalizada) ? 100 :
                              g.Any(o => o.Estado == EstadoOrden.EnProceso) ? 50 : 0,
+
                     Ordenes = g.Select(o => new
                     {
                         o.Id,
-                        Producto = o.Producto.Nombre,
+                        Producto = o.Producto != null ? o.Producto.Nombre : "Desconocido",
                         Medidas = $"{o.Ancho}mm x {o.Espesor} micrones",
                         Estado = o.Estado.ToString(),
                         o.Cantidad
                     }).ToList()
                 })
-                .OrderByDescending(p => p.Pedido);
+                // Ordenamos para que los que tienen Nota de Pedido aparezcan primero
+                .OrderByDescending(p => string.IsNullOrWhiteSpace(p.NotaPedido) ? 0 : 1)
+                .ThenByDescending(p => p.NotaPedido)
+                .ToList();
 
             return Ok(pedidosAgrupados);
         }

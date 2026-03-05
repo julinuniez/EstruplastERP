@@ -16,11 +16,6 @@ const variantesEstandar = [
     'SILLAS', 'BALDES', 'PARAGOLPES', 'CAJONES'
 ];
 
-const nombresExactos = [
-    "POLIPROPILENO", "PEAD", "PEBD", "PAI", 
-    "POLIETILENO", "ABS", "RESISTENTE AL FREON"
-];
-
 const form = ref({
     clienteId: '',
     materialBaseId: '',
@@ -42,17 +37,18 @@ onMounted(async () => {
         clientes.value = resCli.data;
         todosLosProductos.value = resProd.data; 
 
-        const listaLimpia: any[] = [];
-        nombresExactos.forEach(nombreDeseado => {
-            const productoEncontrado = resProd.data.find((p: any) => 
-                p.nombre && p.nombre.toUpperCase().trim() === nombreDeseado
-            );
-            if (productoEncontrado) listaLimpia.push(productoEncontrado);
-        });
-        materialesBase.value = listaLimpia;
+        // ✅ LISTA EXACTA Y DURA (Los 7 Vengadores)
+        const nombresExactos = [
+            "PAI", "PEAD", "POLIPROPILENO", "BIOPLASTICO", "ABS", "RESISTENTE AL FREON", "POLIETILENO"
+        ];
+
+        // Filtramos para que traiga SOLAMENTE esos 7 nombres literales
+        materialesBase.value = resProd.data.filter((p: any) => 
+            p.nombre && nombresExactos.includes(p.nombre.toUpperCase().trim())
+        );
+        
     } catch (e) { console.error(e); }
 });
-
 const variantesExistentes = computed(() => {
     if (!form.value.materialBaseId) return [];
     const materialPadre = materialesBase.value.find(m => m.id === Number(form.value.materialBaseId));
@@ -143,7 +139,6 @@ const guardar = async () => {
 
             <label>Origen (Dueño):</label>
             <select v-model="form.clienteId">
-                <option value="">🏭 Material Propio (Interno)</option>
                 <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.razonSocial }}</option>
             </select>
 

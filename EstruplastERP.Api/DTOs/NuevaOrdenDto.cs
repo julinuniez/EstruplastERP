@@ -6,6 +6,7 @@
         public int? ClienteId { get; set; }
         public int EmpleadoId { get; set; }
         public string? NumeroPedidoCliente { get; set; }
+        public string? NotaPedido { get; set; }
         public int Cantidad { get; set; }
         public decimal Largo { get; set; }
         public decimal Ancho { get; set; }

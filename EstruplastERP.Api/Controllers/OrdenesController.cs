@@ -36,6 +36,7 @@ namespace EstruplastERP.Api.Controllers
                     Producto = o.Producto != null ? o.Producto.Nombre : "Desconocido",
 
                     ProductoId = o.ProductoId,
+                    NotaPedido = o.NotaPedido,
                     ClienteId = o.ClienteId,
                     EmpleadoId = o.EmpleadoId,
                     Turno = o.Turno,

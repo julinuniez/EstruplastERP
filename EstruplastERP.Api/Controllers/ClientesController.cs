@@ -78,27 +78,37 @@ namespace EstruplastERP.Api.Controllers
             return NoContent();
         }
 
-        // POST: api/Clientes/habilitar-fazon/5
-        // Este método reemplaza al anterior que creaba productos fantasma.
-        // Ahora solo activa el flag "EsFazon" en el cliente.
         [HttpPost("habilitar-fazon/{id}")]
         public async Task<IActionResult> HabilitarFazon(int id)
         {
-            var cliente = await _context.Clientes.FindAsync(id);
-            if (cliente == null) return NotFound("Cliente no encontrado.");
-
-            if (cliente.EsFazon)
+            try
             {
-                return Ok(new { nuevo = false, mensaje = "ℹ️ Este cliente ya estaba habilitado para Fazón." });
+                var cliente = await _context.Clientes.FindAsync(id);
+                if (cliente == null) return NotFound("Cliente no encontrado.");
+
+                if (cliente.EsFazon)
+                {
+                    return Ok(new { nuevo = false, mensaje = "ℹ️ Este cliente ya estaba habilitado para Fazón." });
+                }
+
+                cliente.EsFazon = true;
+                await _context.SaveChangesAsync();
+
+                return StatusCode(200, new { nuevo = true, mensaje = $"✅ Fazón habilitado correctamente para {cliente.RazonSocial}." });
             }
+            catch (Exception ex)
+            {
+                // 🔥 EL CHIVATO: Capturamos el error profundo de SQL o C#
+                string errorReal = ex.Message;
+                string errorProfundo = ex.InnerException?.Message ?? "No hay detalle extra.";
 
-            // Habilitamos el servicio
-            cliente.EsFazon = true;
-
-            // Guardamos el cambio
-            await _context.SaveChangesAsync();
-
-            return StatusCode(200, new { nuevo = true, mensaje = $"✅ Fazón habilitado correctamente para {cliente.RazonSocial}." });
+                return StatusCode(500, new
+                {
+                    mensaje = "Explotó el servidor. Mirá el detalle:",
+                    error = errorReal,
+                    detalle = errorProfundo
+                });
+            }
         }
     }
 }

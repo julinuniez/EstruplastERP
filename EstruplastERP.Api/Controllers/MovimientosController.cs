@@ -114,10 +114,6 @@ namespace EstruplastERP.Api.Controllers
                         Rubro = "RECUPERADO",
                         TipoMaterial = "RECUPERADO",
                         FechaCreacion = DateTime.Now,
-                        // Fix DB Constraints
-                        Largo = 0,
-                        Ancho = 0,
-                        Espesor = 0,
                         EspesorMinimo = 0,
                         EspesorMaximo = 0,
                         Color = "GENERICO"
@@ -186,10 +182,6 @@ namespace EstruplastERP.Api.Controllers
                         EsFazon = (dto.ClienteId != null && dto.ClienteId > 0),
                         PesoEspecifico = productoBase.PesoEspecifico,
                         FechaCreacion = DateTime.Now,
-                        // Fix DB Constraints
-                        Largo = 0,
-                        Ancho = 0,
-                        Espesor = 0,
                         EspesorMinimo = 0,
                         EspesorMaximo = 0,
                         Color = nombreColor ?? "GENERICO"
@@ -273,9 +265,6 @@ namespace EstruplastERP.Api.Controllers
                             Activo = true,
                             FechaCreacion = DateTime.Now,
                             PesoEspecifico = 1,
-                            Largo = 0,
-                            Ancho = 0,
-                            Espesor = 0,
                             EspesorMinimo = 0,
                             EspesorMaximo = 0
                         };

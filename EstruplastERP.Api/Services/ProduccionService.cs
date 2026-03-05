@@ -14,6 +14,53 @@ namespace EstruplastERP.Api.Services
             _context = context;
         }
 
+        // --- LÓGICA DE EXPLOSIÓN DE RECETAS (BOM RECURSIVO) ---
+        private async Task<List<DetalleConsumoDto>> ExplosionarRecetasAsync(List<DetalleConsumoDto> consumosOriginales)
+        {
+            var consumosFinales = new List<DetalleConsumoDto>();
+
+            foreach (var consumo in consumosOriginales)
+            {
+                var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
+
+                if (mp != null && mp.EsPremezcla)
+                {
+                    var subReceta = await _context.Formulas
+                        .Where(f => f.ProductoTerminadoId == mp.Id)
+                        .ToListAsync();
+
+                    if (!subReceta.Any())
+                    {
+                        consumosFinales.Add(consumo);
+                        continue;
+                    }
+
+                    var subConsumos = subReceta.Select(r => new DetalleConsumoDto
+                    {
+                        MateriaPrimaId = r.MateriaPrimaId,
+                        CantidadKilos = (consumo.CantidadKilos * r.Cantidad) / 100M
+                    }).ToList();
+
+                    var subConsumosExplosionados = await ExplosionarRecetasAsync(subConsumos);
+                    consumosFinales.AddRange(subConsumosExplosionados);
+                }
+                else
+                {
+                    consumosFinales.Add(consumo);
+                }
+            }
+
+            var consumosAgrupados = consumosFinales
+                .GroupBy(c => c.MateriaPrimaId)
+                .Select(g => new DetalleConsumoDto
+                {
+                    MateriaPrimaId = g.Key,
+                    CantidadKilos = g.Sum(c => c.CantidadKilos)
+                }).ToList();
+
+            return consumosAgrupados;
+        }
+
         // --- LÓGICA DE SUSTITUCIÓN (Intacta) ---
         private async Task<List<DetalleConsumoDto>> AplicarSustitucionFazon(int clienteId, List<DetalleConsumoDto> consumosOriginales)
         {
@@ -37,7 +84,7 @@ namespace EstruplastERP.Api.Services
             return consumosFinales;
         }
 
-        // --- VERIFICACIÓN DE STOCK (Intacta) ---
+        // --- VERIFICACIÓN DE STOCK ---
         public async Task<object> VerificarStock(NuevaOrdenDto request)
         {
             List<DetalleConsumoDto> itemsParaVerificar = new List<DetalleConsumoDto>();
@@ -58,10 +105,14 @@ namespace EstruplastERP.Api.Services
                 itemsParaVerificar = recetaDb.Select(r => new DetalleConsumoDto
                 {
                     MateriaPrimaId = r.MateriaPrimaId,
-                    CantidadKilos = (request.Kilos * r.Cantidad) / 100
+                    CantidadKilos = (request.Kilos * r.Cantidad) / 100M
                 }).ToList();
             }
 
+            // 1. PRIMERO EXPLOTAMOS LAS PRE-MEZCLAS
+            itemsParaVerificar = await ExplosionarRecetasAsync(itemsParaVerificar);
+
+            // 2. LUEGO APLICAMOS SUSTITUCIÓN FAZON (A los materiales base)
             if (request.ClienteId.GetValueOrDefault() > 0)
             {
                 itemsParaVerificar = await AplicarSustitucionFazon(request.ClienteId.Value, itemsParaVerificar);
@@ -85,7 +136,8 @@ namespace EstruplastERP.Api.Services
             return new { posible = true, mensaje = "✅ Stock Disponible." };
         }
 
-        public async Task<OrdenProduccion> RegistrarOrden(NuevaOrdenDto request) // 👈 Aquí se llama 'request'
+        // --- REGISTRO DE ORDEN ---
+        public async Task<OrdenProduccion> RegistrarOrden(NuevaOrdenDto request)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
@@ -98,26 +150,20 @@ namespace EstruplastERP.Api.Services
                     FechaCreacion = DateTime.Now,
                     ProductoId = request.ProductoTerminadoId,
                     ClienteId = request.ClienteId,
-
-                    // ✅ CORRECCIÓN: Usamos 'request', NO 'dto'
                     NumeroPedidoCliente = request.NumeroPedidoCliente,
-
+                    NotaPedido = request.NotaPedido,
                     EmpleadoId = request.EmpleadoId,
                     Cantidad = request.Cantidad,
                     KilosEstimados = request.Kilos,
                     Turno = request.Turno,
                     Observacion = request.Observacion,
                     Estado = EstadoOrden.Pendiente,
-
-                    // Guardamos las medidas
                     Largo = request.Largo,
                     Ancho = request.Ancho,
                     Espesor = request.Espesor,
-
                     Consumos = new List<ConsumoOrden>()
                 };
 
-                // Calcular consumos base
                 List<DetalleConsumoDto> consumosCalculados = request.Consumos;
 
                 if (consumosCalculados == null || !consumosCalculados.Any())
@@ -126,11 +172,14 @@ namespace EstruplastERP.Api.Services
                     consumosCalculados = recetaDb.Select(r => new DetalleConsumoDto
                     {
                         MateriaPrimaId = r.MateriaPrimaId,
-                        CantidadKilos = (request.Kilos * r.Cantidad) / 100
+                        CantidadKilos = (request.Kilos * r.Cantidad) / 100M
                     }).ToList();
                 }
 
-                // APLICAR SUSTITUCIÓN
+                // 1. EXPLOTAR FÓRMULAS
+                consumosCalculados = await ExplosionarRecetasAsync(consumosCalculados);
+
+                // 2. APLICAR SUSTITUCIÓN
                 if (request.ClienteId.GetValueOrDefault() > 0)
                 {
                     consumosCalculados = await AplicarSustitucionFazon(request.ClienteId.Value, consumosCalculados);
@@ -146,7 +195,6 @@ namespace EstruplastERP.Api.Services
                         var mp = inventarioInsumos.FirstOrDefault(p => p.Id == item.MateriaPrimaId);
                         if (mp == null) throw new Exception($"Insumo ID {item.MateriaPrimaId} no encontrado");
 
-                        // Descuento de stock
                         mp.StockActual -= item.CantidadKilos;
 
                         nuevaOrden.Consumos.Add(new ConsumoOrden
@@ -171,7 +219,6 @@ namespace EstruplastERP.Api.Services
                 _context.Ordenes.Add(nuevaOrden);
                 await _context.SaveChangesAsync();
 
-                // Actualizar ID en movimientos
                 var movsRecientes = _context.Movimientos.Local.Where(m => m.Observacion == "Orden Producción (Pendiente)");
                 foreach (var m in movsRecientes) m.Observacion = $"Orden #{nuevaOrden.Id}";
 
@@ -187,7 +234,7 @@ namespace EstruplastERP.Api.Services
             }
         }
 
-        // --- LÓGICA VISUAL (Intacta) ---
+        // --- LÓGICA VISUAL ---
         public async Task<List<ItemFormulaVisualDto>> ObtenerRecetaProyectada(int productoId, int clienteId, decimal kilosAProducir)
         {
             var productoTerminado = await _context.Productos.FindAsync(productoId);
@@ -205,7 +252,6 @@ namespace EstruplastERP.Api.Services
 
                 string nombrePT = productoTerminado.Nombre.ToUpper();
 
-                // Lógica de mapeo de familias (Tu lógica original)
                 if (familiaBuscada == 10)
                 {
                     if (nombrePT.Contains("FINO")) familiaBuscada = 11;
@@ -237,7 +283,7 @@ namespace EstruplastERP.Api.Services
                 {
                     MateriaPrimaId = idFinal,
                     Nombre = nombreFinal,
-                    CantidadRequerida = (kilosAProducir * itemReceta.Cantidad) / 100,
+                    CantidadRequerida = (kilosAProducir * itemReceta.Cantidad) / 100M,
                     EsSustitucion = esSustitucion
                 });
             }

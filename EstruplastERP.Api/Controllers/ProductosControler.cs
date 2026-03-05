@@ -94,10 +94,9 @@ namespace EstruplastERP.Api.Controllers
                     EsScrap = p.EsScrap,
                     p.StockActual,
                     p.PesoEspecifico,
-                    p.Largo,
-                    p.Ancho,
-                    p.Espesor,
-                    p.Color
+                    p.Color,
+                    p.Rubro,
+                    p.PrecioCosto
                 })
                 .ToListAsync();
 
@@ -123,13 +122,6 @@ namespace EstruplastERP.Api.Controllers
             {
                 formulasFinales = producto.Formulas.ToList();
             }
-            else if (producto.ProductoPadreId != null)
-            {
-                formulasFinales = await _context.Formulas
-                    .Include(f => f.MateriaPrima)
-                    .Where(f => f.ProductoTerminadoId == producto.ProductoPadreId)
-                    .ToListAsync();
-            }
             // C. Si no tiene nada, lista vacía.
             else
             {
@@ -144,14 +136,12 @@ namespace EstruplastERP.Api.Controllers
                 StockActual = producto.StockActual,
                 PrecioCosto = producto.PrecioCosto,
                 StockMinimo = producto.StockMinimo,
-                Largo = producto.Largo,
-                Ancho = producto.Ancho,
-                Espesor = producto.Espesor,
                 PesoEspecifico = producto.PesoEspecifico,
                 Color = producto.Color,
                 EsProductoTerminado = producto.EsProductoTerminado,
                 EsMateriaPrima = producto.EsMateriaPrima,
                 EsGenerico = producto.EsGenerico,
+                Rubro = producto.Rubro,
 
                 // Usamos la lista 'formulasFinales' que calculamos arriba
                 Receta = formulasFinales.Select(f => new IngredienteDto
@@ -361,6 +351,8 @@ namespace EstruplastERP.Api.Controllers
             producto.EsMateriaPrima = dto.EsMateriaPrima;
             producto.EsProductoTerminado = dto.EsProductoTerminado;
             producto.EsFazon = dto.EsFazon;
+            producto.PrecioCosto = dto.PrecioCosto;
+            producto.Rubro = dto.Rubro;
 
             using var transaction = await _context.Database.BeginTransactionAsync();
             try

@@ -16,6 +16,7 @@ namespace EstruplastERP.Core
         public int Id { get; set; }
 
         public string NumeroPedidoCliente { get; set; }
+        public string? NotaPedido { get; set; }
 
         public int ProductoId { get; set; }
         public Producto Producto { get; set; }

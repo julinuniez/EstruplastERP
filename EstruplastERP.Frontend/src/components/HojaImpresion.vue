@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import logoImg from '@/assets/estruplast-logo.png';
+const logoImg = new URL('../assets/estruplast-logo.png', import.meta.url).href;
 
 const props = defineProps<{
   form: any;
@@ -23,14 +23,28 @@ const mostrarLista = ref(false);
 
 const cantidadCopias = computed(() => props.ocultarFormula ? 2 : 1);
 
+const kilosNetosExactos = computed(() => Number(props.form?.kilosTotales) || 0);
+
 const pesoBrutoExacto = computed(() => {
-    const kilosNetos = Number(props.form?.kilosTotales) || 0;
     const porcentajeDesperdicio = Number(props.form?.merma) || 0; 
-    const resultado = kilosNetos * (1 + (porcentajeDesperdicio / 100));
+    const resultado = kilosNetosExactos.value * (1 + (porcentajeDesperdicio / 100));
     return isNaN(resultado) ? 0 : resultado;
 });
 
 const pesoVisualRedondeado = computed(() => Math.ceil(pesoBrutoExacto.value));
+
+// MAGIA ACÁ: Si es para el cliente (ocultarFormula), pasamos los netos. Si es para fábrica, los brutos (con desperdicio).
+const kilosCabeceraRedondeado = computed(() =>
+    props.ocultarFormula
+        ? Math.ceil(kilosNetosExactos.value)
+        : Math.ceil(pesoBrutoExacto.value)
+);
+
+const ceilKilos = (valor: number, decimales = 3) => {
+    const num = Number(valor) || 0;
+    const factor = Math.pow(10, decimales);
+    return Math.ceil(num * factor) / factor;
+};
 
 const recetaVisual = computed(() => {
     let lista = [...props.receta];
@@ -148,6 +162,26 @@ const solicitarQuitar = (item: any) => {
 };
 
 const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const nombreProductoLimpio = computed(() => {
+    let nombreOriginal = props.producto?.nombre || '';
+
+    const nombreTrim = nombreOriginal.trimStart();
+    const upper = nombreTrim.toUpperCase();
+
+    const prefijos = [
+        'LAMINADO A FAZON -',
+        'LAMINADO A FAZON-'
+    ];
+
+    for (const pref of prefijos) {
+        if (upper.startsWith(pref)) {
+            const resultado = nombreTrim.substring(pref.length).trimStart();
+            return resultado || nombreTrim;
+        }
+    }
+
+    return nombreOriginal;
+});
 </script>
 
 <template>
@@ -165,6 +199,7 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
                 <h3>{{ ocultarFormula ? 'ORDEN DE PRODUCCIÓN' : 'HOJA DE CARGA' }}</h3>
                 <p>FECHA: <strong>{{ fechaHoy }}</strong></p>
                 <p>NOTA PEDIDO: <strong>{{ form?.notaPedido || '-' }}</strong></p>
+                <p>OC CLIENTE: <strong>{{ form?.numeroPedidoCliente || '-' }}</strong></p>
                 <p>TURNO: <strong>{{ form.turno ? form.turno.toUpperCase() : '-' }}</strong></p>
             </div>
         </div>
@@ -178,8 +213,8 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
 
         <div class="caja-producto-pdf">
             <div class="titulo-seccion-pdf">MATERIAL / PRODUCTO A FABRICAR</div>
-            <div class="producto-nombre-pdf">{{ producto?.nombre || '...' }}</div>
-            <div class="producto-sku-pdf">CÓDIGO: {{ producto?.codigoSku }}</div>
+            <div class="producto-nombre-pdf">{{ nombreProductoLimpio || '...' }}</div>
+            <div v-if="!ocultarFormula" class="producto-sku-pdf">CÓDIGO: {{ producto?.codigoSku }}</div>
             <div v-if="producto?.esGenerico" style="font-size:10px; font-style:italic; margin-top:2px">(MEDIDAS ESPECIALES)</div>
         </div>
 
@@ -188,6 +223,12 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
             <div class="dato-box-pdf"><span class="label-tech-pdf">LARGO</span><span class="valor-tech-pdf">{{ form.largo }} mm</span></div>
             <div class="dato-box-pdf"><span class="label-tech-pdf">ANCHO</span><span class="valor-tech-pdf">{{ form.ancho }} mm</span></div>
             <div class="dato-box-pdf"><span class="label-tech-pdf">ESPESOR</span><span class="valor-tech-pdf">{{ form.espesor }} mm</span></div>
+            <div class="dato-box-pdf">
+                <span class="label-tech-pdf">KILOS TOTALES</span>
+                <span class="valor-tech-pdf">
+                    {{ kilosCabeceraRedondeado }} kg
+                </span>
+            </div>
         </div>
 
         <div class="ficha-tecnica-pdf">
@@ -250,7 +291,9 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
                                     > %
                                 </div>
                             </td>
-                            <td style="text-align:right"><strong>{{ ((pesoBrutoExacto * (parseFloat(r.cantidad.toString()) || 0)) / 100).toFixed(3) }} kg</strong></td>
+                            <td style="text-align:right">
+                                <strong>{{ ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad.toString()) || 0)) / 100).toFixed(3) }} kg</strong>
+                            </td>
                             
                             <td data-html2canvas-ignore="true">
                                 <button @click="solicitarQuitar(r)" class="btn-borrar-insumo">X</button>
@@ -311,7 +354,6 @@ const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month:
 </template>
 
 <style>
-/* ... MISMOS ESTILOS DE SIEMPRE ... */
 .contenedor-principal-pdf { background: white; width: 209mm; min-height: 290mm; padding: 0; box-sizing: border-box; color: black; font-family: Arial, sans-serif; position: relative; }
 .pagina-copia { padding: 15mm; box-sizing: border-box; width: 100%; height: 290mm; display: flex; flex-direction: column; position: relative; }
 .pagina-copia.modo-mitad { height: 145mm; padding: 5mm 15mm; border-bottom: 1px dashed #999; display: block; }

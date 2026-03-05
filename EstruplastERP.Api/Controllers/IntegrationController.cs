@@ -24,9 +24,6 @@ namespace EstruplastERP.Api.Controllers
             ExcelPackage.License.SetNonCommercialPersonal("FreelanceDev");
         }
 
-        // =================================================================================
-        // 1. IMPORTACIÓN FLEXXUS (CSV)
-        // =================================================================================
         [HttpPost("importar-maestro")]
         public async Task<IActionResult> ImportarMaestro(IFormFile archivo)
         {
@@ -34,58 +31,66 @@ namespace EstruplastERP.Api.Controllers
 
             int creados = 0, actualizados = 0;
 
+            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var config = new CsvConfiguration(new CultureInfo("es-AR"))
-                {
-                    Delimiter = ";",
-                    HasHeaderRecord = true,
-                    ShouldSkipRecord = args => args.Row.Parser.Row == 1,
-                    MissingFieldFound = null,
-                    BadDataFound = null,
-                    Encoding = Encoding.Latin1
-                };
-
                 using (var stream = new StreamReader(archivo.OpenReadStream(), Encoding.Latin1))
-                using (var csv = new CsvReader(stream, config))
                 {
-                    var registros = csv.GetRecords<FlexxusMaestroDto>().ToList();
+                    var contenido = await stream.ReadToEndAsync();
+                    var lineas = contenido.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
                     var productosDb = await _context.Productos.ToListAsync();
 
-                    foreach (var row in registros)
+                    for (int i = 2; i < lineas.Length; i++)
                     {
-                        if (string.IsNullOrWhiteSpace(row.CodigoSku)) continue;
+                        var columnas = lineas[i].Split(';');
 
-                        string sku = row.CodigoSku.Trim().ToUpper();
-                        string nombre = row.Nombre?.Trim() ?? "SIN NOMBRE";
-                        string rubro = row.Rubro?.Trim().ToUpper() ?? "OTROS";
+                        if (columnas.Length < 5) continue;
 
-                        if (sku.Contains("/") || sku.Length < 3) continue;
+                        string skuCrudo = columnas[0];
+                        string nombreCrudo = columnas[1];
+                        string rubroCrudo = columnas[4];
+
+                        string skuLimpio = new string(skuCrudo.Where(c => char.IsLetterOrDigit(c)).ToArray()).ToUpper();
+                        string nombre = nombreCrudo.Replace("\"", "").Trim();
+                        string rubro = rubroCrudo.Replace("\"", "").Trim().ToUpper();
+
+                        if (skuLimpio.Length < 3) continue;
+                        if (string.IsNullOrWhiteSpace(nombre)) nombre = "SIN NOMBRE";
 
                         bool esMP = rubro.Contains("MATERIA PRIMA") || rubro.Contains("MASTERBATCH") || rubro.Contains("INSUMO");
+                        var (tipoDetectado, _) = DetectarMaterialYColor(skuLimpio, nombre, null);
 
-                        // Usamos la misma lógica de detección, pero sin contexto de archivo (null)
-                        var (tipoDetectado, _) = DetectarMaterialYColor(sku, nombre, null);
-                        if (!string.IsNullOrEmpty(row.TipoMaterial)) tipoDetectado = row.TipoMaterial.ToUpper();
+                        var prodsCoincidentes = productosDb.Where(p =>
+                            p.CodigoSku != null &&
+                            new string(p.CodigoSku.Where(c => char.IsLetterOrDigit(c)).ToArray()).ToUpper() == skuLimpio
+                        ).ToList();
 
-                        var prod = productosDb.FirstOrDefault(p => p.CodigoSku.Trim().ToUpper() == sku);
-
-                        if (prod != null)
+                        if (prodsCoincidentes.Any())
                         {
-                            // Actualización
-                            bool cambios = false;
-                            if (prod.Nombre != nombre) { prod.Nombre = nombre; cambios = true; }
-                            if (esMP && !prod.EsMateriaPrima) { prod.EsMateriaPrima = true; prod.EsProductoTerminado = false; cambios = true; }
-                            if (tipoDetectado != "OTROS" && prod.TipoMaterial != tipoDetectado) { prod.TipoMaterial = tipoDetectado; cambios = true; }
+                            foreach (var prod in prodsCoincidentes)
+                            {
+                                prod.Nombre = nombre;
 
-                            if (cambios) { _context.Entry(prod).State = EntityState.Modified; actualizados++; }
+                                if (esMP)
+                                {
+                                    prod.EsMateriaPrima = true;
+                                    prod.EsProductoTerminado = false;
+                                }
+                                if (tipoDetectado != "OTROS")
+                                {
+                                    prod.TipoMaterial = tipoDetectado;
+                                }
+
+                                _context.Productos.Update(prod);
+                                actualizados++;
+                            }
                         }
                         else
                         {
-                            // Creación
-                            _context.Productos.Add(new Producto
+                            var nuevoProd = new Producto
                             {
-                                CodigoSku = sku,
+                                CodigoSku = skuCrudo,
                                 Nombre = nombre,
                                 Rubro = rubro,
                                 TipoMaterial = tipoDetectado,
@@ -97,22 +102,32 @@ namespace EstruplastERP.Api.Controllers
                                 Activo = true,
                                 FechaCreacion = DateTime.Now,
                                 PesoEspecifico = esMP ? 1.05m : 1.0m
-                            });
+                            };
+
+                            _context.Productos.Add(nuevoProd);
+                            productosDb.Add(nuevoProd);
                             creados++;
                         }
                     }
-                    if (actualizados > 0 || creados > 0) await _context.SaveChangesAsync();
                 }
-                return Ok(new { mensaje = $"Flexxus: {creados} creados, {actualizados} actualizados." });
+
+                if (actualizados > 0 || creados > 0)
+                {
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+
+                return Ok(new { mensaje = $"✅ Flexxus procesado: {creados} creados, {actualizados} actualizados." });
             }
-            catch (Exception ex) { return StatusCode(500, $"Error: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, $"Error crítico procesando CSV: {ex.Message}");
+            }
         }
 
-        // =================================================================================
-        // 2. IMPORTACIÓN MULTI-CLIENTE (EXCEL) - LÓGICA ROBUSTA DE STOCK
-        // =================================================================================
         [HttpPost("importar-excel-multicliente")]
-        public async Task<IActionResult> ImportarExcelMultiCliente(IFormFile archivo)
+        public async Task<IActionResult> ImportarExcelMultiCliente(IFormFile archivo, [FromForm] int? clienteIdFiltro = null)
         {
             if (archivo == null || archivo.Length == 0) return BadRequest("Suba un Excel válido.");
 
@@ -129,7 +144,6 @@ namespace EstruplastERP.Api.Controllers
                     await archivo.CopyToAsync(stream);
                     using (var package = new ExcelPackage(stream))
                     {
-                        // Intentamos calcular fórmulas. Si falla, seguimos con los valores en caché.
                         try { package.Workbook.Calculate(); } catch { }
 
                         var clientesDb = await _context.Clientes.ToListAsync();
@@ -139,112 +153,105 @@ namespace EstruplastERP.Api.Controllers
                         {
                             string nombreHoja = worksheet.Name.Trim().ToUpper();
 
-                            // Buscar cliente por coincidencia de nombre
                             var cliente = clientesDb.FirstOrDefault(c =>
                                 c.RazonSocial.ToUpper().Replace(".", "").Trim() == nombreHoja.Replace(".", "").Trim() ||
                                 c.RazonSocial.ToUpper().Contains(nombreHoja) ||
                                 nombreHoja.Contains(c.RazonSocial.ToUpper()));
 
-                            if (cliente == null)
+                            if (cliente == null) continue;
+
+                            if (clienteIdFiltro.HasValue && cliente.Id != clienteIdFiltro.Value)
                             {
-                                // logs.Add($"⚠️ Hoja '{worksheet.Name}': Ignorada (Sin cliente)."); 
+                                logs.Add($"⏭️ Hoja '{worksheet.Name}' ignorada por filtro.");
                                 continue;
                             }
 
                             hojas++;
 
-                            // A. Detectar Cabecera
                             int filaInicio = -1, colCodigo = -1, colDesc = -1;
-                            int colTotal = -1, colExistencias = -1, colSaldo = -1;
+                            int colTotal = -1, colExistencias = -1, colSaldo = -1, colStockActual = -1;
 
-                            // Buscamos en las primeras 20 filas y 20 columnas
                             for (int r = 1; r <= 20; r++)
                             {
                                 for (int c = 1; c <= 20; c++)
                                 {
-                                    var celda = worksheet.Cells[r, c].Text.ToUpper().Trim();
+                                    var celda = worksheet.Cells[r, c].Text.ToUpper().Trim().Replace(" ", "").Replace("Á", "A").Replace("É", "E").Replace("Í", "I").Replace("Ó", "O").Replace("Ú", "U");
 
-                                    if (celda == "CODIGO") { filaInicio = r; colCodigo = c; }
-                                    if (celda == "DESCRIPCION") colDesc = c;
+                                    if (celda == "CODIGO" || celda == "ARTICULO" || celda == "SKU" || celda == "ITEM") { filaInicio = r; colCodigo = c; }
+                                    if (celda == "DESCRIPCION" || celda == "DETALLE" || celda == "MATERIAL" || celda == "PRODUCTO" || celda == "NOMBRE") colDesc = c;
 
-                                    // Búsqueda flexible de columnas de stock
-                                    if (celda == "TOTAL") colTotal = c;
-                                    else if (colTotal == -1 && celda.Contains("TOTAL")) colTotal = c;
-
-                                    if (celda == "EXISTENCIAS") colExistencias = c;
-                                    else if (colExistencias == -1 && celda.Contains("EXISTENCIA")) colExistencias = c;
-
-                                    if (celda == "SALDO") colSaldo = c;
+                                    if (celda == "TOTAL" || celda.Contains("TOTAL")) colTotal = c;
+                                    else if (celda == "EXISTENCIAS" || celda == "EXISTENCIA" || celda.Contains("EXISTENCIA")) colExistencias = c;
+                                    else if (celda == "SALDO" || celda.Contains("SALDO")) colSaldo = c;
+                                    else if (celda == "STOCKACTUAL" || celda == "STOCK" || celda == "CANTIDAD" || celda == "KILOS" || celda == "KG" || celda == "PESO") colStockActual = c;
                                 }
-                                // Si encontramos Código y al menos una columna de stock, paramos
-                                if (filaInicio != -1 && (colTotal != -1 || colExistencias != -1 || colSaldo != -1)) break;
+                                if (filaInicio != -1 && colCodigo != -1 && (colTotal != -1 || colExistencias != -1 || colSaldo != -1 || colStockActual != -1)) break;
                             }
 
-                            if (filaInicio == -1) continue;
+                            if (filaInicio == -1 || colCodigo == -1)
+                            {
+                                logs.Add($"❌ Hoja '{worksheet.Name}': No se detectaron columnas válidas.");
+                                continue;
+                            }
 
-                            // B. Recorrer Filas
                             int fila = filaInicio + 1;
                             int filasVaciasConsecutivas = 0;
 
-                            while (fila < 5000 && filasVaciasConsecutivas < 5)
+                            while (fila < 5000 && filasVaciasConsecutivas < 20)
                             {
-                                // Leer Código y Descripción
                                 string codigo = worksheet.Cells[fila, colCodigo].Text.Trim();
-                                string desc = worksheet.Cells[fila, colDesc].Text.Trim();
+                                string desc = colDesc != -1 ? worksheet.Cells[fila, colDesc].Text.Trim() : "";
 
-                                if (string.IsNullOrEmpty(codigo) && string.IsNullOrEmpty(desc))
+                                if (string.IsNullOrEmpty(codigo))
                                 {
                                     filasVaciasConsecutivas++;
                                     fila++;
                                     continue;
                                 }
-                                filasVaciasConsecutivas = 0; // Reseteamos si encontramos dato
+                                filasVaciasConsecutivas = 0;
 
-                                // C. Extracción Robusta del Stock
                                 decimal stockFinal = 0;
                                 bool stockEncontrado = false;
 
-                                // Prioridad 1: TOTAL
-                                if (colTotal != -1) stockFinal = LeerNumeroRobusto(worksheet.Cells[fila, colTotal].Value, out stockEncontrado);
+                                if (colStockActual != -1) stockFinal = LeerNumeroRobusto(worksheet.Cells[fila, colStockActual].Value, out stockEncontrado);
 
-                                // Prioridad 2: EXISTENCIAS (Si Total falló o dio 0)
+                                if (stockFinal == 0 && colTotal != -1)
+                                {
+                                    decimal s1 = LeerNumeroRobusto(worksheet.Cells[fila, colTotal].Value, out bool encontro1);
+                                    if (s1 != 0 || encontro1) { stockFinal = s1; stockEncontrado = true; }
+                                }
+
                                 if (stockFinal == 0 && colExistencias != -1)
                                 {
                                     decimal s2 = LeerNumeroRobusto(worksheet.Cells[fila, colExistencias].Value, out bool encontro2);
                                     if (s2 != 0 || encontro2) { stockFinal = s2; stockEncontrado = true; }
                                 }
 
-                                // Prioridad 3: SALDO
                                 if (stockFinal == 0 && colSaldo != -1)
                                 {
                                     decimal s3 = LeerNumeroRobusto(worksheet.Cells[fila, colSaldo].Value, out bool encontro3);
                                     if (s3 != 0 || encontro3) { stockFinal = s3; stockEncontrado = true; }
                                 }
 
-                                // Procesar si hay código válido (aunque el stock sea 0, lo creamos/actualizamos)
-                                if (!string.IsNullOrEmpty(codigo))
-                                {
-                                    await ProcesarProductoCliente(codigo, desc, stockFinal, cliente.Id, productosDb, esModoScrap, nombreArchivo);
-                                    prods++;
-                                }
+                                bool procesado = await ProcesarProductoCliente(codigo, desc, stockFinal, cliente.Id, productosDb, esModoScrap, nombreArchivo);
+                                if (procesado) prods++;
+
                                 fila++;
                             }
                         }
                         await _context.SaveChangesAsync();
                     }
                 }
-                return Ok(new { mensaje = $"✅ Importación: {hojas} hojas procesadas, {prods} productos actualizados.", logs = logs });
+                return Ok(new { mensaje = $"✅ Importación: {hojas} hojas procesadas, {prods} productos registrados/actualizados.", logs = logs });
             }
             catch (Exception ex) { return StatusCode(500, $"Error crítico: {ex.Message}"); }
         }
 
-        // --- HELPER PARA LEER NÚMEROS SIN FALLAR POR PUNTOS O COMAS ---
         private decimal LeerNumeroRobusto(object valorCelda, out bool exito)
         {
             exito = false;
             if (valorCelda == null) return 0;
 
-            // 1. Si ya es número, devolver directo
             if (valorCelda is double d) { exito = true; return (decimal)d; }
             if (valorCelda is decimal dec) { exito = true; return dec; }
             if (valorCelda is int i) { exito = true; return i; }
@@ -252,82 +259,89 @@ namespace EstruplastERP.Api.Controllers
             string texto = valorCelda.ToString().Trim();
             if (string.IsNullOrEmpty(texto)) return 0;
 
-            // 2. Intentar parseo estándar (Cultura Invariante - Puntos)
             if (decimal.TryParse(texto, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal res1))
             {
                 exito = true;
                 return res1;
             }
 
-            // 3. Intentar parseo local (Argentina/España - Comas)
             if (decimal.TryParse(texto, NumberStyles.Any, new CultureInfo("es-AR"), out decimal res2))
             {
                 exito = true;
                 return res2;
             }
 
-            return 0; // No se pudo leer
+            return 0;
         }
 
-        private async Task ProcesarProductoCliente(string codigo, string nombre, decimal stock, int clienteId, List<Producto> productosDb, bool esScrap, string nombreArchivoContexto)
+        private async Task<bool> ProcesarProductoCliente(string codigo, string nombre, decimal stock, int clienteId, List<Producto> productosDb, bool esModoScrap, string nombreArchivoContexto)
         {
-            // 1. Detectar Material usando el contexto del archivo
             var (tipo, color) = DetectarMaterialYColor(codigo, nombre, nombreArchivoContexto);
 
-            // 2. Generar SKU Sistema
-            string prefijo = esScrap ? "SCRAP" : "MP";
-            string skuSistema = $"{prefijo}-{tipo}-{color}-CLI-{clienteId}".ToUpper().Replace(" ", "");
+            string prefijo = esModoScrap ? "MOLIDO" : "MP";
+            string skuOriginal = new string(codigo.Where(c => char.IsLetterOrDigit(c)).ToArray());
+            if (string.IsNullOrEmpty(skuOriginal)) skuOriginal = "SC";
+
+            string skuSistema = $"{prefijo}-{tipo}-{color}-{skuOriginal}-CLI-{clienteId}".ToUpper().Replace(" ", "");
 
             var prod = productosDb.FirstOrDefault(p => p.CodigoSku == skuSistema && p.ClienteId == clienteId);
 
             if (prod != null)
             {
-                prod.StockActual = stock; // Actualizamos el stock
+                if (stock <= 0)
+                {
+                    prod.StockActual = 0;
+                    prod.Activo = false;
+                    if (prod.Id > 0) _context.Entry(prod).State = EntityState.Modified;
+                    return false;
+                }
+
+                prod.StockActual = stock;
+                prod.Nombre = esModoScrap ? $"[MOLIDO] {tipo} - {color} ({codigo})" : $"[MP] {tipo} - {color} ({codigo})";
                 prod.TipoMaterial = tipo;
                 prod.Color = color;
-                prod.EsScrap = esScrap;
-                prod.EsMateriaPrima = !esScrap;
+                prod.EsScrap = false;
+                prod.EsMateriaPrima = true;
+                prod.Activo = true;
                 if (prod.Id > 0) _context.Entry(prod).State = EntityState.Modified;
+                return true;
             }
             else
             {
+                if (stock <= 0) return false;
+
                 var nuevo = new Producto
                 {
                     CodigoSku = skuSistema,
-                    Nombre = esScrap ? $"[SCRAP] {tipo} - {color} ({codigo})" : $"[MP] {tipo} - {color} ({codigo})",
-                    Rubro = esScrap ? "SCRAP / MP CLIENTE" : "MATERIA PRIMA CLIENTE",
+                    Nombre = esModoScrap ? $"[MOLIDO] {tipo} - {color} ({codigo})" : $"[MP] {tipo} - {color} ({codigo})",
+                    Rubro = esModoScrap ? "MOLIDO CLIENTE" : "MATERIA PRIMA CLIENTE",
                     TipoMaterial = tipo,
                     Color = color,
                     ClienteId = clienteId,
-                    EsScrap = esScrap,
-                    EsMateriaPrima = !esScrap,
+                    EsScrap = false,
+                    EsMateriaPrima = true,
                     EsProductoTerminado = false,
-                    StockActual = stock, // Stock Inicial detectado
+                    StockActual = stock,
                     Activo = true,
                     FechaCreacion = DateTime.Now,
                     PesoEspecifico = 1
                 };
                 _context.Productos.Add(nuevo);
                 productosDb.Add(nuevo);
+                return true;
             }
         }
 
-        // =================================================================================
-        // 🔥 LÓGICA MAESTRA DE DETECCIÓN DE MATERIALES
-        // =================================================================================
         private (string Tipo, string Color) DetectarMaterialYColor(string sku, string nombre, string? contextoArchivo)
         {
             string s = sku?.ToUpper() ?? "";
             string n = nombre?.ToUpper() ?? "";
             string archivo = contextoArchivo?.ToUpper() ?? "";
 
-            // 1. REGLAS DE ORO
             if (s.Contains("003") || n.Contains("BIO") || archivo.Contains("BIO")) return ("BIO", "NATURAL");
 
-            // 2. RESISTENTE FREON (RF)
             bool esFreon = archivo.Contains("FREON") || archivo.Contains("RES. FREON") || n.Contains("FREON") || s.StartsWith("RF");
 
-            // 3. CÓDIGOS NUMÉRICOS (000-015)
             string colorDetectado = "-";
 
             if (s.Contains("000") || n.Contains("TUTI") || n.Contains("TUTTI")) colorDetectado = "TUTI";
@@ -352,7 +366,6 @@ namespace EstruplastERP.Api.Controllers
                 return ("PAI", colorDetectado);
             }
 
-            // 4. OTROS MATERIALES
             if (archivo.Contains("ABS") || n.Contains("ABS")) return ("ABS", "-");
             if (archivo.Contains("PP") || archivo.Contains("POLIPROPILENO") || n.Contains("PP") || n.Contains("POLIPROPILENO")) return ("PP", "-");
             if (archivo.Contains("PEAD") || archivo.Contains("ALTA") || archivo.Contains("HDPE") || n.Contains("PEAD") || n.Contains("ALTA") || n.Contains("HDPE")) return ("PEAD", "-");
