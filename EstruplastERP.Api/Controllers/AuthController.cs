@@ -42,7 +42,6 @@ namespace EstruplastERP.Api.Controllers
                 NombreUsuario = request.NombreUsuario,
                 Password = passwordHash, // Guardamos el hash
                 Rol = request.Rol,
-                EmpleadoId = request.EmpleadoId,
                 Activo = true
             };
 
@@ -58,7 +57,6 @@ namespace EstruplastERP.Api.Controllers
         {
             // 1. Buscar usuario
             var usuario = await _context.Usuarios
-                .Include(u => u.Empleado) // Traemos datos del empleado si existen
                 .FirstOrDefaultAsync(u => u.NombreUsuario == request.NombreUsuario);
 
             // 2. Validar existencia
@@ -96,12 +94,6 @@ namespace EstruplastERP.Api.Controllers
                 new Claim(ClaimTypes.Name, usuario.NombreUsuario),
                 new Claim(ClaimTypes.Role, usuario.Rol)
             };
-
-            // Si tiene empleado vinculado, agregamos su nombre real al token
-            if (usuario.Empleado != null)
-            {
-                claims.Add(new Claim("NombreCompleto", usuario.Empleado.NombreCompleto));
-            }
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration.GetSection("Jwt:Key").Value!));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);

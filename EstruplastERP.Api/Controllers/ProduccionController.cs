@@ -32,7 +32,12 @@ namespace EstruplastERP.Api.Controllers
         {
             try
             {
-                var produccion = await _produccionService.RegistrarOrden(request);
+                dynamic check = await _produccionService.VerificarStock(request);
+                var jsonCheck = System.Text.Json.JsonSerializer.Serialize(check);
+                using var doc = System.Text.Json.JsonDocument.Parse(jsonCheck);
+                bool hayStock = doc.RootElement.GetProperty("posible").GetBoolean();
+
+                var produccion = await _produccionService.RegistrarOrden(request, hayStock);
                 return Ok(new { mensaje = "Producción registrada correctamente", id = produccion.Id });
             }
             catch (Exception ex)
@@ -48,7 +53,6 @@ namespace EstruplastERP.Api.Controllers
 
             var lista = await _context.Producciones
                 .Include(p => p.Producto)
-                .Include(p => p.Empleado)
                 .Where(p => p.FechaRegistro >= hoy)
                 .OrderByDescending(p => p.FechaRegistro)
                 .Select(p => new
@@ -58,8 +62,7 @@ namespace EstruplastERP.Api.Controllers
                     Producto = p.Producto.Nombre,
                     Cantidad = p.Cantidad,
                     Kilos = p.Kilos,
-                    Lote = p.Lote ?? "Sin lote",
-                    Operario = p.Empleado.NombreCompleto
+                    Lote = p.Lote ?? "Sin lote"
                 })
                 .ToListAsync();
 
@@ -73,7 +76,6 @@ namespace EstruplastERP.Api.Controllers
 
             var lista = await _context.Producciones
                 .Include(p => p.Producto)
-                .Include(p => p.Empleado)
                 .Where(p => p.FechaRegistro >= desde && p.FechaRegistro <= finDia)
                 .OrderByDescending(p => p.FechaRegistro)
                 .Select(p => new
@@ -83,9 +85,7 @@ namespace EstruplastERP.Api.Controllers
                     Producto = p.Producto.Nombre,
                     Cantidad = p.Cantidad,
                     Kilos = p.Kilos,
-                    Lote = p.Lote ?? "SIN LOTE",
-                    Operario = p.Empleado.NombreCompleto,
-                    Turno = p.Turno
+                    Lote = p.Lote ?? "SIN LOTE"
                 })
                 .ToListAsync();
 
@@ -113,7 +113,7 @@ namespace EstruplastERP.Api.Controllers
             try
             {
                 await DescontarStockScrapAutomatico(request);
-                var produccion = await _produccionService.RegistrarOrden(request);
+                var produccion = await _produccionService.RegistrarOrden(request, true);
                 await transaction.CommitAsync();
                 return Ok(new { mensaje = "Producción Fazón registrada y stock descontado automáticamente.", id = produccion.Id });
             }
@@ -174,7 +174,6 @@ namespace EstruplastERP.Api.Controllers
             using var transaction = _context.Database.BeginTransaction();
             try
             {
-                // 1. Validaciones Básicas
                 if (request.KilosObtenidos > request.KilosEntrada)
                     return BadRequest("Error físico: No puedes crear materia de la nada (Salida > Entrada).");
 
@@ -184,36 +183,26 @@ namespace EstruplastERP.Api.Controllers
                 if (productoScrap.StockActual < request.KilosEntrada)
                     return BadRequest($"Stock insuficiente. Tienes {productoScrap.StockActual} kg, intentas usar {request.KilosEntrada} kg.");
 
-                // 2. Generación Inteligente de SKU para el Recuperado
-                // Si el SKU era "SCRAP-PP-ROJO", intentamos que sea "REC-PP-ROJO"
                 string skuRecuperado = productoScrap.CodigoSku.Replace("SCRAP", "REC").Replace("scrap", "rec");
 
-                // Si el SKU original no tenía la palabra SCRAP, le anteponemos el prefijo
                 if (!skuRecuperado.ToUpper().Contains("REC"))
                     skuRecuperado = $"REC-{skuRecuperado}";
 
-                // 3. Buscar si ya existe el producto Recuperado (Mismo SKU + Mismo Cliente)
                 var productoRecuperado = await _context.Productos
                     .FirstOrDefaultAsync(p => p.CodigoSku == skuRecuperado && p.ClienteId == request.ClienteId);
 
-                // 4. SI NO EXISTE, LO CREAMOS (Aquí está la mejora del Color)
                 if (productoRecuperado == null)
                 {
-                    // Limpieza del nombre base
                     string nombreBase = productoScrap.Nombre
                         .Replace("[SCRAP]", "")
                         .Replace("SCRAP", "")
                         .Replace("Scrap", "")
                         .Trim();
 
-                    // Construimos el nombre nuevo
                     string nombreFinal = $"[RECUPERADO] {nombreBase}";
 
-                    // 🔥 LÓGICA DE COLOR: Si el producto tiene color, lo agregamos al nombre
-                    // para que en la lista se vea: "[RECUPERADO] POLIPROPILENO ROJO"
                     if (!string.IsNullOrEmpty(productoScrap.Color))
                     {
-                        // Solo lo agregamos si no está ya escrito en el nombre
                         if (!nombreFinal.ToUpper().Contains(productoScrap.Color.ToUpper()))
                         {
                             nombreFinal += $" {productoScrap.Color.ToUpper()}";
@@ -223,17 +212,14 @@ namespace EstruplastERP.Api.Controllers
                     productoRecuperado = new Producto
                     {
                         CodigoSku = skuRecuperado,
-                        Nombre = nombreFinal, // Usamos el nombre con color
+                        Nombre = nombreFinal,
                         Rubro = "MATERIA PRIMA RECUPERADA",
                         TipoMaterial = productoScrap.TipoMaterial,
-                        Color = productoScrap.Color, // Copiamos el dato técnico
+                        Color = productoScrap.Color,
                         ClienteId = request.ClienteId,
-
-                        // Flags importantes
                         EsScrap = false,
                         EsMateriaPrima = true,
                         EsProductoTerminado = false,
-
                         StockActual = 0,
                         StockMinimo = 0,
                         Activo = true,
@@ -242,33 +228,26 @@ namespace EstruplastERP.Api.Controllers
                     };
 
                     _context.Productos.Add(productoRecuperado);
-                    await _context.SaveChangesAsync(); // Guardamos para generar el ID
+                    await _context.SaveChangesAsync();
                 }
 
-                // 5. MOVIMIENTOS DE STOCK (Resta al Sucio, Suma al Limpio)
                 productoScrap.StockActual -= request.KilosEntrada;
                 productoRecuperado.StockActual += request.KilosObtenidos;
 
-                // Forzamos el estado modificado por seguridad
                 _context.Entry(productoScrap).State = EntityState.Modified;
                 _context.Entry(productoRecuperado).State = EntityState.Modified;
 
-                // 6. CÁLCULO DE MERMA
                 decimal merma = request.KilosEntrada - request.KilosObtenidos;
                 decimal porcentaje = (request.KilosEntrada > 0) ? (merma / request.KilosEntrada) * 100 : 0;
 
-                // 7. HISTORIAL (Kardex de Producción)
                 var historial = new Produccion
                 {
                     FechaRegistro = DateTime.Now,
-                    ProductoTerminadoId = productoRecuperado.Id, // El producto resultante
+                    ProductoTerminadoId = productoRecuperado.Id,
                     ClienteId = request.ClienteId,
-                    Cantidad = 1, // Es 1 lote
+                    Cantidad = 1,
                     Kilos = request.KilosObtenidos,
-                    // Guardamos detalle rico en la observación
-                    Observacion = $"TRANSFORMACION: {request.KilosEntrada}kg de '{productoScrap.Nombre}' -> {request.KilosObtenidos}kg de '{productoRecuperado.Nombre}'. Merma: {merma}kg ({porcentaje:N1}%)",
-                    Turno = "Recuperado", // Identificador para reportes
-                    EmpleadoId = 1 // O el ID del usuario logueado si lo tienes
+                    Observacion = $"TRANSFORMACION: {request.KilosEntrada}kg de '{productoScrap.Nombre}' -> {request.KilosObtenidos}kg de '{productoRecuperado.Nombre}'. Merma: {merma}kg ({porcentaje:N1}%)"
                 };
                 _context.Producciones.Add(historial);
 
@@ -278,7 +257,7 @@ namespace EstruplastERP.Api.Controllers
                 return Ok(new
                 {
                     mensaje = "Transformación registrada con éxito.",
-                    producto = productoRecuperado.Nombre, // Devolvemos el nombre para feedback visual
+                    producto = productoRecuperado.Nombre,
                     stockNuevo = productoRecuperado.StockActual,
                     merma = merma
                 });
@@ -324,27 +303,21 @@ namespace EstruplastERP.Api.Controllers
                 query = query.Where(o => o.ClienteId == clienteId);
             }
 
-            // Traemos todo a memoria primero
             var ordenes = await query.ToListAsync();
 
-            // AGRUPAMIENTO INTELIGENTE A PRUEBA DE BALAS
             var pedidosAgrupados = ordenes
                 .GroupBy(o =>
                     !string.IsNullOrWhiteSpace(o.NotaPedido) ? o.NotaPedido.Trim().ToUpper() :
                     !string.IsNullOrWhiteSpace(o.NumeroPedidoCliente) ? o.NumeroPedidoCliente.Trim().ToUpper() :
-                    "OP_AISLADA_" + o.Id.ToString() // Si no tiene ni Nota ni OC, queda sola
+                    "OP_AISLADA_" + o.Id.ToString()
                 )
                 .Select(g => new
                 {
-                    // Buscamos el primer valor válido dentro del grupo para mostrar en los subtítulos
                     NotaPedido = g.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.NotaPedido))?.NotaPedido ?? "",
                     Pedido = g.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o.NumeroPedidoCliente))?.NumeroPedidoCliente ?? "",
                     Cliente = g.FirstOrDefault(o => o.Cliente != null)?.Cliente?.RazonSocial ?? "Stock Propio",
-
-                    // Calculamos el avance: si todas están finalizadas es 100%, si hay alguna en proceso es 50%, sino 0%
                     Avance = g.All(o => o.Estado == EstadoOrden.Finalizada) ? 100 :
                              g.Any(o => o.Estado == EstadoOrden.EnProceso) ? 50 : 0,
-
                     Ordenes = g.Select(o => new
                     {
                         o.Id,
@@ -354,7 +327,6 @@ namespace EstruplastERP.Api.Controllers
                         o.Cantidad
                     }).ToList()
                 })
-                // Ordenamos para que los que tienen Nota de Pedido aparezcan primero
                 .OrderByDescending(p => string.IsNullOrWhiteSpace(p.NotaPedido) ? 0 : 1)
                 .ThenByDescending(p => p.NotaPedido)
                 .ToList();

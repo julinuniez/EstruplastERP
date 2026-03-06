@@ -16,10 +16,5 @@ namespace EstruplastERP.Core
         public string Rol { get; set; } // "Admin", "Recepcion"
 
         public bool Activo { get; set; } = true;
-
-        public int? EmpleadoId { get; set; }
-
-        [ForeignKey("EmpleadoId")]
-        public Empleado? Empleado { get; set; }
     }
 }

@@ -4,9 +4,6 @@ import axios from 'axios'
 
 interface Entidad {
   id: number;
-  nombreCompleto?: string;
-  dni?: string;
-  puesto?: string;
   razonSocial?: string;
   cuit?: string;
   contactoNombre?: string; 
@@ -17,18 +14,16 @@ interface Entidad {
   activo: boolean;
 }
 
-const pestana = ref<'empleados' | 'clientes' | 'proveedores'>('empleados')
+// Ahora la pestaña por defecto es 'clientes'
+const pestana = ref<'clientes' | 'proveedores'>('clientes')
 const lista = ref<Entidad[]>([]) 
 const cargando = ref(false)
 const cargandoFazon = ref<number | null>(null)
-
-const listaPuestos = ['Operario General', 'Logística', 'Extrusor', 'Impresor', 'Supervisor', 'Mantenimiento', 'Administración', 'Gerencia', 'Chofer']
 
 const itemForm = ref({
   id: 0,
   nombre: '', 
   identificacion: '', 
-  puesto: 'Operario General',
   contacto: '',
   email: '',
   telefono: '',
@@ -50,7 +45,6 @@ async function cargarDatos() {
   lista.value = [];
   
   const endpoints = {
-    empleados: 'Empleados',
     clientes: 'Clientes',
     proveedores: 'Proveedores'
   };
@@ -67,12 +61,11 @@ async function cargarDatos() {
 
 async function guardar() {
   if (!itemForm.value.nombre) {
-    alert("El Nombre / Razón Social es obligatorio.");
+    alert("La Razón Social es obligatoria.");
     return;
   }
 
   const endpoints = {
-    empleados: 'Empleados',
     clientes: 'Clientes',
     proveedores: 'Proveedores'
   };
@@ -80,27 +73,20 @@ async function guardar() {
 
   let payload: any = {
     id: itemForm.value.id,
-    activo: itemForm.value.activo
+    activo: itemForm.value.activo,
+    razonSocial: itemForm.value.nombre,
+    cuit: itemForm.value.identificacion
   };
 
-  if (pestana.value === 'empleados') {
-    payload.nombreCompleto = itemForm.value.nombre;
-    payload.dni = itemForm.value.identificacion;
-    payload.puesto = itemForm.value.puesto;
-  } else {
-    payload.razonSocial = itemForm.value.nombre;
-    payload.cuit = itemForm.value.identificacion;
+  if (pestana.value === 'clientes') {
+    payload.esFazon = itemForm.value.esFazon;
+  }
 
-    if (pestana.value === 'clientes') {
-      payload.esFazon = itemForm.value.esFazon;
-    }
-
-    if (pestana.value === 'proveedores') {
-      payload.contactoNombre = itemForm.value.contacto;
-      payload.email = itemForm.value.email;
-      payload.telefono = itemForm.value.telefono;
-      payload.direccion = itemForm.value.direccion;
-    }
+  if (pestana.value === 'proveedores') {
+    payload.contactoNombre = itemForm.value.contacto;
+    payload.email = itemForm.value.email;
+    payload.telefono = itemForm.value.telefono;
+    payload.direccion = itemForm.value.direccion;
   }
 
   try {
@@ -123,9 +109,8 @@ function editar(item: Entidad) {
   
   itemForm.value = {
     id: item.id,
-    nombre: item.razonSocial || item.nombreCompleto || '',
-    identificacion: item.cuit || item.dni || '',
-    puesto: item.puesto || 'Operario General',
+    nombre: item.razonSocial || '',
+    identificacion: item.cuit || '',
     contacto: item.contactoNombre || '',
     email: item.email || '',
     telefono: item.telefono || '',
@@ -137,7 +122,7 @@ function editar(item: Entidad) {
 
 async function eliminar(id: number) {
   if (!confirm("¿Estás seguro de eliminar/desactivar este registro?")) return;
-  const endpoints = { empleados: 'Empleados', clientes: 'Clientes', proveedores: 'Proveedores' };
+  const endpoints = { clientes: 'Clientes', proveedores: 'Proveedores' };
   
   try {
     await axios.delete(`${apiUrl}/${endpoints[pestana.value]}/${id}`, getAuthConfig());
@@ -150,7 +135,7 @@ async function eliminar(id: number) {
 function limpiarForm() {
   modoEdicion.value = false;
   itemForm.value = {
-    id: 0, nombre: '', identificacion: '', puesto: 'Operario General',
+    id: 0, nombre: '', identificacion: '',
     contacto: '', email: '', telefono: '', direccion: '', esFazon: false, activo: true
   };
 }
@@ -183,7 +168,6 @@ onMounted(() => cargarDatos())
     <h2>⚙️ Administración General</h2>
     
     <div class="tabs">
-        <button :class="{ active: pestana==='empleados' }" @click="pestana='empleados'; limpiarForm(); cargarDatos()">👷 Empleados</button>
         <button :class="{ active: pestana==='clientes' }" @click="pestana='clientes'; limpiarForm(); cargarDatos()">🏢 Clientes</button>
         <button :class="{ active: pestana==='proveedores' }" @click="pestana='proveedores'; limpiarForm(); cargarDatos()">🚚 Proveedores</button>
     </div>
@@ -192,22 +176,11 @@ onMounted(() => cargarDatos())
         <div class="card-form">
             <h3>{{ modoEdicion ? 'Editar' : 'Nuevo' }} {{ pestana.toUpperCase() }}</h3>
             
-            <label>Nombre / Razón Social:</label>
-            <input type="text" v-model="itemForm.nombre" placeholder="Nombre completo o Empresa S.A.">
+            <label>Razón Social / Nombre:</label>
+            <input type="text" v-model="itemForm.nombre" placeholder="Empresa S.A. o Nombre">
 
-            <div v-if="pestana==='empleados'">
-                <label>DNI / Legajo:</label>
-                <input type="text" v-model="itemForm.identificacion">
-                <label>Puesto:</label>
-                <select v-model="itemForm.puesto">
-                    <option v-for="p in listaPuestos" :key="p" :value="p">{{ p }}</option>
-                </select>
-            </div>
-            
-            <div v-if="pestana!=='empleados'">
-                <label>CUIT:</label>
-                <input type="text" v-model="itemForm.identificacion" placeholder="XX-XXXXXXXX-X">
-            </div>
+            <label>CUIT:</label>
+            <input type="text" v-model="itemForm.identificacion" placeholder="XX-XXXXXXXX-X">
 
             <div v-if="pestana==='clientes'" class="check-box fazon-check">
                 <input type="checkbox" v-model="itemForm.esFazon" id="chkFazon">
@@ -240,9 +213,8 @@ onMounted(() => cargarDatos())
             <table>
                 <thead>
                     <tr>
-                        <th>Nombre</th>
-                        <th v-if="pestana==='empleados'">Puesto</th> 
-                        <th v-if="pestana!=='empleados'">CUIT</th>
+                        <th>Razón Social</th>
+                        <th>CUIT</th>
                         <th v-if="pestana==='proveedores'">Contacto</th> 
                         <th>Estado</th>
                         <th>Acciones</th>
@@ -251,12 +223,13 @@ onMounted(() => cargarDatos())
                 <tbody>
                     <tr v-for="item in lista" :key="item.id">
                         <td>
-                            {{ item.nombreCompleto || item.razonSocial }}
-                            <div v-if="pestana==='proveedores' && item.email" style="font-size:0.8em; color:#666">📧 {{ item.email }}</div>
+                            <strong>{{ item.razonSocial }}</strong>
+                            <div v-if="pestana==='proveedores' && item.email" style="font-size:0.8em; color:#666; margin-top: 4px;">
+                                📧 {{ item.email }}
+                            </div>
                         </td>
                         
-                        <td v-if="pestana==='empleados'"><span class="badge-puesto">{{ item.puesto || '-' }}</span></td>
-                        <td v-if="pestana!=='empleados'">{{ item.cuit || '-' }}</td>
+                        <td>{{ item.cuit || '-' }}</td>
                         <td v-if="pestana==='proveedores'">{{ item.contactoNombre || '-' }}</td>
 
                         <td>
@@ -292,7 +265,7 @@ h2 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; margin
 h3 { margin-top: 0; color: #34495e; font-size: 1.2rem; margin-bottom: 15px; }
 
 .tabs { display: flex; gap: 15px; margin-bottom: 25px; border-bottom: 1px solid #ddd; }
-.tabs button { background: none; border: none; font-size: 1rem; cursor: pointer; padding: 10px 15px; color: #7f8c8d; transition: all 0.3s; border-bottom: 3px solid transparent; }
+.tabs button { background: none; border: none; font-size: 1rem; cursor: pointer; padding: 10px 15px; color: #7f8c8d; transition: all 0.3s; border-bottom: 3px solid transparent; font-weight: 500; }
 .tabs button:hover { color: #3498db; background-color: #f8f9fa; }
 .tabs button.active { color: #2980b9; font-weight: bold; border-bottom: 3px solid #3498db; }
 
@@ -305,7 +278,7 @@ h3 { margin-top: 0; color: #34495e; font-size: 1.2rem; margin-bottom: 15px; }
 .card-form input:focus, .card-form select:focus { outline: none; border-color: #3498db; box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2); }
 
 .check-box { margin: 10px 0 20px 0; display: flex; gap: 8px; align-items: center; cursor: pointer; background: #f8f9fa; padding: 10px; border-radius: 5px; }
-.fazon-check { background: #f3e5f5; border: 1px solid #e1bee7; color: #8e44ad; }
+.fazon-check { background: #f3e5f5; border: 1px solid #e1bee7; color: #8e44ad; font-weight: bold; }
 .check-box input { width: 18px; height: 18px; cursor: pointer; }
 
 .fila-doble { display: flex; gap: 10px; }
@@ -328,7 +301,6 @@ tr:hover { background-color: #fcfcfc; }
 
 .badge-ok { background: #d4edda; color: #155724; padding: 4px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; border: 1px solid #c3e6cb; }
 .badge-no { background: #f8d7da; color: #721c24; padding: 4px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; border: 1px solid #f5c6cb; }
-.badge-puesto { background: #e3f2fd; color: #0d47a1; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; display: inline-block; }
 
 .btn-small { border: none; background: #ecf0f1; width: 32px; height: 32px; border-radius: 4px; cursor: pointer; margin-right: 5px; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; font-size: 1rem; }
 .btn-small:hover { background: #bdc3c7; transform: translateY(-2px); }

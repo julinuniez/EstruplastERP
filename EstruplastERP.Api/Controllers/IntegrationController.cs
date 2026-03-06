@@ -276,13 +276,29 @@ namespace EstruplastERP.Api.Controllers
 
         private async Task<bool> ProcesarProductoCliente(string codigo, string nombre, decimal stock, int clienteId, List<Producto> productosDb, bool esModoScrap, string nombreArchivoContexto)
         {
+            // 1. LIMPIEZA EXTREMA (Evitar efecto bola de nieve con los corchetes)
+            codigo = codigo.Replace("[MOLIDO]", "").Replace("[MP]", "").Trim();
+            nombre = nombre.Replace("[MOLIDO]", "").Replace("[MP]", "").Trim();
+
+            // 2. DETECCIÓN INTELIGENTE
             var (tipo, color) = DetectarMaterialYColor(codigo, nombre, nombreArchivoContexto);
 
-            string prefijo = esModoScrap ? "MOLIDO" : "MP";
-            string skuOriginal = new string(codigo.Where(c => char.IsLetterOrDigit(c)).ToArray());
-            if (string.IsNullOrEmpty(skuOriginal)) skuOriginal = "SC";
+            // 3. GENERADOR DE SKU CORTO (Ej: MOL-PEAD-NAT-003-C2)
+            string prefijo = esModoScrap ? "MOL" : "MP";
 
-            string skuSistema = $"{prefijo}-{tipo}-{color}-{skuOriginal}-CLI-{clienteId}".ToUpper().Replace(" ", "");
+            // Extraemos solo los números del código original para que sea corto (si no hay, letras cortas)
+            string numOriginal = new string(codigo.Where(char.IsDigit).ToArray());
+            if (string.IsNullOrEmpty(numOriginal)) numOriginal = new string(codigo.Where(char.IsLetterOrDigit).ToArray());
+            if (numOriginal.Length > 5) numOriginal = numOriginal.Substring(numOriginal.Length - 5); // Máximo 5 caracteres
+            if (string.IsNullOrEmpty(numOriginal)) numOriginal = "SC";
+
+            // Acortamos el color (NATURAL -> NAT, BLANCO -> BLA)
+            string colorCorto = color.Length >= 3 && color != "VARIOS" && color != "TUTI" ? color.Substring(0, 3) : color;
+
+            string skuSistema = $"{prefijo}-{tipo}-{colorCorto}-{numOriginal}-C{clienteId}".ToUpper().Replace(" ", "");
+
+            // 4. GENERADOR DE NOMBRE LIMPIO
+            string nombreFinal = esModoScrap ? $"[MOLIDO] {tipo} - {color} ({codigo})" : $"[MP] {tipo} - {color} ({codigo})";
 
             var prod = productosDb.FirstOrDefault(p => p.CodigoSku == skuSistema && p.ClienteId == clienteId);
 
@@ -297,10 +313,10 @@ namespace EstruplastERP.Api.Controllers
                 }
 
                 prod.StockActual = stock;
-                prod.Nombre = esModoScrap ? $"[MOLIDO] {tipo} - {color} ({codigo})" : $"[MP] {tipo} - {color} ({codigo})";
+                prod.Nombre = nombreFinal;
                 prod.TipoMaterial = tipo;
                 prod.Color = color;
-                prod.EsScrap = false;
+                prod.EsScrap = esModoScrap;
                 prod.EsMateriaPrima = true;
                 prod.Activo = true;
                 if (prod.Id > 0) _context.Entry(prod).State = EntityState.Modified;
@@ -313,12 +329,12 @@ namespace EstruplastERP.Api.Controllers
                 var nuevo = new Producto
                 {
                     CodigoSku = skuSistema,
-                    Nombre = esModoScrap ? $"[MOLIDO] {tipo} - {color} ({codigo})" : $"[MP] {tipo} - {color} ({codigo})",
+                    Nombre = nombreFinal,
                     Rubro = esModoScrap ? "MOLIDO CLIENTE" : "MATERIA PRIMA CLIENTE",
                     TipoMaterial = tipo,
                     Color = color,
                     ClienteId = clienteId,
-                    EsScrap = false,
+                    EsScrap = esModoScrap   ,
                     EsMateriaPrima = true,
                     EsProductoTerminado = false,
                     StockActual = stock,
@@ -334,45 +350,45 @@ namespace EstruplastERP.Api.Controllers
 
         private (string Tipo, string Color) DetectarMaterialYColor(string sku, string nombre, string? contextoArchivo)
         {
-            string s = sku?.ToUpper() ?? "";
-            string n = nombre?.ToUpper() ?? "";
-            string archivo = contextoArchivo?.ToUpper() ?? "";
+            string combo = $"{sku} {nombre} {contextoArchivo}".ToUpper();
 
-            if (s.Contains("003") || n.Contains("BIO") || archivo.Contains("BIO")) return ("BIO", "NATURAL");
+            // 1. FILTRO ANTI-ENSALADA: Buscamos explícitamente el material primero
+            string material = "OTROS";
 
-            bool esFreon = archivo.Contains("FREON") || archivo.Contains("RES. FREON") || n.Contains("FREON") || s.StartsWith("RF");
+            if (combo.Contains("ABS")) material = "ABS";
+            else if (combo.Contains("PEAD") || combo.Contains("ALTA") || combo.Contains("HDPE")) material = "PEAD";
+            else if (combo.Contains("PEBD") || combo.Contains("BAJA") || combo.Contains("POLIETILENO")) material = "PEBD";
+            else if (combo.Contains("PP") || combo.Contains("POLIPROPILENO")) material = "PP";
+            else if (combo.Contains("PAI") || combo.Contains("IMPACTO")) material = "PAI";
+            else if (combo.Contains("BIO")) material = "BIO";
+            else if (combo.Contains("FREON") || combo.Contains("RES. FREON") || sku?.StartsWith("RF") == true) material = "RESISTENTE FREON";
 
-            string colorDetectado = "-";
+            // 2. DETECCIÓN DE COLOR INDEPENDIENTE
+            string color = "-";
 
-            if (s.Contains("000") || n.Contains("TUTI") || n.Contains("TUTTI")) colorDetectado = "TUTI";
-            else if (s.Contains("001") || n.Contains("NATURAL")) colorDetectado = "NATURAL";
-            else if (s.Contains("002") || n.Contains("BLANCO")) colorDetectado = "BLANCO";
-            else if (s.Contains("004") || n.Contains("AMARILLO")) colorDetectado = "AMARILLO";
-            else if (s.Contains("005") || n.Contains("NARANJA")) colorDetectado = "NARANJA";
-            else if (s.Contains("006") || n.Contains("ROSA")) colorDetectado = "ROSA";
-            else if (s.Contains("007") || n.Contains("ROJO")) colorDetectado = "ROJO";
-            else if (s.Contains("008") || n.Contains("VIOLETA")) colorDetectado = "VIOLETA";
-            else if (s.Contains("009") || n.Contains("CELESTE")) colorDetectado = "CELESTE";
-            else if (s.Contains("010") || n.Contains("AZUL")) colorDetectado = "AZUL";
-            else if (s.Contains("011") || n.Contains("VERDE")) colorDetectado = "VERDE";
-            else if (s.Contains("012") || n.Contains("MARRON")) colorDetectado = "MARRON";
-            else if (s.Contains("013") || n.Contains("GRIS")) colorDetectado = "GRIS";
-            else if (s.Contains("014") || n.Contains("PLATA")) colorDetectado = "GRIS PLATA";
-            else if (s.Contains("015") || n.Contains("NEGRO")) colorDetectado = "NEGRO";
+            if (combo.Contains("000") || combo.Contains("TUTI") || combo.Contains("TUTTI")) color = "TUTI";
+            else if (combo.Contains("001") || combo.Contains("NATURAL") || (combo.Contains("003") && material == "BIO")) color = "NATURAL";
+            else if (combo.Contains("002") || combo.Contains("BLANCO")) color = "BLANCO";
+            else if (combo.Contains("003") && material == "PEAD") color = "NATURAL"; // Si es 003 pero decía PEAD explícitamente, es Natural, no Bio.
+            else if (combo.Contains("004") || combo.Contains("AMARILLO")) color = "AMARILLO";
+            else if (combo.Contains("005") || combo.Contains("NARANJA")) color = "NARANJA";
+            else if (combo.Contains("006") || combo.Contains("ROSA")) color = "ROSA";
+            else if (combo.Contains("007") || combo.Contains("ROJO")) color = "ROJO";
+            else if (combo.Contains("008") || combo.Contains("VIOLETA")) color = "VIOLETA";
+            else if (combo.Contains("009") || combo.Contains("CELESTE")) color = "CELESTE";
+            else if (combo.Contains("010") || combo.Contains("AZUL")) color = "AZUL";
+            else if (combo.Contains("011") || combo.Contains("VERDE")) color = "VERDE";
+            else if (combo.Contains("012") || combo.Contains("MARRON")) color = "MARRON";
+            else if (combo.Contains("013") || combo.Contains("GRIS")) color = "GRIS";
+            else if (combo.Contains("014") || combo.Contains("PLATA")) color = "GRIS PLATA";
+            else if (combo.Contains("015") || combo.Contains("NEGRO")) color = "NEGRO";
 
-            if (colorDetectado != "-")
-            {
-                if (esFreon) return ("RESISTENTE FREON", colorDetectado);
-                return ("PAI", colorDetectado);
-            }
+            // 3. REGLAS DE RESCATE (Fallback)
+            if (material == "OTROS" && color != "-") material = "PAI"; // Si tiene color de la lista pero no dice material, históricamente usás PAI.
+            if (material != "OTROS" && color == "-") color = "VARIOS"; // Si detectó material pero no color.
+            if (material == "BIO" && color == "VARIOS") color = "NATURAL"; // BIO suele ser natural.
 
-            if (archivo.Contains("ABS") || n.Contains("ABS")) return ("ABS", "-");
-            if (archivo.Contains("PP") || archivo.Contains("POLIPROPILENO") || n.Contains("PP") || n.Contains("POLIPROPILENO")) return ("PP", "-");
-            if (archivo.Contains("PEAD") || archivo.Contains("ALTA") || archivo.Contains("HDPE") || n.Contains("PEAD") || n.Contains("ALTA") || n.Contains("HDPE")) return ("PEAD", "-");
-            if (archivo.Contains("PEBD") || archivo.Contains("BAJA") || archivo.Contains("POLIETILENO") || n.Contains("PEBD") || n.Contains("BAJA") || n.Contains("POLIETILENO")) return ("POLIETILENO", "-");
-            if (archivo.Contains("PAI") || n.Contains("PAI") || n.Contains("IMPACTO")) return ("PAI", "VARIOS");
-
-            return ("OTROS", "VARIOS");
+            return (material, color);
         }
     }
 }

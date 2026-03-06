@@ -8,7 +8,8 @@ namespace EstruplastERP.Core
         Cancelada = -1,
         Pendiente = 0,
         EnProceso = 1,
-        Finalizada = 2
+        Finalizada = 2,
+        EnCola = 3
     }
 
     public class OrdenProduccion
@@ -34,12 +35,6 @@ namespace EstruplastERP.Core
         public int? ClienteId { get; set; }
         [ForeignKey("ClienteId")]
         public Cliente? Cliente { get; set; }
-
-        public int? EmpleadoId { get; set; }
-        [ForeignKey("EmpleadoId")]
-        public virtual Empleado Empleado { get; set; }
-
-        public string Turno { get; set; }
         public string Observacion { get; set; }
 
         [Column(TypeName = "decimal(18,4)")]

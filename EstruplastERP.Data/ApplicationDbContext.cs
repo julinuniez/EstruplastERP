@@ -13,7 +13,6 @@ namespace EstruplastERP.Data
         public DbSet<Producto> Productos { get; set; }
         public DbSet<Formula> Formulas { get; set; }
         public DbSet<Movimiento> Movimientos { get; set; }
-        public DbSet<Empleado> Empleados { get; set; }
         public DbSet<Cliente> Clientes { get; set; }
         public DbSet<Produccion> Producciones { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }

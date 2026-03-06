@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+
 const logoImg = new URL('../assets/estruplast-logo.png', import.meta.url).href;
 
 const props = defineProps<{
   form: any;
   producto: any;
   cliente: any; 
-  empleado: any;
   receta: any[];
   colorFinal: string;
   densidad: number;
@@ -22,7 +22,6 @@ const insumoExtraPorc = ref<number | ''>('');
 const mostrarLista = ref(false); 
 
 const cantidadCopias = computed(() => props.ocultarFormula ? 2 : 1);
-
 const kilosNetosExactos = computed(() => Number(props.form?.kilosTotales) || 0);
 
 const pesoBrutoExacto = computed(() => {
@@ -32,13 +31,7 @@ const pesoBrutoExacto = computed(() => {
 });
 
 const pesoVisualRedondeado = computed(() => Math.ceil(pesoBrutoExacto.value));
-
-// MAGIA ACÁ: Si es para el cliente (ocultarFormula), pasamos los netos. Si es para fábrica, los brutos (con desperdicio).
-const kilosCabeceraRedondeado = computed(() =>
-    props.ocultarFormula
-        ? Math.ceil(kilosNetosExactos.value)
-        : Math.ceil(pesoBrutoExacto.value)
-);
+const kilosCabeceraRedondeado = computed(() => props.ocultarFormula ? Math.ceil(kilosNetosExactos.value) : Math.ceil(pesoBrutoExacto.value));
 
 const ceilKilos = (valor: number, decimales = 3) => {
     const num = Number(valor) || 0;
@@ -48,68 +41,62 @@ const ceilKilos = (valor: number, decimales = 3) => {
 
 const recetaVisual = computed(() => {
     let lista = [...props.receta];
-    lista = lista.filter(item => {
-        const cant = parseFloat(item.cantidad);
-        return cant > 0;
-    });
-    lista.sort((a, b) => {
-        const cantA = parseFloat(a.cantidad) || 0;
-        const cantB = parseFloat(b.cantidad) || 0;
-        return cantB - cantA; 
-    });
+    lista = lista.filter(item => parseFloat(item.cantidad) > 0);
+    lista.sort((a, b) => (parseFloat(b.cantidad) || 0) - (parseFloat(a.cantidad) || 0));
     return lista;
 });
+
+// NUEVA FUNCIÓN UNIVERSAL DE MATERIALES
+const obtenerTipoMaterial = (item: any) => {
+    if (!item) return '';
+    if (item.tipoMaterial && item.tipoMaterial !== 'OTROS') return item.tipoMaterial.toUpperCase();
+    
+    const n = (item.nombre || '').toUpperCase();
+    if (n.includes('PAI') || n.includes('IMPACTO') || n.includes('A.I.') || n.includes('AI ')) return 'PAI';
+    if (n.includes('PEAD') || n.includes('ALTA') || n.includes('HDPE')) return 'PEAD';
+    if (n.includes('PEBD') || n.includes('BAJA') || n.includes('LDPE') || n.includes('POLIETILENO')) return 'POLIETILENO';
+    if (n.includes('PP') || n.includes('POLIPROPILENO')) return 'PP';
+    if (n.includes('ABS')) return 'ABS';
+    if (n.includes('FREON') || n.includes('RESISTENTE')) return 'RESISTENTE FREON';
+    if (n.includes('BIO')) return 'BIO';
+    return '';
+};
 
 const sugerenciasFiltradas = computed(() => {
     const texto = insumoBusquedaTexto.value.trim().toUpperCase();
     let lista = props.materiasPrimas || [];
 
     const idClienteOrden = props.cliente ? props.cliente.id : 0;
-    const esClienteFazon = props.cliente && props.cliente.esFazon === true;
-
-    let materialRequerido = '';
-    const nombreProd = (props.producto?.nombre || '').toUpperCase();
-    
-    if (nombreProd.includes('PAI') || nombreProd.includes('IMPACTO') || nombreProd.includes('A.I.') || nombreProd.includes('AI ')) materialRequerido = 'PAI';
-    else if (nombreProd.includes('PP') || nombreProd.includes('POLIPROPILENO')) materialRequerido = 'PP';
-    else if (nombreProd.includes('PEAD') || nombreProd.includes('ALTA')) materialRequerido = 'PEAD';
-    else if (nombreProd.includes('PEBD') || nombreProd.includes('BAJA')) materialRequerido = 'PEBD';
+    const materialRequerido = obtenerTipoMaterial(props.producto);
 
     lista = lista.filter(mp => {
         const nombreMP = (mp.nombre || '').toUpperCase();
         const rubroMP = (mp.rubro || '').toUpperCase();
         const idDuenioMaterial = mp.clienteId || 0;
         
-        // --- 1. FILTRO DE CALIDAD ---
         if (nombreMP.includes('SCRAP') || nombreMP.includes('SUCIO')) return false;
-        if (mp.esScrap) {
-            const esProcesado = nombreMP.includes('MOLIDO') || nombreMP.includes('RECUPERADO');
-            if (!esProcesado) return false;
-        }
+        
+        const esMolido = mp.esScrap || rubroMP.includes('MOLIDO');
+        if (esMolido && idDuenioMaterial === 0) return false;
 
-        // --- 2. LÓGICA DE CLIENTE ---
         const esDelClienteActual = (idClienteOrden > 0 && idDuenioMaterial === idClienteOrden);
+        const materialMP = obtenerTipoMaterial(mp);
 
+        // Si es material del cliente, solo controlamos que los materiales no choquen (Ej: No meter PP en una orden de PEAD)
         if (esDelClienteActual) {
-            if (materialRequerido) {
-                if (materialRequerido === 'PP' && (nombreMP.includes('PAI') || nombreMP.includes('IMPACTO'))) return false;
-                if (materialRequerido === 'PAI' && (nombreMP.includes('PP') || nombreMP.includes('POLIPROPILENO'))) return false;
-            }
+            if (materialRequerido && materialMP && materialRequerido !== materialMP) return false;
             return true;
         }
 
-        // --- 3. FILTROS GENERALES ---
         if (idDuenioMaterial > 0 && idDuenioMaterial !== idClienteOrden) return false;
         if (nombreMP.includes('BASE') && !nombreMP.includes('ALTA')) return false; 
         if (nombreMP.includes('GENERICO') || nombreMP.includes('GENÉRICO')) return false;
         if (mp.id >= 990 && mp.id <= 999) return false;
 
-        if (materialRequerido) {
+        // Filtro general de incompatibilidad de materiales para Virgen/Aditivos
+        if (materialRequerido && materialMP) {
             const esAditivo = rubroMP.includes('ADITIVO') || rubroMP.includes('MASTER') || nombreMP.includes('MASTER') || nombreMP.includes('COLOR') || nombreMP.includes('CARGA');
-            if (!esAditivo) {
-                if (materialRequerido === 'PAI' && (nombreMP.includes('PP') || nombreMP.includes('PEAD') || nombreMP.includes('POLIETILENO'))) return false;
-                if (materialRequerido === 'PP' && (nombreMP.includes('PAI') || nombreMP.includes('IMPACTO') || nombreMP.includes('PEAD'))) return false;
-            }
+            if (!esAditivo && materialRequerido !== materialMP) return false;
         }
 
         return true;
@@ -131,24 +118,15 @@ const sugerenciasFiltradas = computed(() => {
     });
 });
 
-const seleccionarInsumo = (mp: any) => {
-    insumoBusquedaTexto.value = mp.nombre;
-    mostrarLista.value = false;
-};
-
-const cerrarListaConDelay = () => {
-    setTimeout(() => { mostrarLista.value = false; }, 200);
-};
+const seleccionarInsumo = (mp: any) => { insumoBusquedaTexto.value = mp.nombre; mostrarLista.value = false; };
+const cerrarListaConDelay = () => { setTimeout(() => { mostrarLista.value = false; }, 200); };
 
 const solicitarAgregar = () => {
     if (!insumoBusquedaTexto.value || !insumoExtraPorc.value) return;
     const mpEncontrada = sugerenciasFiltradas.value.find(m => m.nombre === insumoBusquedaTexto.value);
-
     if (mpEncontrada) {
         emit('add-insumo', { id: mpEncontrada.id, porcentaje: Number(insumoExtraPorc.value) });
-        insumoBusquedaTexto.value = '';
-        insumoExtraPorc.value = '';
-        mostrarLista.value = false;
+        insumoBusquedaTexto.value = ''; insumoExtraPorc.value = ''; mostrarLista.value = false;
     } else {
         alert("⚠️ Seleccione un insumo válido de la lista.");
     }
@@ -156,34 +134,21 @@ const solicitarAgregar = () => {
 
 const solicitarQuitar = (item: any) => { 
     const indexReal = props.receta.indexOf(item);
-    if (indexReal !== -1) {
-        emit('remove-insumo', indexReal); 
-    }
+    if (indexReal !== -1) emit('remove-insumo', indexReal); 
 };
 
 const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const nombreProductoLimpio = computed(() => {
     let nombreOriginal = props.producto?.nombre || '';
-
     const nombreTrim = nombreOriginal.trimStart();
     const upper = nombreTrim.toUpperCase();
-
-    const prefijos = [
-        'LAMINADO A FAZON -',
-        'LAMINADO A FAZON-'
-    ];
-
+    const prefijos = ['LAMINADO A FAZON -', 'LAMINADO A FAZON-'];
     for (const pref of prefijos) {
-        if (upper.startsWith(pref)) {
-            const resultado = nombreTrim.substring(pref.length).trimStart();
-            return resultado || nombreTrim;
-        }
+        if (upper.startsWith(pref)) return nombreTrim.substring(pref.length).trimStart() || nombreTrim;
     }
-
     return nombreOriginal;
 });
 </script>
-
 <template>
   <div id="hoja-de-impresion" class="contenedor-principal-pdf">
     
@@ -200,13 +165,11 @@ const nombreProductoLimpio = computed(() => {
                 <p>FECHA: <strong>{{ fechaHoy }}</strong></p>
                 <p>NOTA PEDIDO: <strong>{{ form?.notaPedido || '-' }}</strong></p>
                 <p>OC CLIENTE: <strong>{{ form?.numeroPedidoCliente || '-' }}</strong></p>
-                <p>TURNO: <strong>{{ form.turno ? form.turno.toUpperCase() : '-' }}</strong></p>
             </div>
         </div>
         
         <div class="fila-pdf">
-            <div style="display: flex; justify-content: space-between;">
-                <div><strong>RESPONSABLE:</strong> <span class="dato-relleno">{{ empleado?.nombreCompleto }}</span></div>
+            <div style="display: flex; justify-content: flex-start;">
                 <div><strong>CLIENTE:</strong> <span class="dato-relleno">{{ cliente?.razonSocial }}</span></div>
             </div>
         </div>

@@ -18,10 +18,6 @@ namespace EstruplastERP.Core
         public int? ClienteId { get; set; }
         public Cliente? Cliente { get; set; }
 
-        // Relación con Empleado
-        public int EmpleadoId { get; set; }
-        public Empleado? Empleado { get; set; }
-
         public int Cantidad { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]

@@ -62,21 +62,26 @@ const checkEsPT = (p: any) => !!(p.esProductoTerminado || p.EsProductoTerminado)
 const checkEsMP = (p: any) => !!(p.esMateriaPrima || p.EsMateriaPrima);
 const checkEsFazon = (p: any) => !!(p.esFazon || p.EsFazon);
 const checkEsScrap = (p: any) => !!(p.esScrap || p.EsScrap);
-const checkEsMolido = (p: any) => getSku(p).startsWith('MOLIDO') || getSku(p).startsWith('SCRAP');
 const checkGenerico = (p: any) => !!(p.esGenerico || p.EsGenerico);
 
-const checkEsMasterbatch = (p: any) => {
-    const n = getNombre(p);
+const checkEsMolido = (p: any) => {
     const r = getRubro(p);
-    return r.includes('MASTER') || n.includes('MASTER') || n.includes('COLOR ') || n.includes('PIGMENTO');
+    return r.includes('MOLIDO') || r.includes('SCRAP');
+};
+
+const esMpCliente = (p: any) => {
+    const r = getRubro(p);
+    return r.includes('CLIENTE') || (checkEsMP(p) && getClienteId(p) > 0);
+};
+
+const checkEsMasterbatch = (p: any) => {
+    const r = getRubro(p);
+    return r.includes('MASTER') || r.includes('MASTERBATCH') || getNombre(p).includes('PIGMENTO');
 };
 
 const checkEsAditivo = (p: any) => {
-    const n = getNombre(p);
     const r = getRubro(p);
-    return r.includes('ADITIVO') || n.includes('ADITIVO') || n.includes('UV') || 
-           n.includes('CAUCHO') || n.includes('ESTEARATO') || n.includes('BRILLO') || 
-           n.includes('CARGA') || n.includes('CRISTAL'); 
+    return r.includes('ADITIVO');
 };
 
 const detectarTipo = (p: any) => {
@@ -97,8 +102,6 @@ const detectarTipo = (p: any) => {
 
 watch(clienteFiltro, () => { materialFiltro.value = ''; });
 watch(tabActual, () => { subTabMP.value = 'VIRGEN'; });
-
-const esMpCliente = (p: any) => getSku(p).startsWith('MP-CLI') || (checkEsMP(p) && getClienteId(p) > 0);
 
 const clientesFazon = computed(() => {
     return listaClientes.value.filter(c => c.esFazon === true);
@@ -123,27 +126,13 @@ const productosFiltrados = computed(() => {
             lista = lista.filter(p => checkEsAditivo(p) && !checkEsMasterbatch(p));
         } else if (subTabMP.value === 'VIRGEN') {
             lista = lista.filter(p => {
-                const r = getRubro(p);
-                const n = getNombre(p);
                 const colorProd = (p.color || p.Color || '').toUpperCase();
+                const n = getNombre(p);
                 
-                if (colorProd === 'GENERICO' || colorProd === 'GENÉRICO' || colorProd.includes('GENERICO')) {
-                    return false;
-                }
+                if (colorProd.includes('GENERICO') || colorProd.includes('GENÉRICO')) return false;
+                if (n.includes('FAZON') || n.includes('FAZÓN') || n.includes('BASE')) return false;
 
-                if (n.includes('FAZON') || n.includes('FAZÓN') || n.includes('BASE')) {
-                    return false;
-                }
-
-                if (r.includes('MATERIA PRIMA') || r.includes('PLASTICA') || r.includes('PLMSTICA')) {
-                    return true;
-                }
-                
-                if (!checkEsMasterbatch(p) && !checkEsAditivo(p) && !n.includes('SCRAP') && !n.includes('RECUPERADO')) {
-                    return true;
-                }
-
-                return false;
+                return !checkEsMasterbatch(p) && !checkEsAditivo(p);
             });
         }
 

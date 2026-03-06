@@ -8,9 +8,7 @@ import api from '@/services/axiosInstance'
 
 const DENSIDAD_DEFAULT = 1.1;
 
-// ID del Brillo Estándar (Verificar si es correcto)
 const ID_BRILLO_777 = 1073; 
-
 const ID_ESTEARATO = 1074; 
 const ID_UV = 1075; 
 const ID_CAUCHO = 1076; 
@@ -20,12 +18,11 @@ const PORC_ESTEARATO = 0.08;
 
 interface Producto {
     id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean;
-    esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; rubro?: string;
+    esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; esScrap?: boolean; rubro?: string;
     largo: number; ancho: number; espesor: number; pesoEspecifico: number; color?: string;
     receta?: any[]; espesorMinimo?: number; espesorMaximo?: number; clienteId?: number;
     tipoMaterial?: string;
 }
-interface Empleado { id: number; nombreCompleto: string; }
 interface Cliente { id: number; razonSocial: string; esFazon?: boolean; }
 interface ItemReceta {
     id: number | string; cantidad: number; nombreInsumo: string; densidad: number;
@@ -40,7 +37,6 @@ const listaInventarioCompleto = ref<any[]>([])
 const listaMasterbatches = ref<any[]>([])
 const listaTodasMateriasPrimas = ref<any[]>([])
 
-// Buscador Dinámico para Cristal 555 (Independiente de la BD)
 const idCristal555 = computed(() => {
     const material = listaTodasMateriasPrimas.value.find(m => 
         m.codigoSku === 'MP-CRI-555' || m.nombre === 'CRISTAL 555'
@@ -48,7 +44,6 @@ const idCristal555 = computed(() => {
     return material ? material.id : 0;
 });
 
-const empleados = ref<Empleado[]>([])
 const clientes = ref<Cliente[]>([])
 const recetaDinamica = ref<ItemReceta[]>([])
 const stockFazonDetectado = ref<number | null>(null);
@@ -73,9 +68,7 @@ const form = ref({
     numeroPedidoCliente: '',
     notaPedido: '',
     cantidad: 1,
-    empleadoId: '' as string | number,
     observacion: '',
-    turno: 'Mañana',
     largo: 0, ancho: 0, espesor: 0,
     
     conBrillo: false, 
@@ -94,22 +87,25 @@ const STORAGE_NOTA_PEDIDO_NEXT = 'produccion_notaPedido_siguiente';
 
 const notaPedidoSugerida = ref<string>('');
 
-const detectarMaterial = (nombre: string) => {
-    if (!nombre) return '';
-    const n = nombre.toUpperCase();
+const detectarMaterial = (item: any) => {
+    if (!item) return '';
+    if (item.tipoMaterial && item.tipoMaterial !== 'OTROS') return item.tipoMaterial.toUpperCase();
+    
+    const n = (item.nombre || item).toString().toUpperCase();
     if (n.includes('PAI') || n.includes('IMPACTO') || n.includes('A.I.')) return 'PAI';
     if (n.includes('PP') || n.includes('POLIPROPILENO')) return 'PP';
     if (n.includes('PEAD') || n.includes('ALTA') || n.includes('HDPE')) return 'PEAD';
-    if (n.includes('PEBD') || n.includes('BAJA') || n.includes('LDPE') || n.includes('POLIETILENO')) return 'PEBD';
+    if (n.includes('PEBD') || n.includes('BAJA') || n.includes('LDPE') || n.includes('POLIETILENO')) return 'POLIETILENO';
     if (n.includes('ABS')) return 'ABS';
-    if (n.includes('FREON') || n.includes('RESISTENTE')) return 'FREON';
+    if (n.includes('FREON') || n.includes('RESISTENTE')) return 'RESISTENTE FREON';
+    if (n.includes('BIO')) return 'BIO';
     return '';
 };
 
 async function cargarNotaPedidoSugerida() {
     try {
         const res = await api.get('/Ordenes/recientes');
-        let siguiente = 1;
+        let maxNota = 0;
 
         if (Array.isArray(res.data) && res.data.length > 0) {
             const candidatos = res.data
@@ -118,24 +114,24 @@ async function cargarNotaPedidoSugerida() {
                 .filter((n: number) => !isNaN(n) && n > 0);
 
             if (candidatos.length > 0) {
-                const maxNota = Math.max(...candidatos);
-                siguiente = maxNota + 1;
+                maxNota = Math.max(...candidatos);
             }
         }
 
-        notaPedidoSugerida.value = String(siguiente);
-        localStorage.setItem(STORAGE_NOTA_PEDIDO_NEXT, notaPedidoSugerida.value);
+        notaPedidoSugerida.value = maxNota > 0 ? String(maxNota) : '';
+        const correlativo = maxNota > 0 ? maxNota + 1 : 1;
+        localStorage.setItem(STORAGE_NOTA_PEDIDO_NEXT, String(correlativo));
 
         if (!form.value.notaPedido || String(form.value.notaPedido).trim() === '') {
-            form.value.notaPedido = notaPedidoSugerida.value;
+            form.value.notaPedido = String(correlativo);
         }
     } catch (e) {
         const nextGuardadoRaw = localStorage.getItem(STORAGE_NOTA_PEDIDO_NEXT);
         const nextGuardado = nextGuardadoRaw ? Number(nextGuardadoRaw) : NaN;
         if (!isNaN(nextGuardado) && nextGuardado > 0) {
-            notaPedidoSugerida.value = String(Math.trunc(nextGuardado));
+            notaPedidoSugerida.value = String(Math.trunc(nextGuardado) - 1); 
             if (!form.value.notaPedido || String(form.value.notaPedido).trim() === '') {
-                form.value.notaPedido = notaPedidoSugerida.value;
+                form.value.notaPedido = String(Math.trunc(nextGuardado));
             }
         } else {
             notaPedidoSugerida.value = '';
@@ -152,9 +148,11 @@ watch(
     (v) => {
         const num = Number(v);
         if (!isNaN(num) && num > 0) {
-            const siguiente = Math.trunc(num) + 1;
-            notaPedidoSugerida.value = String(siguiente);
-            localStorage.setItem(STORAGE_NOTA_PEDIDO_NEXT, String(siguiente));
+            const anterior = Math.trunc(num) - 1;
+            if (anterior > 0) {
+                notaPedidoSugerida.value = String(anterior);
+            }
+            localStorage.setItem(STORAGE_NOTA_PEDIDO_NEXT, String(num));
         }
     }
 );
@@ -177,7 +175,6 @@ const limpiarBorrador = () => {
 };
 
 const productoSeleccionado = computed(() => productos.value.find(p => p.id === Number(form.value.productoTerminadoId)) || null);
-const empleadoSeleccionado = computed(() => empleados.value.find(e => e.id === Number(form.value.empleadoId)) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Number(form.value.clienteId)) || null);
 
 const clienteTieneFazonActivo = computed(() => {
@@ -208,7 +205,7 @@ const listaProductosDisponibles = computed(() => {
         const nombre = (p.nombre || '').toUpperCase();
         const rubro = (p.rubro || '').toUpperCase();
         
-        if (p.esMateriaPrima) return false;
+        if (p.esMateriaPrima || p.esScrap || rubro.includes('MOLIDO')) return false;
         if (rubro.includes('MATERIA') || rubro.includes('INSUMO') || rubro.includes('MASTERBATCH')) return false;
         if (nombre.includes('BASE') && !nombre.includes('ALTA')) return false;
         if (nombre.includes('(BASE)') || nombre.includes('(VARIOS)')) return false;
@@ -246,21 +243,18 @@ const materiasPrimasLimpias = computed(() => {
 
     return listaTodasMateriasPrimas.value.filter(mp => {
         const nombre = (mp.nombre || '').toUpperCase().trim();
+        const rubro = (mp.rubro || '').toUpperCase();
 
         if (materialesBaseAbstractos.includes(nombre)) return false;
         if (mp.esGenerico) return false;
 
-        if (!clienteTieneFazonActivo.value) {
-            if (mp.esScrap) return false;
-            if (nombre.includes('SCRAP') || nombre.includes('RECUPERADO')) return false;
+        const esMolido = mp.esScrap || rubro.includes('MOLIDO') || nombre.includes('SCRAP') || nombre.includes('RECUPERADO');
+
+        if (!clienteTieneFazonActivo.value || !esFazon) {
+            if (esMolido) return false;
             if (nombre.includes('FAZON') || mp.esFazon) return false;
         }
 
-        if (!esFazon) {
-            if (mp.esScrap) return false;
-            if (nombre.includes('SCRAP') || nombre.includes('RECUPERADO')) return false;
-            if (nombre.includes('FAZON') || mp.esFazon) return false;
-        }
         return true; 
     });
 });
@@ -392,7 +386,6 @@ function recalcularFormulaAutomatica() {
         });
     };
 
-    // LOGICA NUEVA DE BRILLO DINAMICA (777 o Cristal 555)
     if (form.value.conBrillo) {
         const idBrillo = form.value.tipoBrillo === '777' ? ID_BRILLO_777 : idCristal555.value;
         const nombreBrillo = form.value.tipoBrillo === '777' ? 'BRILLO 777' : 'CRISTAL 555';
@@ -420,27 +413,25 @@ async function actualizarRecetaFazonConCliente(clienteId: string | number, produ
     if (!clienteId || !producto) return;
 
     const esFazon = producto.esFazon || producto.nombre.toUpperCase().includes('FAZON') || producto.nombre.toUpperCase().includes('SERVICIO');
-    
     if (!esFazon || !clienteTieneFazonActivo.value) return;
 
-    const materialPT = detectarMaterial(producto.nombre);
+    const materialPT = detectarMaterial(producto);
 
     const todoElStockCliente = listaInventarioCompleto.value.filter((p: any) => {
         const esDelCliente = Number(p.clienteId) === Number(clienteId);
         const tieneStock = p.stockActual > 0;
+        const rubro = (p.rubro || '').toUpperCase();
         
-        const nombreMaterial = (p.nombre || '').toUpperCase();
-        const esScrapPuro = p.esScrap === true || nombreMaterial.includes('SCRAP');
+        const esMolido = p.esScrap === true || rubro.includes('MOLIDO');
 
-        if (!esDelCliente || !tieneStock || esScrapPuro) return false;
+        if (!esDelCliente || !tieneStock || !esMolido) return false;
 
         if (materialPT) {
-            const materialLote = detectarMaterial(nombreMaterial);
+            const materialLote = detectarMaterial(p);
             if (materialLote && materialLote !== materialPT) {
                 return false;
             }
         }
-
         return true;
     });
 
@@ -604,7 +595,6 @@ async function registrarProduccion() {
     mensaje.value = '';
     error.value = '';
 
-    if (!form.value.empleadoId) return error.value = "Faltan datos de operario.";
     if (!espesorValido.value) return error.value = `⛔ ERROR DE CALIDAD: El espesor debe estar entre ${limiteMinimo.value} y ${limiteMaximo.value} mm.`;
 
     const pesoNetoGeometrico = kilosCalculados.value;
@@ -613,7 +603,9 @@ async function registrarProduccion() {
         if (!form.value.clienteId) return error.value = "Seleccione Cliente.";
         if (!clienteTieneFazonActivo.value) return error.value = "⛔ ERROR: El cliente seleccionado NO tiene servicio de Fazón habilitado.";
     }
-    if (hayBloqueoDeStock.value) return error.value = "STOCK INSUFICIENTE (Revise faltantes).";
+    if (!form.value.clienteId) return error.value = "⛔ ERROR: Debe seleccionar un Cliente obligatoriamente.";
+
+    if (!espesorValido.value) return error.value = `⛔ ERROR DE CALIDAD: El espesor debe estar entre ${limiteMinimo.value} y ${limiteMaximo.value} mm.`;
     
     const tieneProhibido = recetaDinamica.value.some(r => r.materiaPrimaId === ID_MASTERBATCH_GENERICO);
     if (tieneProhibido) return error.value = "⛔ ERROR: Reemplaza el 'Masterbatch Varios' por un color real.";
@@ -642,8 +634,6 @@ async function registrarProduccion() {
             numeroPedidoCliente: form.value.numeroPedidoCliente || '', 
             notaPedido: form.value.notaPedido || '',
             cantidad: Number(form.value.cantidad),
-            empleadoId: Number(form.value.empleadoId),
-            turno: form.value.turno,
             observacion: (form.value.observacion || ''),
             kilos: Number(pesoBrutoExacto.toFixed(3)),
             largo: Number(form.value.largo),
@@ -674,7 +664,6 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
     try {
         loading.value = true;
         
-        form.value.turno = orden.turno || 'Mañana';
         form.value.observacion = orden.observacion || '';
         form.value.cantidad = orden.cantidad;
         const mermaOrden = Number(orden?.merma ?? form.value.merma ?? 0) || 0;
@@ -686,7 +675,6 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
         form.value.notaPedido = String(orden?.id ?? '');
         
         form.value.clienteId = orden.clienteId;
-        form.value.empleadoId = orden.empleadoId;
         form.value.productoTerminadoId = orden.productoId; 
 
         if (orden.consumos && Array.isArray(orden.consumos)) {
@@ -786,10 +774,9 @@ watch(kilosCalculados, (v) => form.value.kilosTotales = v, { immediate: true });
 onMounted(async () => {
     try {
         loading.value = true;
-        const [resProd, resCli, resEmp, resInv] = await Promise.all([
+        const [resProd, resCli, resInv] = await Promise.all([
             api.get('/Productos'),
             api.get('/Clientes'),
-            api.get('/Empleados'),
             api.get('/Productos/inventario-completo')
         ]);
         if (Array.isArray(resProd.data)) {
@@ -798,7 +785,6 @@ onMounted(async () => {
             listaMasterbatches.value = productos.value.filter(p => p.rubro?.includes('MASTERBATCH') || p.nombre.includes('MASTER'));
         }
         if (Array.isArray(resCli.data)) clientes.value = resCli.data;
-        if (Array.isArray(resEmp.data)) empleados.value = resEmp.data;
         if (Array.isArray(resInv.data)) listaInventarioCompleto.value = resInv.data;
 
         const borradorGuardado = localStorage.getItem(STORAGE_KEY);
@@ -839,12 +825,18 @@ onMounted(async () => {
             <div class="hoja-contenedor">
                 <HojaImpresion 
                     id="hoja-de-impresion"
-                    :form="form" :producto="productoSeleccionado" :cliente="clienteSeleccionado" 
-                    :empleado="empleadoSeleccionado" :receta="recetaDinamica" :colorFinal="colorFinalParaPDF" 
-                    :densidad="densidadMezcla" :totalPorcentaje="totalPorcentajeReceta" 
+                    :form="form" 
+                    :producto="productoSeleccionado" 
+                    :cliente="clienteSeleccionado" 
+                    :receta="recetaDinamica" 
+                    :colorFinal="colorFinalParaPDF" 
+                    :densidad="densidadMezcla" 
+                    :totalPorcentaje="totalPorcentajeReceta" 
                     :materiasPrimas="materiasPrimasLimpias" 
-                    :ocultarFormula="ocultarFormula" @add-insumo="agregarInsumoDesdeHijo" 
-                    @remove-insumo="quitarInsumoManual" @update-receta="balancearBase"  
+                    :ocultarFormula="ocultarFormula" 
+                    @add-insumo="agregarInsumoDesdeHijo" 
+                    @remove-insumo="quitarInsumoManual" 
+                    @update-receta="balancearBase"  
                 />
             </div>
         </div>
@@ -852,15 +844,6 @@ onMounted(async () => {
         <div class="panel-derecho">
             <div class="header-control"><h3>⚙️ Configuración</h3></div>
             
-            <label>Turno / Operario:</label>
-            <div class="fila-input">
-                <select v-model="form.turno" style="flex:1"><option>Mañana</option><option>Noche</option></select>
-                <select v-model="form.empleadoId" style="flex:2">
-                    <option disabled value="">Seleccionar...</option>
-                    <option v-for="e in empleados" :key="e.id" :value="e.id">{{e.nombreCompleto}}</option>
-                </select>
-            </div>
-
             <label>Cliente / Producto:</label>
             <select v-model="form.clienteId" style="margin-bottom:5px">
                 <option disabled value="">Cliente...</option>
@@ -885,9 +868,9 @@ onMounted(async () => {
                     class="btn-sugerido"
                     :disabled="!notaPedidoSugerida"
                     @click="aplicarNotaPedidoSugerida"
-                    :title="notaPedidoSugerida ? `Usar sugerido: ${notaPedidoSugerida}` : 'Sin sugerencia'"
+                    :title="notaPedidoSugerida ? `Copiar número anterior: ${notaPedidoSugerida}` : 'Sin sugerencia'"
                 >
-                    Usar {{ notaPedidoSugerida || '-' }}
+                    Usar: {{ notaPedidoSugerida || '-' }}
                 </button>
             </div>
             
@@ -995,12 +978,27 @@ onMounted(async () => {
             <div class="fila-input" style="margin-top:10px"><div style="width: 100%"><label>Obs:</label><input type="text" v-model="form.observacion" style="width:100%"></div></div>
             
             <div v-if="Math.abs(totalPorcentajeReceta - 100) > 0.5" class="alerta-error">⚠️ Receta suma {{ totalPorcentajeReceta }}%.</div>
-            <div v-if="hayBloqueoDeStock" class="alerta-stock"><h4>🚫 Stock Insuficiente</h4><ul><li v-for="(falla, i) in insumosSinStock" :key="i"><strong>{{ falla.nombre }}</strong>: Falta {{ falla.diferencia.toFixed(2) }} kg (Disp: {{ falla.disponible }})</li></ul></div>
+            
+            <div v-if="hayBloqueoDeStock" class="alerta-stock-warning">
+                <h4>⚠️ Material Insuficiente (Irá a la Cola)</h4>
+                <p style="margin: 0 0 5px 0; font-size: 11px;">La orden se guardará en el Backlog hasta que ingrese este stock:</p>
+                <ul>
+                    <li v-for="(falla, i) in insumosSinStock" :key="i">
+                        <strong>{{ falla.nombre }}</strong>: Falta {{ falla.diferencia.toFixed(2) }} kg (Disp: {{ falla.disponible }})
+                    </li>
+                </ul>
+            </div>
 
-            <button class="btn-guardar" @click="registrarProduccion" :disabled="loading || !form.empleadoId || hayBloqueoDeStock" :class="{ 'btn-disabled': !form.empleadoId || hayBloqueoDeStock }">
+            <button 
+                class="btn-guardar" 
+                @click="registrarProduccion" 
+                :disabled="loading || !form.clienteId || !form.productoTerminadoId" 
+                :class="{ 'btn-warning': hayBloqueoDeStock && form.clienteId && form.productoTerminadoId }"
+            >
                 <span v-if="loading">⏳ PROCESANDO...</span>
-                <span v-else-if="hayBloqueoDeStock">⚠️ REVISAR STOCK</span>
-                <span v-else>💾 GUARDAR ORDEN</span>
+                <span v-else-if="!form.clienteId || !form.productoTerminadoId">🚫 SELECCIONE CLIENTE Y PRODUCTO</span>
+                <span v-else-if="hayBloqueoDeStock">📥 GUARDAR EN COLA</span>
+                <span v-else>💾 GUARDAR ORDEN LISTA</span>
             </button>
 
             <div v-if="idProduccionGenerada" class="grupo-botones-pdf">
@@ -1071,10 +1069,26 @@ select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; 
 .check-container input { width: auto; margin-right: 8px; }
 .check-container.disabled { opacity: 0.5; cursor: not-allowed; }
 .alerta-error { background: #c0392b; color: white; padding: 10px; border-radius: 5px; margin-top: 15px; font-weight: bold; text-align: center; font-size: 12px; }
+
+.alerta-stock-warning { 
+    background-color: #fff9e6; 
+    border: 1px solid #f1c40f; 
+    color: #d35400; 
+    padding: 10px; 
+    border-radius: 6px; 
+    margin-top: 15px; 
+    font-size: 12px; 
+    text-align: left; 
+}
+.alerta-stock-warning h4 { margin: 0 0 5px 0; color: #e67e22; font-size: 13px; }
+.alerta-stock-warning ul { margin: 0; padding-left: 20px; }
+
 .btn-guardar { background: #27ae60; color: white; margin-top: 20px; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 1em; font-weight: bold; width: 100%; transition: background 0.3s; }
 .btn-guardar:hover { background: #2ecc71; }
 .btn-guardar:disabled { background: #7f8c8d; cursor: not-allowed; opacity: 0.7; }
-.btn-disabled { background: #7f8c8d !important; cursor: not-allowed; opacity: 0.8; }
+.btn-warning { background: #f39c12 !important; color: white !important; }
+.btn-warning:hover { background: #e67e22 !important; }
+
 .success { color: #2ecc71; text-align: center; font-weight: bold; margin-top: 10px; font-size: 13px; }
 .error { color: #e74c3c; text-align: center; font-weight: bold; margin-top: 10px; font-size: 13px; }
 .fila-control-aditivo { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
@@ -1084,7 +1098,6 @@ select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; 
 .bloque-derecha-brillo { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .select-brillo { width: 130px; padding: 4px; font-size: 11px; margin: 0; background: #ecf0f1; border-radius: 4px; border: none; color: #2c3e50; font-weight: bold; }
 
-.alerta-stock { background-color: #ffebee; border: 1px solid #ef5350; color: #c62828; padding: 10px; border-radius: 6px; margin-top: 15px; font-size: 12px; text-align: left; }
 .bloque-derecha { display: flex; flex-direction: column; align-items: flex-end; }
 .input-lock { background-color: #4a5d6e !important; color: #bdc3c7 !important; cursor: not-allowed; border: 1px solid #3e4f5e !important; }
 .input-error { border: 2px solid #e74c3c !important; background-color: #fab1a0 !important; color: #c0392b !important; }

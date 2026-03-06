@@ -10,7 +10,6 @@ interface ProduccionItem {
   producto: string;
   cantidad: number;
   kilos: number;
-  operario: string;
   estado: string;
   esFinalizada: boolean;
   notaPedido?: string;
@@ -23,8 +22,6 @@ interface ProduccionItem {
   consumos?: any[];
   productoId?: number;
   clienteId?: number;
-  empleadoId?: number;
-  turno?: string;
   observacion?: string;
 }
 
@@ -32,14 +29,15 @@ const producciones = ref<ProduccionItem[]>([])
 const cargando = ref(false)
 const error = ref('')
 
-const filtroEstado = ref('Pendientes');
+const filtroEstado = ref('EnCola'); // <--- AHORA EL DEFAULT ES EN COLA
 const filtroFecha = ref(''); 
 
 const produccionesFiltradas = computed(() => {
     return producciones.value.filter(item => {
         let pasaEstado = true;
-        if (filtroEstado.value === 'Pendientes') pasaEstado = !item.esFinalizada && item.estado !== 'Cancelada';
-        else if (filtroEstado.value === 'Finalizadas') pasaEstado = item.esFinalizada;
+        if (filtroEstado.value === 'EnCola') pasaEstado = item.estado === 'EnCola';
+        else if (filtroEstado.value === 'Pendientes') pasaEstado = item.estado === 'Pendiente' || item.estado === 'EnProceso';
+        else if (filtroEstado.value === 'Finalizadas') pasaEstado = item.estado === 'Finalizada';
         else if (filtroEstado.value === 'Canceladas') pasaEstado = item.estado === 'Cancelada';
         else if (filtroEstado.value === 'Todos') pasaEstado = true;
 
@@ -71,66 +69,43 @@ async function cargarHistorial() {
   }
 }
 
+async function activarOrden(item: ProduccionItem) {
+    if(!confirm(`¿Mandar la orden #${item.id} a las máquinas?\n\nAsegúrese de que el material ya ingresó a la planta.`)) return;
+    try {
+        await api.post(`/Ordenes/activar/${item.id}`)
+        item.estado = "Pendiente";
+        alert("🚀 Orden enviada a Producción.");
+    } catch (e: any) {
+        const msj = e.response?.data?.mensaje || e.response?.data || "Error de conexión con el servidor";
+        alert(msj);
+    }
+}
+
 async function confirmarOrdenRapida(item: ProduccionItem) {
-    if(!confirm(`¿Confirmar orden #${item.id}? Se sumará al stock.`)) return;
+    if(!confirm(`¿Confirmar orden #${item.id} como TERMINADA?\n\n⚠️ ESTO DESCONTARÁ LA MATERIA PRIMA DEL INVENTARIO.`)) return;
     try {
         await api.post(`/Ordenes/confirmar/${item.id}`)
         item.esFinalizada = true;
         item.estado = "Finalizada";
-        alert("✅ Confirmado.");
+        alert("✅ Stock Descontado y PT Sumado.");
     } catch (e: any) {
-        const msg = e.response?.data?.mensaje || "Error de conexión";
-        alert("❌ Error: " + msg);
+        alert("❌ Error: " + (e.response?.data?.mensaje || "Error de conexión"));
     }
 }
 
 async function cancelarOrden(item: ProduccionItem) {
-    if (!confirm(`⚠️ ¿Estás seguro de CANCELAR la Orden #${item.id}?\n\nSe devolverán los materiales al stock.`)) return;
+    if (!confirm(`⚠️ ¿Estás seguro de CANCELAR la Orden #${item.id}?`)) return;
     try {
         await api.post(`/Ordenes/cancelar/${item.id}`);
         item.estado = "Cancelada";
         await cargarHistorial();
-        alert("✅ Orden cancelada correctamente.");
     } catch (e: any) {
-        const msg = e.response?.data || "Error al cancelar";
-        alert("❌ " + msg);
+        alert("❌ " + (e.response?.data || "Error al cancelar"));
     }
 }
 
 const solicitarImpresion = (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
     emit('imprimir-historial', { orden, tipo });
-};
-
-const imprimirEtiqueta = (item: any) => {
-    const ventana = window.open('', 'PRINT', 'height=600,width=800');
-    if (ventana) {
-        ventana.document.write(`
-            <html>
-            <head>
-                <title>Lote #${item.id}</title>
-                <style>
-                    body { font-family: 'Arial', sans-serif; padding: 20px; text-align: center; border: 4px solid black; margin: 10px; }
-                    h1 { font-size: 32px; margin-bottom: 5px; text-transform: uppercase; }
-                    .meta { font-size: 16px; color: #555; margin-bottom: 20px; }
-                    .kilos { font-size: 70px; font-weight: 900; margin: 20px 0; }
-                    .footer { font-size: 12px; margin-top: 40px; border-top: 1px dashed black; padding-top: 10px; }
-                </style>
-            </head>
-            <body>
-                <h1>${item.producto}</h1>
-                <div class="meta">LOTE: #${item.id} | OP: ${item.operario}</div>
-                <div class="kilos">${item.kilos} Kg</div>
-                <div class="footer">ESTRUPLAST S.A. - CONTROL DE PRODUCCIÓN</div>
-            </body>
-            </html>
-        `);
-        ventana.document.close();
-        ventana.focus();
-        setTimeout(() => { 
-            ventana.print(); 
-            ventana.close(); 
-        }, 500);
-    }
 };
 
 onMounted(() => {
@@ -143,15 +118,16 @@ defineExpose({ cargarHistorial })
 <template>
   <div class="historial-wrapper">
     <div class="header-tabla">
-        <h3 :style="{ color: filtroEstado === 'Pendientes' ? '#2c3e50' : '#7f8c8d' }">
-            {{ filtroEstado === 'Pendientes' ? '🔥 Órdenes en Curso' : '🗄️ Archivo Histórico (' + filtroEstado + ')' }}
+        <h3 style="color: #2c3e50;">
+            {{ filtroEstado === 'EnCola' ? '🕒 Backlog (En Espera)' : (filtroEstado === 'Pendientes' ? '🔥 En Máquina' : '🗄️ Histórico') }}
         </h3>
         <div class="filtros-container">
             <select v-model="filtroEstado" class="input-filtro">
-                <option value="Pendientes">Pendientes</option>
-                <option value="Finalizadas">Finalizadas</option>
-                <option value="Canceladas">Canceladas</option>
-                <option value="Todos">Todos</option>
+                <option value="EnCola">🕒 En Cola (Falta Mat.)</option>
+                <option value="Pendientes">🔥 En Producción</option>
+                <option value="Finalizadas">✅ Finalizadas</option>
+                <option value="Canceladas">❌ Canceladas</option>
+                <option value="Todos">📁 Todas</option>
             </select>
             <input type="date" v-model="filtroFecha" class="input-filtro">
             <button @click="cargarHistorial" class="btn-refresh" :disabled="cargando">
@@ -171,13 +147,12 @@ defineExpose({ cargarHistorial })
                     <th>Producto</th>
                     <th>Cant.</th>
                     <th>Kilos</th>
-                    <th>Operario</th>
                     <th>Estado</th>
                     <th>Acción</th>
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-ok': p.esFinalizada, 'fila-cancel': p.estado === 'Cancelada'}">
+                <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-ok': p.estado === 'Finalizada', 'fila-cancel': p.estado === 'Cancelada'}">
                     <td>{{ p.fecha }}</td>
                     <td>
                         <div style="font-weight: bold; color: #2c3e50;">
@@ -190,28 +165,37 @@ defineExpose({ cargarHistorial })
                     <td class="td-prod">{{ p.producto }}</td>
                     <td style="text-align: center;">{{ p.cantidad }}</td>
                     <td style="text-align: right; font-weight: bold;">{{ p.kilos }}</td>
-                    <td>{{ p.operario }}</td>
                     <td>
                         <span :class="{
-                            'badge-ok': p.esFinalizada, 
-                            'badge-pend': !p.esFinalizada && p.estado !== 'Cancelada',
+                            'badge-cola': p.estado === 'EnCola',
+                            'badge-pend': p.estado === 'Pendiente' || p.estado === 'EnProceso',
+                            'badge-ok': p.estado === 'Finalizada',
                             'badge-cancel': p.estado === 'Cancelada'
                         }">
-                            {{ p.estado === 'Cancelada' ? 'CANCELADA' : (p.esFinalizada ? 'FINALIZADA' : 'PENDIENTE') }}
+                            {{ p.estado === 'EnCola' ? 'EN COLA' : (p.estado === 'Cancelada' ? 'CANCELADA' : (p.estado === 'Finalizada' ? 'FINALIZADA' : 'EN MÁQUINA')) }}
                         </span>
                     </td>
                     <td class="td-acciones">
-                        <template v-if="!p.esFinalizada && p.estado !== 'Cancelada'">
-                            <button @click="confirmarOrdenRapida(p)" class="btn-action btn-check">✅</button>
-                            <button @click="solicitarImpresion(p, 'orden')" class="btn-action btn-orden">📄</button>
-                            <button @click="solicitarImpresion(p, 'carga')" class="btn-action btn-carga">🧪</button>
-                            <button @click="cancelarOrden(p)" class="btn-action btn-cancel" style="color:red; border-color: #ffcccc;">❌</button>
+                        <template v-if="p.estado === 'EnCola'">
+                            <button @click="activarOrden(p)" class="btn-action btn-check" title="Enviar a Máquina (Llegó Material)">🚀</button>
+                            <button @click="solicitarImpresion(p, 'orden')" class="btn-action">📄</button>
+                            <button @click="cancelarOrden(p)" class="btn-action btn-cancel">❌</button>
                         </template>
-                        <button @click="imprimirEtiqueta(p)" class="btn-action btn-print">🖨️</button>
+
+                        <template v-else-if="p.estado === 'Pendiente' || p.estado === 'EnProceso'">
+                            <button @click="confirmarOrdenRapida(p)" class="btn-action btn-check" title="Confirmar Fin y Descontar Stock">✅</button>
+                            <button @click="solicitarImpresion(p, 'orden')" class="btn-action">📄</button>
+                            <button @click="solicitarImpresion(p, 'carga')" class="btn-action">🧪</button>
+                            <button @click="cancelarOrden(p)" class="btn-action btn-cancel">❌</button>
+                        </template>
+                        
+                        <template v-else-if="p.estado === 'Finalizada'">
+                             <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Reimprimir Orden">📄</button>
+                        </template>
                     </td>
                 </tr>
                 <tr v-if="produccionesFiltradas.length === 0 && !cargando">
-                    <td colspan="8" class="vacio">No hay órdenes en esta bandeja.</td>
+                    <td colspan="7" class="vacio">No hay órdenes en esta bandeja.</td>
                 </tr>
             </tbody>
         </table>
@@ -230,18 +214,25 @@ defineExpose({ cargarHistorial })
 .tabla-scroll { overflow-y: auto; flex: 1; }
 .tabla-custom { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tabla-custom th { background: #2c3e50; color: white; padding: 8px; text-align: left; position: sticky; top: 0; z-index: 5; }
-.tabla-custom td { padding: 8px; border-bottom: 1px solid #eee; color: #333; }
+.tabla-custom td { padding: 8px; border-bottom: 1px solid #eee; color: #333; vertical-align: middle; }
 .td-prod { font-weight: 600; color: #2c3e50; }
 .fila-ok { background-color: #f8fff9; color: #888; }
 .fila-ok .td-prod { text-decoration: line-through; } 
 .fila-cancel { background-color: #fff5f5; color: #999; }
 .fila-cancel .td-prod { text-decoration: line-through; color: #c0392b; }
-.badge-ok { background: #d4edda; color: #155724; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #c3e6cb; }
-.badge-pend { background: #fff3cd; color: #856404; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #ffeeba; }
-.badge-cancel { background: #f8d7da; color: #721c24; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #f5c6cb; }
-.td-acciones { display: flex; gap: 4px; justify-content: center; }
-.btn-action { border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; padding: 4px 6px; font-size: 1.1rem; }
+
+/* Semáforo de estados */
+.badge-cola { background: #e0f7fa; color: #2e7d32; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #b2dfdb; }
+.badge-pend { background: #fff3cd; color: #d35400; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #ffeeba; }
+.badge-ok { background: #e8eaed; color: #7f8c8d; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #cfd8dc; }
+.badge-cancel { background: #f8d7da; color: #721c24; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; border: 1px solid #f5c6cb; }
+
+.td-acciones { display: flex; gap: 4px; justify-content: flex-start; }
+.btn-action { border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; padding: 5px 8px; font-size: 1.1rem; display: flex; align-items: center; justify-content: center;}
 .btn-action:hover { transform: scale(1.1); background: #f0f8ff; }
+.btn-cancel { color: red; border-color: #ffcccc; }
+.btn-cancel:hover { background: #ffebee; }
+
 .vacio { text-align: center; padding: 20px; color: #aaa; font-style: italic; }
 .loading-overlay { position: absolute; top: 50px; left: 0; width: 100%; text-align: center; background: rgba(255,255,255,0.8); padding: 20px; color: #3498db; font-weight: bold; }
 .error-msg { text-align: center; padding: 10px; color: #e74c3c; background: #fadbd8; margin-bottom: 10px; border-radius: 4px; }

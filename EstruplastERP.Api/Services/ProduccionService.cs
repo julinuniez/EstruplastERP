@@ -136,8 +136,8 @@ namespace EstruplastERP.Api.Services
             return new { posible = true, mensaje = "✅ Stock Disponible." };
         }
 
-        // --- REGISTRO DE ORDEN ---
-        public async Task<OrdenProduccion> RegistrarOrden(NuevaOrdenDto request)
+        // --- REGISTRO DE ORDEN (SIN DESCONTAR STOCK) ---
+        public async Task<OrdenProduccion> RegistrarOrden(NuevaOrdenDto request, bool hayStock)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
@@ -152,12 +152,10 @@ namespace EstruplastERP.Api.Services
                     ClienteId = request.ClienteId,
                     NumeroPedidoCliente = request.NumeroPedidoCliente,
                     NotaPedido = request.NotaPedido,
-                    EmpleadoId = request.EmpleadoId,
                     Cantidad = request.Cantidad,
                     KilosEstimados = request.Kilos,
-                    Turno = request.Turno,
                     Observacion = request.Observacion,
-                    Estado = EstadoOrden.Pendiente,
+                    Estado = hayStock ? EstadoOrden.Pendiente : EstadoOrden.EnCola,
                     Largo = request.Largo,
                     Ancho = request.Ancho,
                     Espesor = request.Espesor,
@@ -176,10 +174,8 @@ namespace EstruplastERP.Api.Services
                     }).ToList();
                 }
 
-                // 1. EXPLOTAR FÓRMULAS
                 consumosCalculados = await ExplosionarRecetasAsync(consumosCalculados);
 
-                // 2. APLICAR SUSTITUCIÓN
                 if (request.ClienteId.GetValueOrDefault() > 0)
                 {
                     consumosCalculados = await AplicarSustitucionFazon(request.ClienteId.Value, consumosCalculados);
@@ -187,41 +183,18 @@ namespace EstruplastERP.Api.Services
 
                 if (consumosCalculados.Any())
                 {
-                    var idsInsumos = consumosCalculados.Select(c => c.MateriaPrimaId).ToList();
-                    var inventarioInsumos = await _context.Productos.Where(p => idsInsumos.Contains(p.Id)).ToListAsync();
-
+                    // SOLO GUARDAMOS LOS CONSUMOS PROYECTADOS, YA NO SE RESTA STOCK ACÁ
                     foreach (var item in consumosCalculados)
                     {
-                        var mp = inventarioInsumos.FirstOrDefault(p => p.Id == item.MateriaPrimaId);
-                        if (mp == null) throw new Exception($"Insumo ID {item.MateriaPrimaId} no encontrado");
-
-                        mp.StockActual -= item.CantidadKilos;
-
                         nuevaOrden.Consumos.Add(new ConsumoOrden
                         {
-                            MateriaPrimaId = mp.Id,
+                            MateriaPrimaId = item.MateriaPrimaId,
                             CantidadKilos = item.CantidadKilos
-                        });
-
-                        _context.Movimientos.Add(new Movimiento
-                        {
-                            Fecha = DateTime.Now,
-                            ProductoId = mp.Id,
-                            Cantidad = -item.CantidadKilos,
-                            TipoMovimiento = "CONSUMO",
-                            Observacion = "Orden Producción (Pendiente)",
-                            EmpleadoId = request.EmpleadoId,
-                            Turno = request.Turno
                         });
                     }
                 }
 
                 _context.Ordenes.Add(nuevaOrden);
-                await _context.SaveChangesAsync();
-
-                var movsRecientes = _context.Movimientos.Local.Where(m => m.Observacion == "Orden Producción (Pendiente)");
-                foreach (var m in movsRecientes) m.Observacion = $"Orden #{nuevaOrden.Id}";
-
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
