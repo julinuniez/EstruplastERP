@@ -19,7 +19,7 @@ const PORC_ESTEARATO = 0.08;
 interface Producto {
     id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean;
     esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; esScrap?: boolean; rubro?: string;
-    largo: number; ancho: number; espesor: number; pesoEspecifico: number; color?: string;
+    largo: number; ancho: number; espesor: number; color?: string; pesoEspecifico: number;
     receta?: any[]; espesorMinimo?: number; espesorMaximo?: number; clienteId?: number;
     tipoMaterial?: string;
 }
@@ -59,6 +59,7 @@ const mensaje = ref('');
 const error = ref('');
 const idProduccionGenerada = ref(false);
 const ocultarFormula = ref(false);
+const cantidadPalletsUsuario = ref(1);
 
 const emit = defineEmits(['guardado'])
 
@@ -69,17 +70,16 @@ const form = ref({
     notaPedido: '',
     cantidad: 1,
     observacion: '',
-    largo: 0, ancho: 0, espesor: 0,
-    
+    largo: 0, ancho: 0, espesor: 0, color: '' as string,
     conBrillo: false, 
     tipoBrillo: '777',
     porcBrillo: 2.00, 
-    
     llevaFilm: false, tipoCorona: 'Ninguno',
     conEstearato: false, esProductoColor: false, masterbatchId: '' as string | number, colorTexto: '',
     aditivoUV: false, porcentajeUv: 1.00, aditivoCaucho: false, porcentajeCaucho: 1.00,
     aditivoCarga: 0,
-    merma: 8, kilosTotales: 0
+    merma: 8, kilosTotales: 0,
+    esConsolidado: false 
 })
 
 const STORAGE_KEY = 'produccion_borrador';
@@ -273,6 +273,7 @@ const densidadMezcla = computed(() => {
 });
 
 const kilosCalculados = computed(() => {
+    if (form.value.esConsolidado) return Number(form.value.kilosTotales);
     if (!productoSeleccionado.value) return 0;
     const L = (Number(form.value.largo) || 0) / 1000; 
     const A = (Number(form.value.ancho) || 0) / 1000; 
@@ -639,6 +640,7 @@ async function registrarProduccion() {
             largo: Number(form.value.largo),
             ancho: Number(form.value.ancho),
             espesor: Number(form.value.espesor),
+            color: colorFinalParaPDF.value,
             consumos: consumosReales
         });
 
@@ -657,25 +659,72 @@ async function registrarProduccion() {
     }
 }
 
-const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'carga' }) => {
+function calcularEtiquetasPallets(kilosTotales: number, cantidadTotal: number, cantidadPalletsElegida: number) {
+    if (cantidadPalletsElegida <= 1) {
+        return [{ palletNumero: 1, palletTotal: 1, kilos: kilosTotales, laminas: cantidadTotal }];
+    }
+
+    let pallets = [];
+    let laminasRestantes = cantidadTotal;
+    let kilosRestantes = kilosTotales;
+
+    for (let i = 1; i <= cantidadPalletsElegida; i++) {
+        let esUltimoPallet = (i === cantidadPalletsElegida);
+
+        let laminasPallet = esUltimoPallet 
+            ? laminasRestantes 
+            : Math.round(cantidadTotal / cantidadPalletsElegida);
+
+        let kilosPallet = esUltimoPallet 
+            ? kilosRestantes 
+            : Math.round((kilosTotales / cantidadTotal) * laminasPallet);
+
+        pallets.push({
+            palletNumero: i,
+            palletTotal: cantidadPalletsElegida,
+            kilos: kilosPallet,
+            laminas: laminasPallet
+        });
+
+        laminasRestantes -= laminasPallet;
+        kilosRestantes -= kilosPallet;
+    }
+
+    return pallets;
+}
+
+const imprimirDesdeHistorial = async (payload: { orden: any, tipo: string }) => {
     const { orden, tipo } = payload;
-    if (!confirm(`¿Reimprimir ${tipo.toUpperCase()} de la Orden #${orden.id}?`)) return;
+    const isConsolidado = tipo === 'carga-consolidada';
+    const tituloAlerta = isConsolidado ? 'LOTE MÚLTIPLE' : tipo.toUpperCase();
+    
+    if (!confirm(`¿Reimprimir ${tituloAlerta} de la Orden #${orden.id}?`)) return;
 
     try {
         loading.value = true;
         
+        form.value.esConsolidado = isConsolidado;
         form.value.observacion = orden.observacion || '';
         form.value.cantidad = orden.cantidad;
-        const mermaOrden = Number(orden?.merma ?? form.value.merma ?? 0) || 0;
-        form.value.merma = mermaOrden;
-        const factor = 1 + (mermaOrden / 100);
-        const kilosBrutos = Number(orden?.kilos) || 0;
-        form.value.kilosTotales = factor > 0 ? Number((kilosBrutos / factor).toFixed(4)) : 0;
-
-        form.value.notaPedido = String(orden?.id ?? '');
         
-        form.value.clienteId = orden.clienteId;
-        form.value.productoTerminadoId = orden.productoId; 
+        const mermaOrden = Number(orden?.merma ?? form.value.merma ?? 0) || 0;
+        form.value.merma = isConsolidado ? 0 : mermaOrden;
+        
+        const kilosBrutos = Number(orden?.kilos) || 0;
+        const factor = 1 + (mermaOrden / 100);
+        
+        form.value.kilosTotales = isConsolidado ? kilosBrutos : (factor > 0 ? Number((kilosBrutos / factor).toFixed(4)) : 0);
+
+        form.value.notaPedido = String(orden?.notaPedido ?? orden?.id ?? '');
+        form.value.numeroPedidoCliente = orden?.numeroPedidoCliente || '';
+        form.value.clienteId = orden.clienteId || '';
+
+        // 1. CARGAMOS EL PRODUCTO PARA TRAER EL COLOR ORIGINAL
+        if (!isConsolidado && orden.productoId) {
+            await CargarDatosProductos(orden.productoId);
+        }
+
+        form.value.productoTerminadoId = orden.productoId || ''; 
 
         if (orden.consumos && Array.isArray(orden.consumos)) {
             recetaDinamica.value = orden.consumos.map((c: any) => {
@@ -684,15 +733,15 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
                 const esColor = c.materiaPrimaId === ID_MASTERBATCH_GENERICO || 
                                 (c.nombreMateriaPrima && c.nombreMateriaPrima.toUpperCase().includes('MASTER'));
                 
-                const porcentajeCalc = c.cantidadKilos && kilosBrutos > 0
-                    ? ((c.cantidadKilos / kilosBrutos) * 100).toFixed(2)
-                    : 0;
+                const valorCantidad = isConsolidado 
+                    ? c.cantidadKilos 
+                    : (c.cantidadKilos && kilosBrutos > 0 ? ((c.cantidadKilos / kilosBrutos) * 100).toFixed(2) : 0);
 
                 return {
                     id: Date.now() + Math.random(),
                     materiaPrimaId: c.materiaPrimaId,
                     nombreInsumo: c.nombreMateriaPrima || mpOriginal?.nombre || 'Insumo Histórico',
-                    cantidad: porcentajeCalc, 
+                    cantidad: valorCantidad, 
                     densidad: mpOriginal ? mpOriginal.pesoEspecifico : 1,
                     esEstearato: esEstearato,
                     esColor: esColor,
@@ -701,18 +750,22 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
             });
         }
 
+        // 2. MAGIA ANTIBUGS: Esperamos 1.5 segundos para asegurarnos de que la recarga 
+        // automática no nos pise las variables, y recién ahí inyectamos las medidas exactas.
         setTimeout(async () => {
             if (orden.largo) form.value.largo = orden.largo;
             if (orden.ancho) form.value.ancho = orden.ancho;
             if (orden.espesor) form.value.espesor = orden.espesor;
-            
+            form.value.colorTexto = orden.color || '';
+
             await nextTick();
-            await new Promise(r => setTimeout(r, 200)); 
-            await generarPDF(tipo);
+            await generarPDF(tipo as any);
             
-            mensaje.value = `✅ Reimpresión Orden #${orden.id} generada.`;
+            mensaje.value = `✅ Reimpresión ${tituloAlerta} generada.`;
             loading.value = false;
-        }, 600);
+            
+            setTimeout(() => { form.value.esConsolidado = false; }, 1000);
+        }, 1500);
 
     } catch (e) {
         console.error(e);
@@ -721,21 +774,57 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: 'orden' | 'ca
     }
 };
 
-async function generarPDF(tipo: 'orden' | 'carga') {
+async function generarPDF(tipo: 'orden' | 'carga' | 'carga-consolidada') {
     ocultarFormula.value = (tipo === 'orden');
-    await nextTick();
-    await new Promise(r => setTimeout(r, 100));
-    
-    const elemento = document.getElementById('hoja-de-impresion');
-    if (elemento) {
-        await html2pdf().set({
-            margin: 0,
-            filename: `Doc_${Date.now()}.pdf`,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 },
-            jsPDF: { unit: 'mm', format: 'a4' }
-        }).from(elemento).save();
+
+    if (tipo === 'orden' && form.value.kilosTotales > 1000 && cantidadPalletsUsuario.value > 1) {
+        const tickets = calcularEtiquetasPallets(form.value.kilosTotales, form.value.cantidad, cantidadPalletsUsuario.value);
+        const originalKilos = form.value.kilosTotales;
+        const originalCantidad = form.value.cantidad;
+        const originalObs = form.value.observacion;
+
+        for (const ticket of tickets) {
+            form.value.kilosTotales = ticket.kilos;
+            form.value.cantidad = ticket.laminas;
+            form.value.observacion = originalObs 
+                ? `${originalObs} | [PALLET ${ticket.palletNumero} DE ${ticket.palletTotal}]` 
+                : `[PALLET ${ticket.palletNumero} DE ${ticket.palletTotal}]`;
+
+            await nextTick();
+            await new Promise(r => setTimeout(r, 400));
+
+            const elemento = document.getElementById('hoja-de-impresion');
+            if (elemento) {
+                await html2pdf().set({
+                    margin: 0,
+                    filename: `Orden_${form.value.notaPedido}_P${ticket.palletNumero}_${Date.now()}.pdf`,
+                    image: { type: 'jpeg', quality: 0.75 },
+                    html2canvas: { scale: 2 },
+                    jsPDF: { unit: 'mm', format: 'a4' }
+                }).from(elemento).save();
+            }
+        }
+
+        form.value.kilosTotales = originalKilos;
+        form.value.cantidad = originalCantidad;
+        form.value.observacion = originalObs;
+
+    } else {
+        await nextTick();
+        await new Promise(r => setTimeout(r, 200));
+        
+        const elemento = document.getElementById('hoja-de-impresion');
+        if (elemento) {
+            await html2pdf().set({
+                margin: 0,
+                filename: `Doc_${Date.now()}.pdf`,
+                image: { type: 'jpeg', quality: 0.70 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'mm', format: 'a4' }
+            }).from(elemento).save();
+        }
     }
+
     ocultarFormula.value = false;
 }
 
@@ -752,6 +841,7 @@ watch(() => form.value.clienteId, async (nuevoCli) => {
 });
 
 watch(() => form.value.productoTerminadoId, (v) => {
+    if (form.value.esConsolidado) return;
     if (v) CargarDatosProductos(Number(v));
     else recetaDinamica.value = [];
 });
@@ -769,8 +859,175 @@ watch(
 
 watch(() => form.value.espesor, (v) => { if (v < 1) form.value.conBrillo = false; });
 watch(() => form.value.conBrillo, (v) => { if (!v) form.value.llevaFilm = false; });
-watch(kilosCalculados, (v) => form.value.kilosTotales = v, { immediate: true });
 
+watch(kilosCalculados, (v) => {
+    if (!form.value.esConsolidado) {
+        form.value.kilosTotales = v;
+    }
+}, { immediate: true });
+
+watch(() => form.value.kilosTotales, (v) => {
+    if (v > 1000) {
+        cantidadPalletsUsuario.value = Math.ceil(v / 1000);
+    } else {
+        cantidadPalletsUsuario.value = 1;
+    }
+});
+const imprimirLoteOPsDesdeHistorial = async (ordenesArray: any[]) => {
+    if (!confirm(`¿Generar un PDF unificado con las ${ordenesArray.length} Órdenes de Producción?\n\n(No toques nada en la pantalla mientras procesa)`)) return;
+
+    try {
+        mensaje.value = `⏳ Construyendo ${ordenesArray.length} páginas. Por favor, espere...`;
+        ocultarFormula.value = true; 
+        window.scrollTo(0, 0);
+
+        // 1. Buscamos la hoja original y a su "padre" en el HTML
+        const elementoOriginal = document.getElementById('hoja-de-impresion');
+        if (!elementoOriginal || !elementoOriginal.parentNode) throw new Error("No se encontró la hoja base");
+
+        // 2. Contenedor temporal (SIN posiciones raras, pegado directo al DOM normal)
+        const contenedorTemporal = document.createElement('div');
+        contenedorTemporal.id = 'temp-pdf-wrapper';
+        contenedorTemporal.style.width = '210mm'; 
+        contenedorTemporal.style.backgroundColor = '#ffffff';
+        
+        // Lo insertamos justo después de tu hoja original
+        elementoOriginal.parentNode.insertBefore(contenedorTemporal, elementoOriginal.nextSibling);
+
+        for (let i = 0; i < ordenesArray.length; i++) {
+            const orden = ordenesArray[i];
+
+            // Cargar datos en el formulario Vue
+            form.value.esConsolidado = false;
+            form.value.observacion = orden.observacion || '';
+            form.value.cantidad = orden.cantidad;
+            const mermaOrden = Number(orden?.merma ?? form.value.merma ?? 0) || 0;
+            form.value.merma = mermaOrden;
+            
+            const kilosBrutos = Number(orden?.kilos) || 0;
+            const factor = 1 + (mermaOrden / 100);
+            form.value.kilosTotales = factor > 0 ? Number((kilosBrutos / factor).toFixed(4)) : 0;
+            form.value.notaPedido = String(orden?.notaPedido ?? orden?.id ?? '');
+            form.value.numeroPedidoCliente = orden?.numeroPedidoCliente || '';
+            form.value.clienteId = orden.clienteId || '';
+
+            if (orden.productoId) await CargarDatosProductos(orden.productoId);
+            form.value.productoTerminadoId = orden.productoId || ''; 
+
+            if (orden.consumos && Array.isArray(orden.consumos)) {
+                recetaDinamica.value = orden.consumos.map((c: any) => {
+                    const mpOriginal = listaTodasMateriasPrimas.value.find((m: any) => m.id === c.materiaPrimaId);
+                    
+                    // 🚨 RECUPERAMOS LA DETECCIÓN DE COLOR Y ESTEARATO
+                    const nombreMayus = (c.nombreMateriaPrima || mpOriginal?.nombre || '').toUpperCase();
+                    // Si el nombre dice "MASTER" o "COLOR", le avisamos al sistema que es el color
+                    const esColor = nombreMayus.includes('MASTER') || nombreMayus.includes('COLOR');
+                    const esEstearato = nombreMayus.includes('ESTEARATO');
+
+                    return {
+                        id: Date.now() + Math.random(),
+                        materiaPrimaId: c.materiaPrimaId,
+                        nombreInsumo: c.nombreMateriaPrima || mpOriginal?.nombre || 'Insumo',
+                        cantidad: (c.cantidadKilos && kilosBrutos > 0 ? ((c.cantidadKilos / kilosBrutos) * 100).toFixed(2) : 0), 
+                        densidad: mpOriginal ? mpOriginal.pesoEspecifico : 1,
+                        esEstearato: esEstearato, // <-- Y ESTO TAMBIÉN
+                        esBase: false 
+                    };
+                });
+            }
+
+            // Dejar que Vue pinte los datos reales
+            await new Promise(r => setTimeout(r, 1000)); 
+            form.value.largo = orden.largo;
+            form.value.ancho = orden.ancho;
+            form.value.espesor = orden.espesor;
+            form.value.color = orden.color || '';
+            await nextTick();
+            await new Promise(r => setTimeout(r, 400)); 
+
+            // CLONAR LA HOJA
+            const clon = elementoOriginal.cloneNode(true) as HTMLElement;
+            clon.removeAttribute('id'); 
+            clon.style.display = 'block';
+
+            // 🚨 TRUCO MAESTRO: Transformamos los inputs en texto puro
+            // para que html2canvas no colapse tratando de renderizar etiquetas <input>
+            const clonedInputs = clon.querySelectorAll('input, textarea');
+            const originalInputs = elementoOriginal.querySelectorAll('input, textarea');
+            
+            clonedInputs.forEach((clonedInput: any, index) => {
+                const valorReal = (originalInputs[index] as HTMLInputElement).value;
+                const spanEstatico = document.createElement('span');
+                spanEstatico.innerText = valorReal;
+                spanEstatico.style.fontWeight = 'bold';
+                spanEstatico.style.fontSize = '12px';
+                spanEstatico.style.display = 'inline-block';
+                // Reemplazamos el <input> por el <span>
+                if (clonedInput.parentNode) {
+                    clonedInput.parentNode.replaceChild(spanEstatico, clonedInput);
+                }
+            });
+
+            // Armar la página BLINDADA a tamaño A4 estricto
+            const hojaWrapper = document.createElement('div');
+            hojaWrapper.style.width = '210mm';
+            hojaWrapper.style.height = '296mm'; // 🚨 CLAVE: 1mm menos que el A4 real para que no rebalse
+            hojaWrapper.style.overflow = 'hidden'; // 🚨 CLAVE: Si sobra 1 pixel invisible, lo corta y lo oculta
+            hojaWrapper.style.boxSizing = 'border-box';
+            hojaWrapper.style.position = 'relative';
+            hojaWrapper.appendChild(clon);
+
+            // Inyectar el salto oficial si no es la última hoja
+            if (i < ordenesArray.length - 1) {
+                const salto = document.createElement('div');
+                salto.className = 'html2pdf__page-break';
+                hojaWrapper.appendChild(salto);
+            }
+
+            contenedorTemporal.appendChild(hojaWrapper);
+
+            // Inyectar el salto oficial si no es la última hoja
+            if (i < ordenesArray.length - 1) {
+                const salto = document.createElement('div');
+                salto.className = 'html2pdf__page-break';
+                hojaWrapper.appendChild(salto);
+            }
+
+            contenedorTemporal.appendChild(hojaWrapper);
+        }
+
+        mensaje.value = "⏳ Guardando el archivo PDF...";
+        await new Promise(r => setTimeout(r, 500)); 
+
+        // 3. MOMENTO CLAVE: Ocultamos tu hoja real para que no estorbe en la "foto"
+        const displayOriginal = elementoOriginal.style.display;
+        elementoOriginal.style.display = 'none';
+
+        // 4. Configuración del PDF
+        const opt: any = {
+            margin: 0,
+            filename: `Lote_OP_x${ordenesArray.length}_${Date.now()}.pdf`,
+            image: { type: 'jpeg', quality: 0.70 }, 
+            html2canvas: { scale: 2, useCORS: true, scrollY: 0 }, 
+            pagebreak: { mode: 'css' },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        await html2pdf().set(opt).from(contenedorTemporal).save();
+
+        // 5. RESTAURAMOS TODO a la normalidad
+        elementoOriginal.style.display = displayOriginal;
+        contenedorTemporal.remove();
+
+        mensaje.value = `✅ Archivo unificado de ${ordenesArray.length} OPs generado con éxito.`;
+
+    } catch (e) {
+        console.error("Error crítico en impresión múltiple:", e);
+        error.value = "Error al generar el lote de impresión.";
+    } finally {
+        ocultarFormula.value = false;
+    }
+};
 onMounted(async () => {
     try {
         loading.value = true;
@@ -794,9 +1051,22 @@ onMounted(async () => {
                 const unDia = 24 * 60 * 60 * 1000;
                 if (Date.now() - datos.timestamp < unDia) {
                     if (confirm("📝 Encontré un trabajo sin terminar. ¿Quieres recuperarlo?")) {
+                        
                         Object.assign(form.value, datos.form);
                         recetaDinamica.value = datos.receta;
-                        nextTick(() => { mensaje.value = "📝 Datos recuperados de la memoria."; });
+                        
+                        setTimeout(() => {
+                            form.value.largo = datos.form.largo;
+                            form.value.ancho = datos.form.ancho;
+                            form.value.espesor = datos.form.espesor;
+                            form.value.cantidad = datos.form.cantidad;
+                            form.value.observacion = datos.form.observacion;
+                            form.value.kilosTotales = datos.form.kilosTotales;
+                            form.value.colorTexto = datos.form.colorTexto || '';
+                                
+                            mensaje.value = "📝 Datos y medidas recuperados con éxito.";
+                        }, 1500);
+
                     } else {
                         limpiarBorrador();
                     }
@@ -1001,6 +1271,12 @@ onMounted(async () => {
                 <span v-else>💾 GUARDAR ORDEN LISTA</span>
             </button>
 
+            <div v-if="idProduccionGenerada && form.kilosTotales > 1000" class="alerta-pallets">
+                <p style="margin: 0 0 10px 0; font-weight: bold; font-size: 13px;">⚠️ Pedido de {{ form.kilosTotales }} kg.</p>
+                <label style="color: #856404; display: inline-block; margin: 0;">¿Dividir en cuántos pallets?</label>
+                <input type="number" v-model.number="cantidadPalletsUsuario" min="1" style="width: 60px; display: inline-block; margin-left: 10px; border: 1px solid #ffeeba; background: white; color: black; padding: 4px;">
+            </div>
+
             <div v-if="idProduccionGenerada" class="grupo-botones-pdf">
                 <button class="btn-imprimir btn-orden" @click="generarPDF('orden')">📄 Orden</button>
                 <button class="btn-imprimir btn-carga" @click="generarPDF('carga')">🧪 Carga</button>
@@ -1012,7 +1288,12 @@ onMounted(async () => {
     </div>
 
     <div class="bloque-inferior">
-        <ListaProduccion ref="listaProduccionRef" @imprimir-historial="imprimirDesdeHistorial" />
+        <ListaProduccion 
+    ref="listaProduccionRef" 
+    @imprimir-historial="imprimirDesdeHistorial" 
+    @imprimir-carga-consolidada="imprimirDesdeHistorial" 
+    @imprimir-lote-op="imprimirLoteOPsDesdeHistorial"
+/>
     </div>
 
   </div>
@@ -1122,6 +1403,15 @@ select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; 
     font-weight: bold;
     color: #2c3e50;
     border: 2px solid #2ecc71;
+}
+
+.alerta-pallets {
+    background-color: #fff3cd;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 15px;
+    color: #856404;
+    border: 1px solid #ffeeba;
 }
 
 @media (max-width: 1000px) { 

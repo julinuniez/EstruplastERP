@@ -31,6 +31,7 @@ namespace EstruplastERP.Core
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal Espesor { get; set; }
+        public string? Color { get; set; }
 
         public int? ClienteId { get; set; }
         [ForeignKey("ClienteId")]

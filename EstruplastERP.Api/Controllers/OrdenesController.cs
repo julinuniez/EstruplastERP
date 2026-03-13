@@ -25,6 +25,7 @@ namespace EstruplastERP.Api.Controllers
         {
             var lista = await _context.Ordenes
                 .Include(o => o.Producto)
+                .Include(o => o.Cliente) // <-- Cruce con Cliente
                 .Include(o => o.Consumos).ThenInclude(c => c.MateriaPrima)
                 .OrderByDescending(o => o.FechaCreacion)
                 .Take(50)
@@ -36,10 +37,15 @@ namespace EstruplastERP.Api.Controllers
                     ProductoId = o.ProductoId,
                     NotaPedido = o.NotaPedido,
                     ClienteId = o.ClienteId,
+
+                    // LÍNEA MÁGICA: Mapeamos la Razón Social para que viaje al Frontend
+                    ClienteNombre = o.Cliente != null ? o.Cliente.RazonSocial : "Desconocido",
+
                     Observacion = o.Observacion,
                     o.Largo,
                     o.Ancho,
                     o.Espesor,
+                    o.Color,
                     o.Cantidad,
                     Kilos = o.KilosEstimados,
                     Estado = o.Estado.ToString(),
@@ -58,37 +64,54 @@ namespace EstruplastERP.Api.Controllers
         [HttpPost("activar/{id}")]
         public async Task<IActionResult> ActivarOrden(int id)
         {
-            var orden = await _context.Ordenes
-                .Include(o => o.Consumos)
-                .FirstOrDefaultAsync(o => o.Id == id);
-
-            if (orden == null)
-                return NotFound(new { mensaje = "Orden no encontrada." });
-
-            if (orden.Estado != EstadoOrden.EnCola)
-                return BadRequest(new { mensaje = "Solo las órdenes 'En Cola' pueden ser enviadas a producción." });
-
-            var faltantes = new List<string>();
-            foreach (var consumo in orden.Consumos)
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
-                if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
+                var orden = await _context.Ordenes.Include(o => o.Consumos).FirstOrDefaultAsync(o => o.Id == id);
+                if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
+                if (orden.Estado != EstadoOrden.EnCola) return BadRequest(new { mensaje = "Solo las órdenes 'En Cola' pueden ser enviadas a producción." });
+
+                var faltantes = new List<string>();
+                foreach (var consumo in orden.Consumos)
                 {
-                    if (mp.StockActual < consumo.CantidadKilos)
+                    var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
+                    if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
                     {
-                        faltantes.Add($"- {mp.Nombre}: Faltan {(consumo.CantidadKilos - mp.StockActual):N2} kg");
+                        if (mp.StockActual < consumo.CantidadKilos)
+                            faltantes.Add($"- {mp.Nombre}: Faltan {(consumo.CantidadKilos - mp.StockActual):N2} kg");
                     }
                 }
-            }
+                if (faltantes.Any()) return BadRequest(new { mensaje = "Faltan materiales:\n" + string.Join("\n", faltantes) });
 
-            if (faltantes.Any())
+                foreach (var consumo in orden.Consumos)
+                {
+                    var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
+                    if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
+                    {
+                        mp.StockActual -= consumo.CantidadKilos;
+                        _context.Movimientos.Add(new Movimiento
+                        {
+                            Fecha = DateTime.Now,
+                            ProductoId = mp.Id,
+                            Cantidad = -consumo.CantidadKilos,
+                            TipoMovimiento = "CONSUMO",
+                            Observacion = $"Reserva Orden #{id}",
+                            ClienteId = orden.ClienteId
+                        });
+                    }
+                }
+
+                orden.Estado = EstadoOrden.Pendiente;
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { mensaje = "Materia prima reservada. Orden en Máquina." });
+            }
+            catch (Exception ex)
             {
-                return BadRequest(new { mensaje = "Faltan materiales:\n" + string.Join("\n", faltantes) });
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { mensaje = $"Error al activar: {ex.Message}" });
             }
-
-            orden.Estado = EstadoOrden.Pendiente;
-            await _context.SaveChangesAsync();
-            return Ok(new { mensaje = "Hay stock. Orden enviada a Máquina." });
         }
 
         [HttpPost]
@@ -118,92 +141,87 @@ namespace EstruplastERP.Api.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { mensaje = $"Error al crear orden: {ex.Message}" });
+                string errorReal = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+
+                return BadRequest(new { mensaje = $"Error exacto de SQL: {errorReal}" });
             }
         }
 
         [HttpPost("confirmar/{id}")]
         public async Task<IActionResult> ConfirmarOrden(int id)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            var orden = await _context.Ordenes.Include(o => o.Producto).FirstOrDefaultAsync(o => o.Id == id);
+
+            if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
+            if (orden.Estado == EstadoOrden.Finalizada) return BadRequest(new { mensaje = "Esta orden ya fue finalizada." });
+
+            if (orden.Producto != null)
             {
-                var orden = await _context.Ordenes
-                    .Include(o => o.Producto)
-                    .Include(o => o.Consumos)
-                    .FirstOrDefaultAsync(o => o.Id == id);
+                orden.Producto.StockActual += orden.KilosEstimados;
 
-                if (orden == null)
-                    return NotFound(new { mensaje = "Orden no encontrada." });
-
-                if (orden.Estado == EstadoOrden.Finalizada)
-                    return BadRequest(new { mensaje = "Esta orden ya fue finalizada." });
-
-                foreach (var consumo in orden.Consumos)
+                _context.Movimientos.Add(new Movimiento
                 {
-                    var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
-                    if (mp != null)
-                    {
-                        mp.StockActual -= consumo.CantidadKilos;
-
-                        _context.Movimientos.Add(new Movimiento
-                        {
-                            Fecha = DateTime.Now,
-                            ProductoId = mp.Id,
-                            Cantidad = -consumo.CantidadKilos,
-                            TipoMovimiento = "CONSUMO",
-                            Observacion = $"Fabricación Orden #{id}",
-                            ClienteId = orden.ClienteId
-                        });
-                    }
-                }
-
-                if (orden.Producto != null)
-                {
-                    orden.Producto.StockActual += orden.KilosEstimados;
-
-                    _context.Movimientos.Add(new Movimiento
-                    {
-                        Fecha = DateTime.Now,
-                        ProductoId = orden.ProductoId,
-                        Cantidad = orden.KilosEstimados,
-                        TipoMovimiento = "PRODUCCION_TERMINADA",
-                        Observacion = $"Cierre Orden #{id}",
-                        ClienteId = orden.ClienteId
-                    });
-                }
-
-                orden.Estado = EstadoOrden.Finalizada;
-                orden.FechaFin = DateTime.Now;
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return Ok(new { mensaje = "Producción confirmada. Inventario actualizado." });
+                    Fecha = DateTime.Now,
+                    ProductoId = orden.ProductoId,
+                    Cantidad = orden.KilosEstimados,
+                    TipoMovimiento = "PRODUCCION_TERMINADA",
+                    Observacion = $"Cierre Orden #{id}",
+                    ClienteId = orden.ClienteId
+                });
             }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                return StatusCode(500, new { mensaje = $"Error al confirmar la orden: {ex.Message}" });
-            }
+
+            orden.Estado = EstadoOrden.Finalizada;
+            orden.FechaFin = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { mensaje = "Producción confirmada. PT sumado al inventario." });
         }
 
         [HttpPost("cancelar/{id}")]
         public async Task<IActionResult> CancelarOrden(int id)
         {
-            var orden = await _context.Ordenes.FindAsync(id);
-            if (orden == null)
-                return NotFound(new { mensaje = "Orden no encontrada." });
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var orden = await _context.Ordenes.Include(o => o.Consumos).FirstOrDefaultAsync(o => o.Id == id);
+                if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
+                if (orden.Estado == EstadoOrden.Finalizada) return BadRequest(new { mensaje = "No se puede cancelar una orden que ya fue finalizada." });
 
-            if (orden.Estado == EstadoOrden.Finalizada)
-                return BadRequest(new { mensaje = "No se puede cancelar una orden que ya fue finalizada." });
+                if (orden.Estado == EstadoOrden.Pendiente || orden.Estado == EstadoOrden.EnProceso)
+                {
+                    foreach (var consumo in orden.Consumos)
+                    {
+                        var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
+                        if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
+                        {
+                            mp.StockActual += consumo.CantidadKilos;
 
-            orden.Estado = EstadoOrden.Cancelada;
-            orden.FechaFin = DateTime.Now;
+                            _context.Movimientos.Add(new Movimiento
+                            {
+                                Fecha = DateTime.Now,
+                                ProductoId = mp.Id,
+                                Cantidad = consumo.CantidadKilos,
+                                TipoMovimiento = "DEVOLUCION",
+                                Observacion = $"Cancelación Orden #{id} (Restitución)",
+                                ClienteId = orden.ClienteId
+                            });
+                        }
+                    }
+                }
 
-            await _context.SaveChangesAsync();
+                orden.Estado = EstadoOrden.Cancelada;
+                orden.FechaFin = DateTime.Now;
 
-            return Ok(new { mensaje = "Orden cancelada correctamente." });
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { mensaje = "Orden cancelada correctamente." });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { mensaje = $"Error al cancelar: {ex.Message}" });
+            }
         }
 
         [HttpGet]

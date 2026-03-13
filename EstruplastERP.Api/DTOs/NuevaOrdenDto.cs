@@ -10,6 +10,7 @@
         public decimal Largo { get; set; }
         public decimal Ancho { get; set; }
         public decimal Espesor { get; set; }
+        public string? Color { get; set; }
         public decimal Kilos { get; set; }
         public string? Observacion { get; set; }
         public List<DetalleConsumoDto> Consumos { get; set; } = new List<DetalleConsumoDto>();

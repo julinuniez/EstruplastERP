@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using EstruplastERP.Data;
 using EstruplastERP.Core;
+using System.Globalization;
 
 namespace EstruplastERP.Controllers
 {
@@ -19,66 +20,119 @@ namespace EstruplastERP.Controllers
         [HttpGet("resumen-mensual")]
         public async Task<IActionResult> GetResumenMensual()
         {
-            // Filtramos órdenes NO canceladas del último año
             var fechaLimite = DateTime.Now.AddMonths(-12);
 
-            // NOTA: Entity Framework a veces no puede traducir agrupaciones complejas de fechas a SQL directo.
-            // Traemos los datos mínimos necesarios a memoria y agrupamos ahí (seguro y rápido para volúmenes moderados).
             var ordenesRaw = await _context.Ordenes
-                .Where(o => o.FechaCreacion >= fechaLimite && o.Estado != EstadoOrden.Cancelada)
-                .Select(o => new { o.FechaCreacion, o.KilosEstimados })
+                .Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null && o.FechaFin >= fechaLimite)
+                .Select(o => new { FechaFin = o.FechaFin.Value, o.KilosEstimados })
                 .ToListAsync();
 
             var datos = ordenesRaw
-                .GroupBy(o => new { o.FechaCreacion.Year, o.FechaCreacion.Month })
+                .GroupBy(o => new { o.FechaFin.Year, o.FechaFin.Month })
                 .Select(g => new {
-                    Periodo = $"{g.Key.Month:00}/{g.Key.Year}", // Formato MM/YYYY
+                    Periodo = $"{g.Key.Month:00}/{g.Key.Year}",
                     Kilos = g.Sum(x => x.KilosEstimados),
                     CantidadOrdenes = g.Count()
                 })
-                .OrderBy(x => x.Periodo.Substring(3) + x.Periodo.Substring(0, 2)) // Ordenar por YYYYMM string
+                .OrderBy(x => x.Periodo.Substring(3) + x.Periodo.Substring(0, 2))
+                .ToList();
+
+            return Ok(datos);
+        }
+
+        [HttpGet("produccion-semanal")]
+        public async Task<IActionResult> GetProduccionSemanal()
+        {
+            var fechaLimite = DateTime.Today.AddDays(-56);
+
+            var ordenesRaw = await _context.Ordenes
+                .Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null && o.FechaFin >= fechaLimite)
+                .Select(o => new { FechaFin = o.FechaFin.Value, o.KilosEstimados })
+                .ToListAsync();
+
+            var culture = CultureInfo.CurrentCulture;
+
+            var datos = ordenesRaw
+                .GroupBy(o => new {
+                    Year = o.FechaFin.Year,
+                    Week = culture.Calendar.GetWeekOfYear(o.FechaFin, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday)
+                })
+                .Select(g => new {
+                    Periodo = $"Sem {g.Key.Week}",
+                    Anio = g.Key.Year,
+                    NumSemana = g.Key.Week,
+                    Kilos = g.Sum(x => x.KilosEstimados)
+                })
+                .OrderBy(x => x.Anio).ThenBy(x => x.NumSemana)
                 .ToList();
 
             return Ok(datos);
         }
 
         [HttpGet("top-productos")]
-        public async Task<IActionResult> GetTopProductos()
+        public async Task<IActionResult> GetTopProductos([FromQuery] int? mes, [FromQuery] int? anio)
         {
-            // Top 5 productos más fabricados (en Kilos) históricamente o del año
-            var datos = await _context.Ordenes
-                .Where(o => o.Estado != EstadoOrden.Cancelada)
-                .Include(o => o.Producto) // En tu clase OrdenProduccion es 'Producto', no 'ProductoTerminado'
-                .GroupBy(o => o.Producto.Nombre)
-                .Select(g => new {
-                    Producto = g.Key,
-                    TotalKilos = g.Sum(x => x.KilosEstimados) // Corregido: KilosEstimados
-                })
-                .OrderByDescending(x => x.TotalKilos)
-                .Take(5)
-                .ToListAsync();
+            var query = _context.Ordenes.Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null).AsQueryable();
+            if (mes.HasValue && anio.HasValue)
+                query = query.Where(o => o.FechaFin.Value.Month == mes && o.FechaFin.Value.Year == anio);
 
+            var datos = await query.Include(o => o.Producto).GroupBy(o => o.Producto.Nombre)
+                .Select(g => new { Producto = g.Key, TotalKilos = g.Sum(x => x.KilosEstimados) })
+                .OrderByDescending(x => x.TotalKilos).Take(5).ToListAsync();
+            return Ok(datos);
+        }
+
+        [HttpGet("top-materiales")]
+        public async Task<IActionResult> GetTopMateriales([FromQuery] int? mes, [FromQuery] int? anio)
+        {
+            var query = _context.Ordenes.Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null).AsQueryable();
+            if (mes.HasValue && anio.HasValue)
+                query = query.Where(o => o.FechaFin.Value.Month == mes && o.FechaFin.Value.Year == anio);
+
+            var datos = await query.SelectMany(o => o.Consumos).Where(c => c.MateriaPrimaId < 990 || c.MateriaPrimaId > 999)
+                .GroupBy(c => c.MateriaPrima.Nombre)
+                .Select(g => new { Material = g.Key, TotalKilos = g.Sum(c => c.CantidadKilos) })
+                .OrderByDescending(x => x.TotalKilos).Take(5).ToListAsync();
+            return Ok(datos);
+        }
+
+        [HttpGet("top-clientes")]
+        public async Task<IActionResult> GetTopClientes([FromQuery] int? mes, [FromQuery] int? anio)
+        {
+            var query = _context.Ordenes.Where(o => o.Estado == EstadoOrden.Finalizada && o.ClienteId != null && o.FechaFin != null).AsQueryable();
+            if (mes.HasValue && anio.HasValue)
+                query = query.Where(o => o.FechaFin.Value.Month == mes && o.FechaFin.Value.Year == anio);
+
+            var datos = await query.Include(o => o.Cliente).GroupBy(o => o.Cliente.RazonSocial)
+                .Select(g => new { Cliente = g.Key, TotalKilos = g.Sum(x => x.KilosEstimados) })
+                .OrderByDescending(x => x.TotalKilos).Take(7).ToListAsync();
             return Ok(datos);
         }
 
         [HttpGet("resumen-kpis")]
-        public async Task<IActionResult> GetKPIs()
+        public async Task<IActionResult> GetKPIs([FromQuery] int? mes, [FromQuery] int? anio)
         {
-            // Datos rápidos para tarjetas superiores
-            var hoy = DateTime.Today;
-            var primerDiaMes = new DateTime(hoy.Year, hoy.Month, 1);
+            var targetAnio = anio ?? DateTime.Today.Year;
+            var targetMes = mes ?? DateTime.Today.Month;
+
+            var fechaInicio = new DateTime(targetAnio, targetMes, 1);
+            var fechaFin = fechaInicio.AddMonths(1).AddDays(-1);
+
+            var fechaInicioAnt = fechaInicio.AddMonths(-1);
+            var fechaFinAnt = fechaInicio.AddDays(-1);
 
             var kilosMes = await _context.Ordenes
-                .Where(o => o.FechaCreacion >= primerDiaMes && o.Estado != EstadoOrden.Cancelada)
-                .SumAsync(o => o.KilosEstimados);
+                .Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null && o.FechaFin >= fechaInicio && o.FechaFin <= fechaFin)
+                .SumAsync(o => (decimal?)o.KilosEstimados) ?? 0;
 
-            var ordenesPendientes = await _context.Ordenes
-                .CountAsync(o => o.Estado == EstadoOrden.Pendiente || o.Estado == EstadoOrden.EnProceso);
+            var kilosMesAnt = await _context.Ordenes
+                .Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null && o.FechaFin >= fechaInicioAnt && o.FechaFin <= fechaFinAnt)
+                .SumAsync(o => (decimal?)o.KilosEstimados) ?? 0;
 
             return Ok(new
             {
                 ProduccionMes = kilosMes,
-                Pendientes = ordenesPendientes
+                ProduccionMesAnterior = kilosMesAnt
             });
         }
     }

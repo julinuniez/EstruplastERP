@@ -18,29 +18,37 @@ namespace EstruplastERP.Api.Controllers
         }
 
         [HttpGet("inventario-completo")]
-        public async Task<ActionResult<IEnumerable<object>>> GetInventarioCompleto()
+        public async Task<IActionResult> GetInventarioCompleto()
         {
-            var productos = await _context.Productos
-                .Where(p => p.Activo)
-                .OrderBy(p => p.Nombre)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.Nombre,
-                    p.CodigoSku,
-                    p.StockActual,
-                    p.StockMinimo,
-                    p.PesoEspecifico,
-                    p.EsMateriaPrima,
-                    p.EsProductoTerminado,
-                    p.EsFazon,
-                    p.PrecioCosto,
-                    ClienteId = p.ClienteId,
-                    EsScrap = p.EsScrap
-                })
-                .ToListAsync();
+            try
+            {
+                var productos = await _context.Productos
+                    .Where(p => p.Activo)
+                    .OrderBy(p => p.Nombre)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.Nombre,
+                        p.CodigoSku,
+                        p.StockActual,
+                        p.StockMinimo,
+                        p.PesoEspecifico,
+                        p.EsMateriaPrima,
+                        p.EsProductoTerminado,
+                        p.EsFazon,
+                        p.PrecioCosto,
+                        ClienteId = p.ClienteId,
+                        EsScrap = p.EsScrap
+                    })
+                    .ToListAsync();
 
-            return Ok(productos);
+                return Ok(productos);
+            }
+            catch (Exception ex)
+            {
+                string errorReal = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return StatusCode(500, new { mensaje = $"Error de BD: {errorReal}" });
+            }
         }
 
         // ==========================================
@@ -64,43 +72,51 @@ namespace EstruplastERP.Api.Controllers
         }
 
         // ==========================================
-        // 3. GET: TODOS LOS PRODUCTOS (CORREGIDO EL FALLO)
+        // 3. GET: TODOS LOS PRODUCTOS
         // ==========================================
-        // GET: api/Productos?clienteId=5
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<object>>> GetProductos([FromQuery] int? clienteId)
+        public async Task<IActionResult> GetProductos([FromQuery] int? clienteId)
         {
-            var query = _context.Productos
-                .Where(p => p.Activo)
-                .AsQueryable();
-            if (clienteId.HasValue && clienteId.Value > 0)
+            try
             {
-                query = query.Where(p => p.ClienteId == null || p.ClienteId == clienteId);
-            }
+                var query = _context.Productos
+                    .Where(p => p.Activo)
+                    .AsQueryable();
 
-            var productos = await query
-                .OrderBy(p => p.Nombre)
-                .Select(p => new
+                if (clienteId.HasValue && clienteId.Value > 0)
                 {
-                    p.Id,
-                    p.Nombre,
-                    p.CodigoSku,
-                    p.EsProductoTerminado,
-                    p.EsMateriaPrima,
-                    p.EsGenerico,
-                    ClienteId = p.ClienteId,
-                    EsFazonCalculado = p.ClienteId != null,
-                    EsFazon = p.EsFazon, 
-                    EsScrap = p.EsScrap,
-                    p.StockActual,
-                    p.PesoEspecifico,
-                    p.Color,
-                    p.Rubro,
-                    p.PrecioCosto
-                })
-                .ToListAsync();
+                    query = query.Where(p => p.ClienteId == null || p.ClienteId == clienteId);
+                }
 
-            return Ok(productos);
+                var productos = await query
+                    .OrderBy(p => p.Nombre)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.Nombre,
+                        p.CodigoSku,
+                        p.EsProductoTerminado,
+                        p.EsMateriaPrima,
+                        p.EsGenerico,
+                        ClienteId = p.ClienteId,
+                        EsFazonCalculado = p.ClienteId != null,
+                        EsFazon = p.EsFazon,
+                        EsScrap = p.EsScrap,
+                        p.StockActual,
+                        p.PesoEspecifico,
+                        p.Color,
+                        p.Rubro,
+                        p.PrecioCosto
+                    })
+                    .ToListAsync();
+
+                return Ok(productos);
+            }
+            catch (Exception ex)
+            {
+                string errorReal = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return StatusCode(500, new { mensaje = $"Error de BD: {errorReal}" });
+            }
         }
 
         // ==========================================

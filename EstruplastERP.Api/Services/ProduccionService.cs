@@ -14,7 +14,6 @@ namespace EstruplastERP.Api.Services
             _context = context;
         }
 
-        // --- LÓGICA DE EXPLOSIÓN DE RECETAS (BOM RECURSIVO) ---
         private async Task<List<DetalleConsumoDto>> ExplosionarRecetasAsync(List<DetalleConsumoDto> consumosOriginales)
         {
             var consumosFinales = new List<DetalleConsumoDto>();
@@ -61,7 +60,6 @@ namespace EstruplastERP.Api.Services
             return consumosAgrupados;
         }
 
-        // --- LÓGICA DE SUSTITUCIÓN (Intacta) ---
         private async Task<List<DetalleConsumoDto>> AplicarSustitucionFazon(int clienteId, List<DetalleConsumoDto> consumosOriginales)
         {
             var reglas = await _context.ClientesMaterialesFazon
@@ -84,7 +82,6 @@ namespace EstruplastERP.Api.Services
             return consumosFinales;
         }
 
-        // --- VERIFICACIÓN DE STOCK ---
         public async Task<object> VerificarStock(NuevaOrdenDto request)
         {
             List<DetalleConsumoDto> itemsParaVerificar = new List<DetalleConsumoDto>();
@@ -109,10 +106,8 @@ namespace EstruplastERP.Api.Services
                 }).ToList();
             }
 
-            // 1. PRIMERO EXPLOTAMOS LAS PRE-MEZCLAS
             itemsParaVerificar = await ExplosionarRecetasAsync(itemsParaVerificar);
 
-            // 2. LUEGO APLICAMOS SUSTITUCIÓN FAZON (A los materiales base)
             if (request.ClienteId.GetValueOrDefault() > 0)
             {
                 itemsParaVerificar = await AplicarSustitucionFazon(request.ClienteId.Value, itemsParaVerificar);
@@ -136,7 +131,6 @@ namespace EstruplastERP.Api.Services
             return new { posible = true, mensaje = "✅ Stock Disponible." };
         }
 
-        // --- REGISTRO DE ORDEN (SIN DESCONTAR STOCK) ---
         public async Task<OrdenProduccion> RegistrarOrden(NuevaOrdenDto request, bool hayStock)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -158,6 +152,7 @@ namespace EstruplastERP.Api.Services
                     Estado = hayStock ? EstadoOrden.Pendiente : EstadoOrden.EnCola,
                     Largo = request.Largo,
                     Ancho = request.Ancho,
+                    Color = request.Color,
                     Espesor = request.Espesor,
                     Consumos = new List<ConsumoOrden>()
                 };
@@ -183,7 +178,9 @@ namespace EstruplastERP.Api.Services
 
                 if (consumosCalculados.Any())
                 {
-                    // SOLO GUARDAMOS LOS CONSUMOS PROYECTADOS, YA NO SE RESTA STOCK ACÁ
+                    var idsInsumos = consumosCalculados.Select(c => c.MateriaPrimaId).ToList();
+                    var inventarioInsumos = await _context.Productos.Where(p => idsInsumos.Contains(p.Id)).ToListAsync();
+
                     foreach (var item in consumosCalculados)
                     {
                         nuevaOrden.Consumos.Add(new ConsumoOrden
@@ -191,13 +188,38 @@ namespace EstruplastERP.Api.Services
                             MateriaPrimaId = item.MateriaPrimaId,
                             CantidadKilos = item.CantidadKilos
                         });
+
+                        if (hayStock)
+                        {
+                            var mp = inventarioInsumos.FirstOrDefault(p => p.Id == item.MateriaPrimaId);
+                            if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
+                            {
+                                mp.StockActual -= item.CantidadKilos;
+                                _context.Movimientos.Add(new Movimiento
+                                {
+                                    Fecha = DateTime.Now,
+                                    ProductoId = mp.Id,
+                                    Cantidad = -item.CantidadKilos,
+                                    TipoMovimiento = "CONSUMO",
+                                    Observacion = "Reserva Producción",
+                                    ClienteId = request.ClienteId
+                                });
+                            }
+                        }
                     }
                 }
 
                 _context.Ordenes.Add(nuevaOrden);
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
 
+                if (hayStock)
+                {
+                    var movsRecientes = _context.Movimientos.Local.Where(m => m.Observacion == "Reserva Producción");
+                    foreach (var m in movsRecientes) m.Observacion = $"Reserva Orden #{nuevaOrden.Id}";
+                    await _context.SaveChangesAsync();
+                }
+
+                await transaction.CommitAsync();
                 return nuevaOrden;
             }
             catch
@@ -207,7 +229,6 @@ namespace EstruplastERP.Api.Services
             }
         }
 
-        // --- LÓGICA VISUAL ---
         public async Task<List<ItemFormulaVisualDto>> ObtenerRecetaProyectada(int productoId, int clienteId, decimal kilosAProducir)
         {
             var productoTerminado = await _context.Productos.FindAsync(productoId);
@@ -223,24 +244,27 @@ namespace EstruplastERP.Api.Services
                 bool esSustitucion = false;
                 int familiaBuscada = itemReceta.MateriaPrima.FamiliaId ?? 0;
 
-                string nombrePT = productoTerminado.Nombre.ToUpper();
+                if (productoTerminado != null)
+                {
+                    string nombrePT = productoTerminado.Nombre.ToUpper();
 
-                if (familiaBuscada == 10)
-                {
-                    if (nombrePT.Contains("FINO")) familiaBuscada = 11;
-                    else if (nombrePT.Contains("GRUESO")) familiaBuscada = 12;
-                    else if (nombrePT.Contains("BICAPA")) familiaBuscada = 13;
-                    else if (nombrePT.Contains("TRICAPA")) familiaBuscada = 14;
-                }
-                else if (familiaBuscada == 20)
-                {
-                    if (nombrePT.Contains("GRUESO")) familiaBuscada = 21;
-                }
-                else if (familiaBuscada == 30 || familiaBuscada == 40)
-                {
-                    if (nombrePT.Contains("FINO")) familiaBuscada = 31;
-                    else if (nombrePT.Contains("GRUESO")) familiaBuscada = 32;
-                    else if (nombrePT.Contains("BICAPA")) familiaBuscada = 41;
+                    if (familiaBuscada == 10)
+                    {
+                        if (nombrePT.Contains("FINO")) familiaBuscada = 11;
+                        else if (nombrePT.Contains("GRUESO")) familiaBuscada = 12;
+                        else if (nombrePT.Contains("BICAPA")) familiaBuscada = 13;
+                        else if (nombrePT.Contains("TRICAPA")) familiaBuscada = 14;
+                    }
+                    else if (familiaBuscada == 20)
+                    {
+                        if (nombrePT.Contains("GRUESO")) familiaBuscada = 21;
+                    }
+                    else if (familiaBuscada == 30 || familiaBuscada == 40)
+                    {
+                        if (nombrePT.Contains("FINO")) familiaBuscada = 31;
+                        else if (nombrePT.Contains("GRUESO")) familiaBuscada = 32;
+                        else if (nombrePT.Contains("BICAPA")) familiaBuscada = 41;
+                    }
                 }
 
                 var sustituto = materialesCliente.FirstOrDefault(m => m.FamiliaId == familiaBuscada);
