@@ -13,6 +13,11 @@
         public string? Color { get; set; }
         public decimal Kilos { get; set; }
         public string? Observacion { get; set; }
+        public decimal Desperdicio { get; set; } = 8;
+        public bool EsBobina { get; set; } = false;
+        public bool ConBrillo { get; set; }
+        public bool LlevaFilm { get; set; }
+        public string TipoCorona { get; set; } = "Ninguno";
         public List<DetalleConsumoDto> Consumos { get; set; } = new List<DetalleConsumoDto>();
     }
 

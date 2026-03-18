@@ -296,6 +296,8 @@ namespace EstruplastERP.Api.Controllers
             var query = _context.Ordenes
                 .Include(o => o.Producto)
                 .Include(o => o.Cliente)
+                // 🚨 MAGIA 1: Filtramos las canceladas desde SQL. ¡No viajan más al frontend!
+                .Where(o => o.Estado != EstadoOrden.Cancelada)
                 .AsQueryable();
 
             if (clienteId.HasValue && clienteId > 0)
@@ -322,7 +324,17 @@ namespace EstruplastERP.Api.Controllers
                     {
                         o.Id,
                         Producto = o.Producto != null ? o.Producto.Nombre : "Desconocido",
-                        Medidas = $"{o.Ancho}mm x {o.Espesor} micrones",
+                        Medidas = $"{o.Ancho}mm x {o.Espesor} micrones", // Queda por las dudas
+
+                        // 🚨 MAGIA 2: Enviamos las variables reales separadas
+                        Largo = o.Largo,
+                        Ancho = o.Ancho,
+                        Espesor = o.Espesor,
+
+                        // 🚨 MAGIA 3: Detectamos si es bobina en el backend
+                        EsBobina = o.Largo == 0 || (o.Producto != null && o.Producto.Nombre.ToUpper().Contains("BOBINA")),
+                        KilosPorBobina = (o.Largo == 0 && o.Cantidad > 0) ? Math.Round(o.KilosEstimados / o.Cantidad, 2) : 0,
+
                         Estado = o.Estado.ToString(),
                         o.Cantidad
                     }).ToList()

@@ -2,6 +2,10 @@
 using EstruplastERP.Core;
 using EstruplastERP.Data;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace EstruplastERP.Api.Services
 {
@@ -148,12 +152,20 @@ namespace EstruplastERP.Api.Services
                     NotaPedido = request.NotaPedido,
                     Cantidad = request.Cantidad,
                     KilosEstimados = request.Kilos,
+                    Desperdicio = request.Desperdicio,
+                    EsBobina = request.EsBobina,
                     Observacion = request.Observacion,
                     Estado = hayStock ? EstadoOrden.Pendiente : EstadoOrden.EnCola,
                     Largo = request.Largo,
                     Ancho = request.Ancho,
                     Color = request.Color,
                     Espesor = request.Espesor,
+                    
+                    // 🚨 NUEVOS CAMPOS GUARDADOS EN LA BD 
+                    ConBrillo = request.ConBrillo,
+                    LlevaFilm = request.LlevaFilm,
+                    TipoCorona = request.TipoCorona,
+
                     Consumos = new List<ConsumoOrden>()
                 };
 

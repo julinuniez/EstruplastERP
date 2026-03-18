@@ -2,8 +2,8 @@
 import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 import {
-  Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, 
-  BarElement, ArcElement, Title, Tooltip, Legend, Filler
+    Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, 
+    BarElement, ArcElement, Title, Tooltip, Legend, Filler
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'vue-chartjs';
 import packageInfo from '../../package.json';
@@ -41,6 +41,7 @@ const produccionSemanal = ref<any[]>([]);
 const topProductos = ref<any[]>([]);
 const topMateriales = ref<any[]>([]);
 const topClientes = ref<any[]>([]);
+const stockMateriales = ref<any[]>([]); // 🚨 NUEVO: Para guardar el stock actual
 
 const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
@@ -54,13 +55,15 @@ async function cargarDatos() {
     const query = `?mes=${mes}&anio=${anio}`;
 
     try {
-        const [resKpis, resMes, resSemana, resProd, resMat, resClientes] = await Promise.all([
+        // 🚨 Sumamos la llamada a /Productos para traernos el stock en tiempo real
+        const [resKpis, resMes, resSemana, resProd, resMat, resClientes, resInventario] = await Promise.all([
             axios.get(`${apiUrl}/Estadisticas/resumen-kpis${query}`, getAuthConfig()),
-            axios.get(`${apiUrl}/Estadisticas/resumen-mensual`, getAuthConfig()), // Históricos globales
+            axios.get(`${apiUrl}/Estadisticas/resumen-mensual`, getAuthConfig()), 
             axios.get(`${apiUrl}/Estadisticas/produccion-semanal`, getAuthConfig()),
             axios.get(`${apiUrl}/Estadisticas/top-productos${query}`, getAuthConfig()),
             axios.get(`${apiUrl}/Estadisticas/top-materiales${query}`, getAuthConfig()),
-            axios.get(`${apiUrl}/Estadisticas/top-clientes${query}`, getAuthConfig())
+            axios.get(`${apiUrl}/Estadisticas/top-clientes${query}`, getAuthConfig()),
+            axios.get(`${apiUrl}/Productos`, getAuthConfig()) // <-- Trae el catálogo con stock
         ]);
 
         resumenMensual.value = Array.isArray(resMes.data) ? resMes.data : [];
@@ -68,6 +71,13 @@ async function cargarDatos() {
         topProductos.value = Array.isArray(resProd.data) ? resProd.data : [];
         topMateriales.value = Array.isArray(resMat.data) ? resMat.data : [];
         topClientes.value = Array.isArray(resClientes.data) ? resClientes.data : [];
+
+        // 🚨 Procesamos el inventario para quedarnos solo con Materias Primas y ordenarlas por stock
+        const todosLosProductos = Array.isArray(resInventario.data) ? resInventario.data : [];
+        stockMateriales.value = todosLosProductos
+            .filter(p => p.esMateriaPrima)
+            .sort((a, b) => (b.stockActual || 0) - (a.stockActual || 0))
+            .slice(0, 10); // Nos quedamos con el Top 10 para no saturar el gráfico
 
         // Cálculo de variación desde el backend
         const prodActual = resKpis.data?.produccionMes || 0;
@@ -96,6 +106,7 @@ async function cargarDatos() {
     }
 }
 
+// --- CONFIGURACIÓN DE GRÁFICOS ---
 const chartDataMensual = computed(() => ({
     labels: resumenMensual.value.map(m => m?.periodo || ''),
     datasets: [{
@@ -124,6 +135,17 @@ const chartDataMateriales = computed(() => ({
         backgroundColor: '#9b59b6',
         borderRadius: 4,
         data: topMateriales.value.map(m => m?.totalKilos || 0)
+    }]
+}));
+
+// 🚨 NUEVO GRÁFICO DE STOCK
+const chartDataStock = computed(() => ({
+    labels: stockMateriales.value.map(m => m?.nombre || 'Desconocido'),
+    datasets: [{
+        label: 'Stock Actual (Kg)',
+        backgroundColor: '#1abc9c', // Verde esmeralda para diferenciarlo del consumo
+        borderRadius: 4,
+        data: stockMateriales.value.map(m => m?.stockActual || 0)
     }]
 }));
 
@@ -186,6 +208,23 @@ onMounted(() => cargarDatos());
             </div>
 
             <div class="grid-principal">
+                
+                <div class="card">
+                    <h3>📦 Stock Disponible (Top 10 Materias Primas)</h3>
+                    <div class="area-grafico" v-if="stockMateriales.length > 0">
+                        <Bar :data="chartDataStock" :options="{ indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }" />
+                    </div>
+                    <p class="sin-datos" v-else>No hay stock registrado.</p>
+                </div>
+
+                <div class="card">
+                    <h3>🛢️ Insumos Consumidos ({{ nombreMesSeleccionado }})</h3>
+                    <div class="area-grafico" v-if="topMateriales.length > 0">
+                        <Bar :data="chartDataMateriales" :options="{ indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }" />
+                    </div>
+                    <p class="sin-datos" v-else>Sin consumos en este mes.</p>
+                </div>
+
                 <div class="card">
                     <h3>📅 Evolución Mensual (Largo Plazo)</h3>
                     <div class="area-grafico">
@@ -209,20 +248,13 @@ onMounted(() => cargarDatos());
                 </div>
 
                 <div class="card">
-                    <h3>🛢️ Insumos Consumidos ({{ nombreMesSeleccionado }})</h3>
-                    <div class="area-grafico" v-if="topMateriales.length > 0">
-                        <Bar :data="chartDataMateriales" :options="{ indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }" />
-                    </div>
-                    <p class="sin-datos" v-else>Sin consumos en este mes.</p>
-                </div>
-
-                <div class="card">
                     <h3>🏆 Top Productos ({{ nombreMesSeleccionado }})</h3>
                     <div class="area-grafico" v-if="topProductos.length > 0">
                         <Doughnut :data="chartDataProductos" :options="{ responsive: true, maintainAspectRatio: false }" />
                     </div>
                     <p class="sin-datos" v-else>Sin producción este mes.</p>
                 </div>
+
             </div>
         </div>
     </div>

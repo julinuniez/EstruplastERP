@@ -41,8 +41,13 @@ namespace EstruplastERP.Core
         [Column(TypeName = "decimal(18,4)")]
         public decimal KilosEstimados { get; set; }
 
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Desperdicio { get; set; } = 8;
         public EstadoOrden Estado { get; set; } = EstadoOrden.Pendiente;
-
+        public bool EsBobina { get; set; } = false;
+        public bool ConBrillo { get; set; }
+        public bool LlevaFilm { get; set; }
+        public string? TipoCorona { get; set; } = "Ninguno";
         public DateTime FechaCreacion { get; set; } = DateTime.Now;
         public DateTime? FechaFin { get; set; }
 

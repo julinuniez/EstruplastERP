@@ -35,6 +35,7 @@ namespace EstruplastERP.Data
             int FAM_PP = 30;   // Polipropileno
             int FAM_PE = 40;   // Polietileno (PEAD/PEBD)
             int FAM_MB = 50;   // Masterbatch / Aditivos
+            int FAM_FREON = 60;
 
             // =============================================================================
             // CONFIGURACIONES DE PRECISIÓN
@@ -90,12 +91,12 @@ namespace EstruplastERP.Data
                 // 1. MATERIAS PRIMAS GENÉRICAS (FAZÓN BASE)
                 new Producto { Id = 999, Nombre = "MATERIAL DE CLIENTE (GENÉRICO)", CodigoSku = "MP-FAZON-GEN", Rubro = "SERVICIO FAZON", EsMateriaPrima = true, PesoEspecifico = 1.00m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = null },
 
-                new Producto { Id = 990, Nombre = "MP FAZÓN ALTO IMPACTO (BASE)", CodigoSku = "MP-FAZ-AI", Rubro = "SERVICIO FAZON", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_AI },
-                new Producto { Id = 991, Nombre = "MP FAZÓN ABS (BASE)", CodigoSku = "MP-FAZ-ABS", Rubro = "SERVICIO FAZON", EsMateriaPrima = true, PesoEspecifico = 1.05m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_ABS },
+                new Producto { Id = 990, Nombre = "MP FAZÓN ALTO IMPACTO (BASE)", CodigoSku = "MP-FAZ-AI", Rubro = "SERVICIO FAZON", EsMateriaPrima = true, PesoEspecifico = 1.1m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_AI },
+                new Producto { Id = 991, Nombre = "MP FAZÓN ABS (BASE)", CodigoSku = "MP-FAZ-ABS", Rubro = "SERVICIO FAZON", EsMateriaPrima = true, PesoEspecifico = 1.1m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_ABS },
                 new Producto { Id = 992, Nombre = "MP FAZÓN POLIPROPILENO (BASE)", CodigoSku = "MP-FAZ-PP", Rubro = "SERVICIO FAZON", EsMateriaPrima = true, PesoEspecifico = 0.91m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_PP },
                 new Producto { Id = 993, Nombre = "MP FAZÓN PEAD/PEBD (BASE)", CodigoSku = "MP-FAZ-PE", Rubro = "SERVICIO FAZON", EsMateriaPrima = true, PesoEspecifico = 0.96m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_PE },
-
-                new Producto { Id = 22, Nombre = "Masterbatch Color (Varios)", CodigoSku = "MP-MB-COL", Rubro = "MATERIA PRIMA", EsMateriaPrima = true, PesoEspecifico = 1.20m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_MB },
+                new Producto { Id = 994, Nombre = "MP FAZÓN FREON (BASE)", CodigoSku = "MP-FAZ-FREON", Rubro = "SERVICIO FAZON", EsMateriaPrima = true, PesoEspecifico = 1.1m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_FREON },
+                new Producto { Id = 22, Nombre = "Masterbatch Color (Varios)", CodigoSku = "MP-MB-COL", Rubro = "MATERIA PRIMA", EsMateriaPrima = true, PesoEspecifico = 1.1m, StockActual = 0, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_MB },
 
                 // 2. PRODUCTOS TERMINADOS (PROPIOS)
                 new Producto { Id = 100, Nombre = "A.I. FINO (0.40 - 0.90 mm)", CodigoSku = "AI-FINO", Rubro = "PRODUCTO TERMINADO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
@@ -120,20 +121,22 @@ namespace EstruplastERP.Data
                 new Producto { Id = 400, Nombre = "PEAD / PEBD", CodigoSku = "PE-MIX", Rubro = "PRODUCTO TERMINADO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.94m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 401, Nombre = "PEBD GOFRADO", CodigoSku = "PEBD-GOF", Rubro = "PRODUCTO TERMINADO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.92m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 402, Nombre = "PEAD BICAPA", CodigoSku = "PEAD-BIC", Rubro = "PRODUCTO TERMINADO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.96m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 500, Nombre = "BIOPLASTICO", CodigoSku = "BIO-LAM", Rubro = "PRODUCTO TERMINADO", EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.25m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
 
                 new Producto { Id = 900, Nombre = "LAMINADO A FAZON - A.I. FINO", CodigoSku = "FAZ-AI-FIN", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 902, Nombre = "LAMINADO A FAZON - A.I. FINO COLOR", CodigoSku = "FAZ-AI-FIN-COL", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 906, Nombre = "LAMINADO A FAZON - A.I. TUTTI FINO", CodigoSku = "FAZ-AI-TUT-FIN", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 909, Nombre = "LAMINADO A FAZON - PEAD/PP/BIO FINO", CodigoSku = "FAZ-POLI-FIN", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.95m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now },
+               
                 new Producto { Id = 901, Nombre = "LAMINADO A FAZON - A.I. GRUESO", CodigoSku = "FAZ-AI-GRU", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 903, Nombre = "LAMINADO A FAZON - A.I. GRUESO COLOR", CodigoSku = "FAZ-AI-GRU-COL", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 904, Nombre = "LAMINADO A FAZON - A.I. BICAPA", CodigoSku = "FAZ-AI-BIC", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 905, Nombre = "LAMINADO A FAZON - A.I. TRICAPA", CodigoSku = "FAZ-AI-TRI", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 907, Nombre = "LAMINADO A FAZON - A.I. TUTTI GRUESO", CodigoSku = "FAZ-AI-TUT-GRU", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
                 new Producto { Id = 908, Nombre = "LAMINADO A FAZON - ABS GRUESO", CodigoSku = "FAZ-ABS-GRU", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 910, Nombre = "LAMINADO A FAZON - PEAD/PP/BIO GRUESO", CodigoSku = "FAZ-POLI-GRU", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.95m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
-                new Producto { Id = 911, Nombre = "LAMINADO A FAZON - PEAD BICAPA", CodigoSku = "FAZ-PEAD-BIC", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.96m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now }
+                
+                new Producto { Id = 911, Nombre = "LAMINADO A FAZON - PEAD BICAPA", CodigoSku = "FAZ-PEAD-BIC", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 0.96m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now },
+                new Producto { Id = 912, Nombre = "LAMINADO A FAZON - RESISTENTE FREON FINO", CodigoSku = "FAZ-FREON-FIN", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.40m, EspesorMaximo = 0.90m, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_FREON },
+                new Producto { Id = 913, Nombre = "LAMINADO A FAZON - RESISTENTE FREON GRUESO", CodigoSku = "FAZ-FREON-GRU", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_FREON },
+                new Producto { Id = 914, Nombre = "LAMINADO A FAZON - RESISTENTE FREON COLOR", CodigoSku = "FAZ-FREON-COL", Rubro = "SERVICIO FAZON", EsFazon = true, EsProductoTerminado = true, EsGenerico = true, PesoEspecifico = 1.05m, EspesorMinimo = 0.90m, EspesorMaximo = 0m, Color = "A Elección", Activo = true, FechaCreacion = DateTime.Now, FamiliaId = FAM_FREON }
             );
 
             // =============================================================================
@@ -157,11 +160,14 @@ namespace EstruplastERP.Data
 
                 new Formula { Id = 61, ProductoTerminadoId = 909, MateriaPrimaId = 992, Cantidad = 100 },
                 new Formula { Id = 62, ProductoTerminadoId = 910, MateriaPrimaId = 992, Cantidad = 100 },
-                new Formula { Id = 63, ProductoTerminadoId = 911, MateriaPrimaId = 993, Cantidad = 100 }
+                new Formula { Id = 63, ProductoTerminadoId = 911, MateriaPrimaId = 993, Cantidad = 100 },
+                new Formula { Id = 64, ProductoTerminadoId = 912, MateriaPrimaId = 994, Cantidad = 100 },
+new Formula { Id = 65, ProductoTerminadoId = 913, MateriaPrimaId = 994, Cantidad = 100 },
+new Formula { Id = 66, ProductoTerminadoId = 914, MateriaPrimaId = 994, Cantidad = 100 }
 
-                // 👇 ESTAS SON LAS DOS FÓRMULAS FANTASMA QUE HACÍAN EXPLOTAR LA BASE (Intentaban usar el ID 602 que no existe)
-                // new Formula { Id = 70, ProductoTerminadoId = 106, MateriaPrimaId = 602, Cantidad = 100 },
-                // new Formula { Id = 71, ProductoTerminadoId = 107, MateriaPrimaId = 602, Cantidad = 100 }
+            // 👇 ESTAS SON LAS DOS FÓRMULAS FANTASMA QUE HACÍAN EXPLOTAR LA BASE (Intentaban usar el ID 602 que no existe)
+            // new Formula { Id = 70, ProductoTerminadoId = 106, MateriaPrimaId = 602, Cantidad = 100 },
+            // new Formula { Id = 71, ProductoTerminadoId = 107, MateriaPrimaId = 602, Cantidad = 100 }
             );
         }
     }

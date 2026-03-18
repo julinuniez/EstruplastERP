@@ -10,6 +10,7 @@ interface ProduccionItem {
     producto: string;
     cantidad: number;
     kilos: number;
+    desperdicio?: number; // 🚨 Propiedad vital para los cálculos
     estado: string;
     esFinalizada: boolean;
     notaPedido?: string;
@@ -32,6 +33,7 @@ const error = ref('')
 
 const filtroEstado = ref('Pendientes'); 
 const filtroFecha = ref(''); 
+const filtroLibre = ref(''); 
 
 const ordenesSeleccionadas = ref<number[]>([]);
 
@@ -51,7 +53,19 @@ const produccionesFiltradas = computed(() => {
             pasaFecha = item.fecha.startsWith(fechaBuscada);
         }
 
-        return pasaEstado && pasaFecha;
+        let pasaFiltroLibre = true;
+        if (filtroLibre.value.trim() !== '') {
+            const busqueda = filtroLibre.value.toLowerCase().trim();
+            const nomCliente = (item.clienteNombre || 'interno stock').toLowerCase();
+            const notaPed = (item.notaPedido || '').toLowerCase();
+            const ocCli = (item.numeroPedidoCliente || '').toLowerCase();
+            
+            pasaFiltroLibre = nomCliente.includes(busqueda) || 
+                              notaPed.includes(busqueda) || 
+                              ocCli.includes(busqueda);
+        }
+
+        return pasaEstado && pasaFecha && pasaFiltroLibre;
     });
 });
 
@@ -139,6 +153,14 @@ function obtenerNombreClienteReal(orden: any) {
     return 'Desconocido';
 }
 
+// 🚨 MAGIA 1: Calculamos el NETO para la tabla de visualización (Le sacamos la basura)
+function calcularKilosNetos(kilosBrutos: number, desperdicio: number | undefined) {
+    if (!kilosBrutos) return 0;
+    const porcentaje = desperdicio || 0;
+    // Ejemplo: Si son 110kg Brutos con 10% desperdicio -> 110 / 1.10 = 100kg Netos
+    return Math.round(kilosBrutos / (1 + (porcentaje / 100)));
+}
+
 function imprimirLoteOP() {
     if (ordenesSeleccionadas.value.length === 0) return;
     const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id));
@@ -151,7 +173,6 @@ function imprimirCargaConsolidada() {
 
     const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id));
     
-    // Validación de compatibilidad justo antes de armar la hoja
     const familiaBase = normalizarNombreFamilia(ordenesAImprimir[0]?.producto || '');
     const sonDiferentes = ordenesAImprimir.some(o => normalizarNombreFamilia(o.producto || '') !== familiaBase);
     
@@ -160,13 +181,14 @@ function imprimirCargaConsolidada() {
         return;
     }
 
-    let totalKilosMateriales = 0;
+    let totalKilosMezcla = 0;
     const recetaConsolidadaMap: Record<string, { id: number, nombre: string, kilos: number }> = {};
     const notasSet = new Set<string>();
 
     ordenesAImprimir.forEach(orden => {
         const refPedido = orden.notaPedido ? String(orden.notaPedido) : String(orden.id);
         const nombreCliente = obtenerNombreClienteReal(orden);
+        
         notasSet.add(refPedido);
 
         if (orden.consumos && Array.isArray(orden.consumos)) {
@@ -185,8 +207,12 @@ function imprimirCargaConsolidada() {
                     recetaConsolidadaMap[mapKey] = { id: mpId, nombre: nombreAVisualizar, kilos: 0 };
                 }
                 
-                recetaConsolidadaMap[mapKey].kilos += (consumo.cantidadKilos || 0);
-                totalKilosMateriales += (consumo.cantidadKilos || 0);
+                // 🚨 CAMBIO VITAL: Ya NO multiplicamos por desperdicio aquí.
+                // Como ahora guardamos los consumos BRUTOS en la BD, simplemente los sumamos.
+                const kilosYaBrutos = (consumo.cantidadKilos || 0);
+
+                recetaConsolidadaMap[mapKey].kilos += kilosYaBrutos;
+                totalKilosMezcla += kilosYaBrutos;
             });
         }
     });
@@ -205,13 +231,15 @@ function imprimirCargaConsolidada() {
         largo: 0,
         ancho: 0,
         espesor: 0,
-        kilos: totalKilosMateriales, 
-        merma: 0, 
+        
+        kilos: totalKilosMezcla, // Este ya es el Bruto total
+        desperdicio: 0,          // Se envía 0 para que el PDF no vuelva a calcular nada
+        
         observacion: `LOTE CONSOLIDADO: Pedidos #${notasUnicas.join(', #')}`,
         consumos: consumosConsolidadosArray.map(c => ({
             materiaPrimaId: c.id,
             nombreMateriaPrima: c.nombre,
-            cantidadKilos: c.kilos
+            cantidadKilos: Math.round(c.kilos * 100) / 100 
         }))
     };
 
@@ -233,6 +261,13 @@ defineExpose({ cargarHistorial })
             {{ filtroEstado === 'EnCola' ? '🕒 Bandeja de Espera' : (filtroEstado === 'Pendientes' ? '🔥 Bandeja de Producción' : '🗄️ Histórico de Órdenes') }}
         </h3>
         <div class="filtros-container">
+            <input 
+                type="text" 
+                v-model="filtroLibre" 
+                class="input-filtro input-buscador" 
+                placeholder="🔍 Buscar Cliente, Nota o OC..."
+            >
+            
             <select v-model="filtroEstado" class="input-filtro">
                 <option value="Pendientes">🔥 En Producción</option>
                 <option value="EnCola">🕒 En Cola (Falta Mat.)</option>
@@ -259,7 +294,7 @@ defineExpose({ cargarHistorial })
                     <th style="width: 100px;">N° Pedido</th>
                     <th>Producto</th>
                     <th style="width: 70px; text-align: center;">Cant.</th>
-                    <th style="width: 80px; text-align: right;">Kilos</th>
+                    <th style="width: 90px; text-align: right;">Kilos (Neto)</th>
                     <th style="width: 120px; text-align: center;">Estado</th>
                     <th style="width: 150px; text-align: center;">Acciones</th>
                 </tr>
@@ -296,7 +331,10 @@ defineExpose({ cargarHistorial })
                     
                     <td class="td-prod">{{ p.producto }}</td>
                     <td style="text-align: center; font-weight: 500;">{{ p.cantidad }}</td>
-                    <td style="text-align: right; font-weight: bold; color: #2c3e50;">{{ p.kilos }}</td>
+                    
+                    <td style="text-align: right; font-weight: bold; color: #2c3e50;">
+                        {{ Math.round(p.kilos) }}
+                    </td>
                     
                     <td style="text-align: center;">
                         <span :class="{
@@ -329,7 +367,7 @@ defineExpose({ cargarHistorial })
                     </td>
                 </tr>
                 <tr v-if="produccionesFiltradas.length === 0 && !cargando">
-                    <td colspan="9" class="vacio">No hay órdenes en esta bandeja para la fecha seleccionada.</td>
+                    <td colspan="9" class="vacio">No hay órdenes en esta bandeja para los filtros seleccionados.</td>
                 </tr>
             </tbody>
         </table>
@@ -351,7 +389,6 @@ defineExpose({ cargarHistorial })
             </button>
         </div>
     </div>
-
   </div>
 </template>
 
@@ -359,9 +396,10 @@ defineExpose({ cargarHistorial })
 .historial-wrapper { background: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); height: 100%; display: flex; flex-direction: column; position: relative; overflow: hidden; }
 .header-tabla { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #3498db; padding-bottom: 10px; flex-wrap: wrap; gap: 10px; }
 .titulo-bandeja { margin: 0; font-size: 1.2rem; color: #2c3e50; font-weight: 700; }
-.filtros-container { display: flex; gap: 10px; align-items: center; }
+.filtros-container { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .input-filtro { padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; background: #f8fafc; cursor: pointer; color: #334155; font-weight: 500; transition: border-color 0.2s; }
 .input-filtro:focus { border-color: #3498db; outline: none; }
+.input-buscador { width: 220px; cursor: text; } 
 .btn-refresh { background: white; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; padding: 6px 12px; font-size: 1rem; transition: all 0.2s; }
 .btn-refresh:hover { background: #f1f5f9; border-color: #94a3b8; }
 .tabla-scroll { overflow-y: auto; flex: 1; margin-bottom: 55px; border-radius: 6px; border: 1px solid #e2e8f0; }

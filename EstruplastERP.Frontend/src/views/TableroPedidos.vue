@@ -5,7 +5,12 @@ import api from '@/services/axiosInstance';
 interface OrdenResumen {
     id: number;
     producto: string;
-    medidas: string;
+    medidas: string; // Por retrocompatibilidad
+    largo?: number;
+    ancho?: number;
+    espesor?: number;
+    esBobina?: boolean;
+    kilosPorBobina?: number;
     estado: string;
     cantidad: number;
 }
@@ -36,7 +41,14 @@ const cargarTablero = async () => {
 };
 
 const pedidosFiltrados = computed(() => {
-    return listaPedidos.value.filter(p => {
+    // 1. Limpiamos las órdenes canceladas y pedidos vacíos
+    const pedidosLimpios = listaPedidos.value.map(p => ({
+        ...p,
+        ordenes: p.ordenes.filter(o => o.estado !== 'Cancelada' && o.estado !== 'Cancelado')
+    })).filter(p => p.ordenes.length > 0);
+
+    // 2. Aplicamos los filtros visuales (buscador y pendientes)
+    return pedidosLimpios.filter(p => {
         const busqueda = clienteFiltro.value.toLowerCase();
         
         const matchCliente = p.cliente.toLowerCase().includes(busqueda) || 
@@ -98,8 +110,16 @@ onMounted(() => {
                         <div class="orden-info">
                             <strong>OP #{{ orden.id }}</strong>
                             <span class="prod-nombre">{{ orden.producto }}</span>
-                            <small>{{ orden.medidas }}</small>
+                            
+                            <small v-if="orden.esBobina" style="color: #d35400; font-weight: 600;">
+                                🗞️ Bobina ({{ orden.kilosPorBobina }}kg) | {{ orden.ancho }} x {{ orden.espesor }} mm
+                            </small>
+                            <small v-else-if="orden.largo !== undefined && orden.largo > 0">
+                                📏 {{ orden.largo }} x {{ orden.ancho }} x {{ orden.espesor }} mm
+                            </small>
+                            <small v-else>{{ orden.medidas }}</small>
                         </div>
+                        
                         <div class="orden-estado">
                             <span :class="['badge', claseEstado(orden.estado)]">{{ orden.estado }}</span>
                             <span class="cant">{{ orden.cantidad }} un.</span>
@@ -148,7 +168,7 @@ onMounted(() => {
 
 .orden-info { display: flex; flex-direction: column; font-size: 0.85rem; }
 .prod-nombre { color: #34495e; font-weight: 500; }
-.orden-info small { color: #95a5a6; }
+.orden-info small { color: #95a5a6; margin-top: 2px; }
 
 .orden-estado { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .badge { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; color: white; font-weight: bold; }

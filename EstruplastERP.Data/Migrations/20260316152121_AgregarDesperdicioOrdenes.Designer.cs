@@ -4,6 +4,7 @@ using EstruplastERP.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EstruplastERP.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260316152121_AgregarDesperdicioOrdenes")]
+    partial class AgregarDesperdicioOrdenes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -341,14 +344,8 @@ namespace EstruplastERP.Data.Migrations
                     b.Property<string>("Color")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<bool>("ConBrillo")
-                        .HasColumnType("bit");
-
                     b.Property<decimal>("Desperdicio")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<bool>("EsBobina")
-                        .HasColumnType("bit");
 
                     b.Property<decimal>("Espesor")
                         .HasColumnType("decimal(18,2)");
@@ -368,9 +365,6 @@ namespace EstruplastERP.Data.Migrations
                     b.Property<decimal>("Largo")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<bool>("LlevaFilm")
-                        .HasColumnType("bit");
-
                     b.Property<string>("NotaPedido")
                         .HasColumnType("nvarchar(max)");
 
@@ -384,10 +378,6 @@ namespace EstruplastERP.Data.Migrations
 
                     b.Property<int>("ProductoId")
                         .HasColumnType("int");
-
-                    b.Property<string>("TipoCorona")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -540,7 +530,7 @@ namespace EstruplastERP.Data.Migrations
                             EsPremezcla = false,
                             EsProductoTerminado = false,
                             EsScrap = false,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(828),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4077),
                             Nombre = "MATERIAL DE CLIENTE (GENÉRICO)",
                             PesoEspecifico = 1.00m,
                             PrecioCosto = 0m,
@@ -560,7 +550,7 @@ namespace EstruplastERP.Data.Migrations
                             EsProductoTerminado = false,
                             EsScrap = false,
                             FamiliaId = 10,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(834),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4083),
                             Nombre = "MP FAZÓN ALTO IMPACTO (BASE)",
                             PesoEspecifico = 1.1m,
                             PrecioCosto = 0m,
@@ -580,7 +570,7 @@ namespace EstruplastERP.Data.Migrations
                             EsProductoTerminado = false,
                             EsScrap = false,
                             FamiliaId = 20,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(838),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4087),
                             Nombre = "MP FAZÓN ABS (BASE)",
                             PesoEspecifico = 1.1m,
                             PrecioCosto = 0m,
@@ -600,7 +590,7 @@ namespace EstruplastERP.Data.Migrations
                             EsProductoTerminado = false,
                             EsScrap = false,
                             FamiliaId = 30,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(841),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4091),
                             Nombre = "MP FAZÓN POLIPROPILENO (BASE)",
                             PesoEspecifico = 0.91m,
                             PrecioCosto = 0m,
@@ -620,7 +610,7 @@ namespace EstruplastERP.Data.Migrations
                             EsProductoTerminado = false,
                             EsScrap = false,
                             FamiliaId = 40,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(844),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4095),
                             Nombre = "MP FAZÓN PEAD/PEBD (BASE)",
                             PesoEspecifico = 0.96m,
                             PrecioCosto = 0m,
@@ -640,7 +630,7 @@ namespace EstruplastERP.Data.Migrations
                             EsProductoTerminado = false,
                             EsScrap = false,
                             FamiliaId = 60,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(848),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4099),
                             Nombre = "MP FAZÓN FREON (BASE)",
                             PesoEspecifico = 1.1m,
                             PrecioCosto = 0m,
@@ -660,7 +650,7 @@ namespace EstruplastERP.Data.Migrations
                             EsProductoTerminado = false,
                             EsScrap = false,
                             FamiliaId = 50,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(851),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4103),
                             Nombre = "Masterbatch Color (Varios)",
                             PesoEspecifico = 1.1m,
                             PrecioCosto = 0m,
@@ -681,7 +671,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(856),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4112),
                             Nombre = "A.I. FINO (0.40 - 0.90 mm)",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -703,7 +693,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(861),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4116),
                             Nombre = "A.I. FINO COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -724,7 +714,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(866),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4121),
                             Nombre = "A.I. TUTTI FINO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -745,7 +735,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(870),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4125),
                             Nombre = "A.I. GRUESO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -767,7 +757,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(874),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4130),
                             Nombre = "A.I. GRUESO COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -788,7 +778,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(877),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4134),
                             Nombre = "A.I. BICAPA",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -809,7 +799,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(881),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4141),
                             Nombre = "A.I. TRICAPA",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -830,7 +820,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(885),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4157),
                             Nombre = "A.I. TUTTI GRUESO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -851,7 +841,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(889),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4175),
                             Nombre = "A.I. RESISTENTE AL FREON",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -873,7 +863,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(893),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4311),
                             Nombre = "A.I. RESISTENTE AL FREON COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -895,7 +885,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(897),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4316),
                             Nombre = "ABS BLANCO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -917,7 +907,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1064),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4320),
                             Nombre = "ABS COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -938,7 +928,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 1.00m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1068),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4326),
                             Nombre = "ABS GRUESO (Min 1mm)",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -959,7 +949,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1072),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4330),
                             Nombre = "PP (POLIPROPILENO)",
                             PesoEspecifico = 0.91m,
                             PrecioCosto = 0m,
@@ -981,7 +971,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1077),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4341),
                             Nombre = "PP COLOR",
                             PesoEspecifico = 0.91m,
                             PrecioCosto = 0m,
@@ -1002,7 +992,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1081),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4345),
                             Nombre = "PEAD / PEBD",
                             PesoEspecifico = 0.94m,
                             PrecioCosto = 0m,
@@ -1023,7 +1013,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1085),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4349),
                             Nombre = "PEBD GOFRADO",
                             PesoEspecifico = 0.92m,
                             PrecioCosto = 0m,
@@ -1044,7 +1034,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1088),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4354),
                             Nombre = "PEAD BICAPA",
                             PesoEspecifico = 0.96m,
                             PrecioCosto = 0m,
@@ -1065,7 +1055,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1093),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4360),
                             Nombre = "LAMINADO A FAZON - A.I. FINO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1086,7 +1076,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1096),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4365),
                             Nombre = "LAMINADO A FAZON - A.I. FINO COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1107,7 +1097,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1101),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4369),
                             Nombre = "LAMINADO A FAZON - A.I. TUTTI FINO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1128,7 +1118,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1105),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4373),
                             Nombre = "LAMINADO A FAZON - A.I. GRUESO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1149,7 +1139,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1109),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4378),
                             Nombre = "LAMINADO A FAZON - A.I. GRUESO COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1170,7 +1160,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1113),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4382),
                             Nombre = "LAMINADO A FAZON - A.I. BICAPA",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1191,7 +1181,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1117),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4388),
                             Nombre = "LAMINADO A FAZON - A.I. TRICAPA",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1212,7 +1202,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1121),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4392),
                             Nombre = "LAMINADO A FAZON - A.I. TUTTI GRUESO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1233,7 +1223,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1125),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4396),
                             Nombre = "LAMINADO A FAZON - ABS GRUESO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1254,7 +1244,7 @@ namespace EstruplastERP.Data.Migrations
                             EsScrap = false,
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1129),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4400),
                             Nombre = "LAMINADO A FAZON - PEAD BICAPA",
                             PesoEspecifico = 0.96m,
                             PrecioCosto = 0m,
@@ -1276,7 +1266,7 @@ namespace EstruplastERP.Data.Migrations
                             EspesorMaximo = 0.90m,
                             EspesorMinimo = 0.40m,
                             FamiliaId = 60,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1133),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4404),
                             Nombre = "LAMINADO A FAZON - RESISTENTE FREON FINO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1298,7 +1288,7 @@ namespace EstruplastERP.Data.Migrations
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
                             FamiliaId = 60,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1138),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4409),
                             Nombre = "LAMINADO A FAZON - RESISTENTE FREON GRUESO",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,
@@ -1321,7 +1311,7 @@ namespace EstruplastERP.Data.Migrations
                             EspesorMaximo = 0m,
                             EspesorMinimo = 0.90m,
                             FamiliaId = 60,
-                            FechaCreacion = new DateTime(2026, 3, 17, 10, 5, 29, 867, DateTimeKind.Local).AddTicks(1142),
+                            FechaCreacion = new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4415),
                             Nombre = "LAMINADO A FAZON - RESISTENTE FREON COLOR",
                             PesoEspecifico = 1.05m,
                             PrecioCosto = 0m,

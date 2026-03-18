@@ -11,9 +11,7 @@ const advertencia = ref('');
 
 // Colores/Variantes estándar para el Datalist
 const variantesEstandar = [
-    'BLANCO', 'NEGRO', 'NATURAL', 'AZUL', 'ROJO', 
-    'VERDE', 'AMARILLO', 'GRIS', 'NARANJA', 'MULTICOLOR',
-    'SILLAS', 'BALDES', 'PARAGOLPES', 'CAJONES'
+    'BLANCO', 'NEGRO', 'NATURAL'
 ];
 
 const form = ref({
@@ -39,7 +37,7 @@ onMounted(async () => {
 
         // ✅ LISTA EXACTA Y DURA (Los 7 Vengadores)
         const nombresExactos = [
-            "PAI", "PEAD", "POLIPROPILENO", "BIOPLASTICO", "ABS", "RESISTENTE AL FREON", "POLIETILENO"
+            "PAI", "PEAD", "POLIPROPILENO", "ABS", "RESISTENTE AL FREON", "POLIETILENO"
         ];
 
         // Filtramos para que traiga SOLAMENTE esos 7 nombres literales
