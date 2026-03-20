@@ -53,8 +53,6 @@ namespace EstruplastERP.Data
             modelBuilder.Entity<Produccion>().Property(p => p.Kilos).HasPrecision(18, 3);
             modelBuilder.Entity<RemitoDetalle>().Property(r => r.Cantidad).HasPrecision(18, 3);
             modelBuilder.Entity<RemitoDetalle>().Property(r => r.PrecioUnitarioSnapshot).HasPrecision(18, 2);
-            modelBuilder.Entity<Movimiento>().Property(m => m.PrecioUnitario).HasPrecision(18, 2);
-            modelBuilder.Entity<Movimiento>().Property(m => m.PrecioTotal).HasPrecision(18, 2);
 
             // =============================================================================
             // RELACIONES

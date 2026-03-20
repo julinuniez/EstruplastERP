@@ -161,8 +161,8 @@ const nombreProductoLimpio = computed(() => {
         </div>
 
         <div class="caja-producto-pdf">
-            <div class="titulo-seccion-pdf">MATERIAL / PRODUCTO A FABRICAR</div>
-            <div class="producto-nombre-pdf">{{ form.esConsolidado ? (form.numeroPedidoCliente || 'LOTE MÚLTIPLE') : (form.productoNombre || nombreProductoLimpio) }}</div>
+            <div class="titulo-seccion-pdf">PRODUCTO A FABRICAR</div>
+            <div class="producto-nombre-pdf">{{ form.productoNombre || nombreProductoLimpio }}</div>
             <div v-if="!ocultarFormula && !form.esConsolidado" class="producto-sku-pdf">CÓDIGO: {{ producto?.codigoSku }}</div>
         </div>
 

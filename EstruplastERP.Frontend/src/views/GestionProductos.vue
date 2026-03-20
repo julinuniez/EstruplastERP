@@ -28,6 +28,29 @@ const mostrarModalNuevaMP = ref(false);
 const nuevaMP = ref({ nombre: '', codigoSku: '' });
 const guardandoMP = ref(false);
 
+const mostrarModalReservas = ref(false);
+const productoSeleccionado = ref<any>(null);
+const ordenesReserva = ref<any[]>([]);
+const cargandoReservas = ref(false);
+
+const verDetalleReserva = async (producto: any) => {
+    productoSeleccionado.value = producto;
+    mostrarModalReservas.value = true;
+    cargandoReservas.value = true;
+    ordenesReserva.value = [];
+    
+    try {
+        const res = await api.get(`/Productos/${producto.id}/reservas`);
+        ordenesReserva.value = res.data;
+        cargandoReservas.value = false;
+        
+    } catch (e) {
+        console.error(e);
+        cargandoReservas.value = false;
+        alert("Error al cargar el detalle de reservas.");
+    }
+};
+
 const guardarNuevaMateriaPrima = async () => {
     if (!nuevaMP.value.nombre || !nuevaMP.value.codigoSku) {
         return alert("⚠️ El Nombre y el SKU son obligatorios.");
@@ -364,13 +387,16 @@ onMounted(() => {
                         <th v-if="tabActual === 'PT'">Dueño</th>
                         <th v-if="tabActual === 'CLI'">Material</th> 
                         <th>Color / Var.</th>
-                        <th style="text-align:right">Stock (Kg)</th>
-                        <th style="text-align:right">Costo ($)</th>
+                        <th style="text-align:right; width: 90px;" title="Stock Real en Galpón">Físico (Kg)</th>
+                        <th style="text-align:center; width: 90px;" title="Retenido en Órdenes de Producción">Reservado</th>
+                        <th style="text-align:right; width: 90px;" title="Stock Libre para usar">Disponible</th>
                         <th style="text-align:center">Acción</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="p in productosFiltrados" :key="p.id" :class="{'bajo-stock': p.stockActual <= p.stockMinimo}">
+                    <tr v-for="p in productosFiltrados" :key="p.id" 
+                        :class="{'bajo-stock': ((p.stockFisico ?? p.stockActual ?? 0) - (p.stockReservado ?? 0)) <= p.stockMinimo}">
+                        
                         <td class="sku">{{ p.codigoSku }}</td>
                         <td>
                             <div class="nombre-prod">{{ p.nombre }}</div>
@@ -393,8 +419,23 @@ onMounted(() => {
                         </td>
 
                         <td>{{ p.color || '-' }}</td>
-                        <td style="text-align:right; font-weight: bold;" :class="{'text-danger': p.stockActual <= 0}">{{ p.stockActual }}</td>
-                        <td style="text-align:right;">{{ p.precioCosto || p.PrecioCosto ? `$${p.precioCosto || p.PrecioCosto}` : '-' }}</td>
+
+                        <td style="text-align:right; font-weight: 500;">
+                            {{ p.stockFisico ?? p.stockActual ?? 0 }}
+                        </td>
+
+                        <td style="text-align:center;">
+                            <button v-if="(p.stockReservado || 0) > 0" @click="verDetalleReserva(p)" class="btn-buchon" title="Ver dónde está reservado">
+                                🔒 {{ p.stockReservado }}
+                            </button>
+                            <span v-else style="color: #bdc3c7;">-</span>
+                        </td>
+
+                        <td style="text-align:right; font-weight: bold; font-size: 1.05rem;" 
+                            :class="{'text-danger': ((p.stockFisico ?? p.stockActual ?? 0) - (p.stockReservado ?? 0)) <= 0}">
+                            {{ p.stockDisponible ?? ((p.stockFisico ?? p.stockActual ?? 0) - (p.stockReservado ?? 0)) }}
+                        </td>
+
                         <td style="text-align:center;">
                             <button @click="irAEditar(p.id)" class="btn-editar" title="Editar">✏️</button>
                         </td>
@@ -409,6 +450,47 @@ onMounted(() => {
                 </div>
                 <div v-else>
                     No hay productos que coincidan con los filtros.
+                </div>
+            </div>
+        </div>
+
+        <div v-if="mostrarModalReservas" class="modal-overlay" @click.self="mostrarModalReservas = false">
+            <div class="modal-content" style="width: 450px;">
+                <h3>🔒 Detalle de Reserva</h3>
+                <p style="color: #34495e; font-weight: bold; margin-top: -5px; margin-bottom: 20px;">
+                    {{ productoSeleccionado?.nombre }}
+                </p>
+
+                <div v-if="cargandoReservas" style="text-align: center; padding: 20px;">
+                    ⏳ Buscando órdenes de producción...
+                </div>
+                
+                <div v-else class="caja-pedidos-reservados">
+                    <table class="tabla-reservas">
+                        <thead>
+                            <tr>
+                                <th>N° Pedido (Flexxus)</th> 
+                                <th>Cliente / Destino</th>
+                                <th style="text-align: right;">Retenido</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="res in ordenesReserva" :key="res.id">
+                                <td style="font-weight: bold; color: #2980b9;">{{ res.notaPedido }}</td>
+                                <td>{{ res.cliente }}</td>
+                                <td style="text-align: right; font-weight: bold; color: #e67e22;">{{ res.cantidad }} kg</td>
+                            </tr>
+                            <tr v-if="ordenesReserva.length === 0">
+                                <td colspan="3" style="text-align: center; color: #7f8c8d; padding: 15px;">
+                                    No se encontraron órdenes activas.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="text-align: right; margin-top: 20px;">
+                    <button class="btn-cancelar" @click="mostrarModalReservas = false">Cerrar</button>
                 </div>
             </div>
         </div>
@@ -489,7 +571,7 @@ onMounted(() => {
 .tabla-wrapper { overflow-x: auto; min-height: 300px; }
 table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 th { background: #f8f9fa; text-align: left; padding: 12px; font-weight: 600; color: #555; border-bottom: 2px solid #eee; }
-td { padding: 12px; border-bottom: 1px solid #f1f1f1; vertical-align: middle; color: #333; }
+td { padding: 12px; border-bottom: 1px solid #f1f1f1; vertical-align: middle; color: #333; transition: background-color 0.2s; }
 tr:hover { background-color: #f9f9f9; }
 
 .sku { font-family: 'Courier New', monospace; font-weight: bold; color: #666; font-size: 0.9em; }
@@ -508,8 +590,41 @@ tr:hover { background-color: #f9f9f9; }
 .badge-material.resistente-freon { background: #2980b9; }
 .badge-material.polietileno { background: #16a085; }
 
-.bajo-stock td { background-color: #fff5f5; }
+tr.bajo-stock td { background-color: #fdeaea !important; }
+tr.bajo-stock:hover td { background-color: #fadada !important; }
+tr.bajo-stock .sku { color: #c0392b; }
+tr.bajo-stock .nombre-prod { color: #c0392b; font-weight: 700; }
 .text-danger { color: #e74c3c; }
+
+.btn-buchon { background: #fff3e0; border: 1px solid #ffb74d; color: #e67e22; padding: 4px 10px; border-radius: 15px; font-size: 0.85rem; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+.btn-buchon:hover { background: #ffe0b2; transform: scale(1.05); }
+
+/* ESTILOS TABLA MODAL RESERVAS CON SCROLL */
+.caja-pedidos-reservados {
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.caja-pedidos-reservados::-webkit-scrollbar {
+    width: 6px;
+}
+.caja-pedidos-reservados::-webkit-scrollbar-track {
+    background: #f1f5f9; 
+    border-radius: 4px;
+}
+.caja-pedidos-reservados::-webkit-scrollbar-thumb {
+    background: #cbd5e1; 
+    border-radius: 4px;
+}
+.caja-pedidos-reservados::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8; 
+}
+
+.tabla-reservas { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.tabla-reservas th { background: #ecf0f1; padding: 8px; font-size: 0.85rem; }
+.tabla-reservas td { padding: 10px 8px; font-size: 0.9rem; border-bottom: 1px solid #ecf0f1; }
+
 .btn-editar { border: none; background: #e3f2fd; color: #1976d2; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; transition: background 0.2s; font-size: 1.1rem; }
 .btn-editar:hover { background: #bbdefb; }
 

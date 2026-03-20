@@ -87,9 +87,7 @@ namespace EstruplastERP.Api.Controllers
                     ProductoId = ajuste.ProductoId,
                     Cantidad = diferencia,
                     TipoMovimiento = "AJUSTE_INVENTARIO",
-                    Observacion = $"Ajuste: {ajuste.Motivo}",
-                    PrecioUnitario = producto.PrecioCosto,
-                    PrecioTotal = producto.PrecioCosto * Math.Abs(diferencia)
+                    Observacion = $"Ajuste: {ajuste.Motivo}"
                 });
 
                 producto.StockActual = ajuste.CantidadReal;

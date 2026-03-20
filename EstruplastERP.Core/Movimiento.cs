@@ -32,13 +32,6 @@ namespace EstruplastERP.Core
 
         [MaxLength(50)]
         public string? NumeroRemito { get; set; }
-        [MaxLength(50)]
-        public string? LoteProveedor { get; set; }
 
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal PrecioUnitario { get; set; } = 0;
-
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal PrecioTotal { get; set; } = 0;
     }
 }

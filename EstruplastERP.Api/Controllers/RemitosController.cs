@@ -102,9 +102,7 @@ namespace EstruplastERP.Api.Controllers
                     Cantidad = itemDto.Cantidad,
                     TipoMovimiento = "SALIDA_REMITO",
                     Observacion = $"Remito #{dto.NumeroRemito} -> {cliente.RazonSocial}. ({itemDto.Detalle})",
-                    ClienteId = cliente.Id,
-                    PrecioUnitario = 0,
-                    PrecioTotal = 0
+                    ClienteId = cliente.Id
                 });
             }
 

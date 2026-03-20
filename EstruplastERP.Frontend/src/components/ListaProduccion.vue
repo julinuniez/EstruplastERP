@@ -10,9 +10,10 @@ interface ProduccionItem {
     producto: string;
     cantidad: number;
     kilos: number;
-    desperdicio?: number; // 🚨 Propiedad vital para los cálculos
+    desperdicio?: number;
     estado: string;
     esFinalizada: boolean;
+    esImpreso?: boolean;
     notaPedido?: string;
     numeroPedidoCliente?: string;
     clienteNombre?: string; 
@@ -120,6 +121,9 @@ async function cancelarOrden(item: ProduccionItem) {
 }
 
 const solicitarImpresion = (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
+    if (tipo === 'orden' && orden.esImpreso) {
+        if (!confirm(`La orden #${orden.id} ya fue impresa. ¿Seguro quieres reimprimirla?`)) return;
+    }
     emit('imprimir-historial', { orden, tipo });
 };
 
@@ -153,17 +157,24 @@ function obtenerNombreClienteReal(orden: any) {
     return 'Desconocido';
 }
 
-// 🚨 MAGIA 1: Calculamos el NETO para la tabla de visualización (Le sacamos la basura)
 function calcularKilosNetos(kilosBrutos: number, desperdicio: number | undefined) {
     if (!kilosBrutos) return 0;
     const porcentaje = desperdicio || 0;
-    // Ejemplo: Si son 110kg Brutos con 10% desperdicio -> 110 / 1.10 = 100kg Netos
     return Math.round(kilosBrutos / (1 + (porcentaje / 100)));
 }
 
 function imprimirLoteOP() {
     if (ordenesSeleccionadas.value.length === 0) return;
     const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id));
+    
+    const yaImpresas = ordenesAImprimir.filter(o => o.esImpreso).length;
+    if (yaImpresas > 0) {
+        const msj = yaImpresas === 1 
+            ? "Hay 1 orden seleccionada que ya fue impresa. ¿Seguro quieres reimprimirla?" 
+            : `Hay ${yaImpresas} órdenes seleccionadas que ya fueron impresas. ¿Seguro quieres reimprimirlas?`;
+        if (!confirm(msj)) return;
+    }
+
     emit('imprimir-lote-op', ordenesAImprimir);
     ordenesSeleccionadas.value = [];
 }
@@ -207,8 +218,6 @@ function imprimirCargaConsolidada() {
                     recetaConsolidadaMap[mapKey] = { id: mpId, nombre: nombreAVisualizar, kilos: 0 };
                 }
                 
-                // 🚨 CAMBIO VITAL: Ya NO multiplicamos por desperdicio aquí.
-                // Como ahora guardamos los consumos BRUTOS en la BD, simplemente los sumamos.
                 const kilosYaBrutos = (consumo.cantidadKilos || 0);
 
                 recetaConsolidadaMap[mapKey].kilos += kilosYaBrutos;
@@ -225,6 +234,7 @@ function imprimirCargaConsolidada() {
         id: "MIX",
         notaPedido: notasUnicas.join(' / '),
         numeroPedidoCliente: nombreProductoBase, 
+        producto: familiaBase,
         productoId: 0,
         clienteId: 0,
         cantidad: 0,
@@ -232,8 +242,8 @@ function imprimirCargaConsolidada() {
         ancho: 0,
         espesor: 0,
         
-        kilos: totalKilosMezcla, // Este ya es el Bruto total
-        desperdicio: 0,          // Se envía 0 para que el PDF no vuelva a calcular nada
+        kilos: totalKilosMezcla,
+        desperdicio: 0,
         
         observacion: `LOTE CONSOLIDADO: Pedidos #${notasUnicas.join(', #')}`,
         consumos: consumosConsolidadosArray.map(c => ({
@@ -300,7 +310,7 @@ defineExpose({ cargarHistorial })
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-ok': p.estado === 'Finalizada', 'fila-cancel': p.estado === 'Cancelada', 'fila-seleccionada': ordenesSeleccionadas.includes(p.id)}">
+                <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-impresa': p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-no-impresa': !p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-ok': p.estado === 'Finalizada', 'fila-cancel': p.estado === 'Cancelada', 'fila-seleccionada': ordenesSeleccionadas.includes(p.id)}">
                     
                     <td style="text-align: center; vertical-align: middle;">
                         <input 
@@ -406,6 +416,12 @@ defineExpose({ cargarHistorial })
 .tabla-custom { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; }
 .tabla-custom th { background: #f8fafc; color: #475569; padding: 12px 10px; text-align: left; position: sticky; top: 0; z-index: 5; font-weight: 700; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
 .tabla-custom td { padding: 10px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; transition: background-color 0.2s; }
+
+tr.fila-impresa td { background-color: #d4edda; }
+tr.fila-no-impresa td { background-color: #f8d7da; }
+tr.fila-impresa:hover td { background-color: #c3e6cb; }
+tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
+
 .tabla-custom tbody tr:hover td { background-color: #f8fafc; }
 .check-orden { transform: scale(1.3); cursor: pointer; accent-color: #3498db; }
 .td-fecha { color: #64748b; font-size: 0.8rem; }

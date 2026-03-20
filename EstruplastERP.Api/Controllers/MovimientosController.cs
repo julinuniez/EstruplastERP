@@ -31,14 +31,13 @@ namespace EstruplastERP.Api.Controllers
                 .Select(m => new
                 {
                     m.Id,
-                    Fecha = m.Fecha.ToString("dd/MM/yyyy HH:mm"),
+                    // 🚨 CORRECCIÓN CLAVE: Formato ISO para que Vue / JavaScript lo entienda perfecto
+                    Fecha = m.Fecha.ToString("yyyy-MM-ddTHH:mm:ss"),
                     Producto = m.Producto != null ? m.Producto.Nombre : "Producto eliminado",
                     Proveedor = m.Proveedor != null ? m.Proveedor.RazonSocial : "-",
                     Cliente = m.Cliente != null ? m.Cliente.RazonSocial : "-",
                     m.Cantidad,
                     m.TipoMovimiento,
-                    m.PrecioUnitario,
-                    m.LoteProveedor,
                     m.Observacion
                 })
                 .ToListAsync();

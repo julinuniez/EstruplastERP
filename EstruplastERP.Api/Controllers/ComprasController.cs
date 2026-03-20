@@ -31,13 +31,6 @@ namespace EstruplastERP.Api.Controllers
                 ProductoId = dto.ProductoId,
                 ProveedorId = dto.ProveedorId,
                 Cantidad = dto.Cantidad,
-
-                // PRECIO E HISTORIAL
-                PrecioUnitario = dto.PrecioUnitario,
-                PrecioTotal = dto.Cantidad * dto.PrecioUnitario,
-
-                // TRAZABILIDAD
-                LoteProveedor = dto.Lote, // Asegúrate de haber agregado este campo a la entidad Movimiento
                 NumeroRemito = dto.NumeroRemito,
 
                 TipoMovimiento = "COMPRA", // Con este texto ya sabemos que fue una entrada

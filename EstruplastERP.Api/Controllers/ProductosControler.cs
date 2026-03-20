@@ -75,48 +75,60 @@ namespace EstruplastERP.Api.Controllers
         // 3. GET: TODOS LOS PRODUCTOS
         // ==========================================
         [HttpGet]
-        public async Task<IActionResult> GetProductos([FromQuery] int? clienteId)
+        public async Task<IActionResult> GetProductos()
         {
-            try
-            {
-                var query = _context.Productos
-                    .Where(p => p.Activo)
-                    .AsQueryable();
-
-                if (clienteId.HasValue && clienteId.Value > 0)
+            var productos = await _context.Productos
+                .Select(p => new
                 {
-                    query = query.Where(p => p.ClienteId == null || p.ClienteId == clienteId);
-                }
+                    p.Id,
+                    p.CodigoSku,
+                    p.Nombre,
+                    p.Rubro,
+                    p.TipoMaterial,
+                    p.Color,
+                    p.EsMateriaPrima,
+                    p.EsProductoTerminado,
+                    p.EsFazon,
+                    p.EsScrap,
 
-                var productos = await query
-                    .OrderBy(p => p.Nombre)
-                    .Select(p => new
-                    {
-                        p.Id,
-                        p.Nombre,
-                        p.CodigoSku,
-                        p.EsProductoTerminado,
-                        p.EsMateriaPrima,
-                        p.EsGenerico,
-                        ClienteId = p.ClienteId,
-                        EsFazonCalculado = p.ClienteId != null,
-                        EsFazon = p.EsFazon,
-                        EsScrap = p.EsScrap,
-                        p.StockActual,
-                        p.PesoEspecifico,
-                        p.Color,
-                        p.Rubro,
-                        p.PrecioCosto
-                    })
-                    .ToListAsync();
+                    // 🚨 MATAMOS LA LÓGICA VIEJA: Forzamos a true para que todo sea editable
+                    EsGenerico = true,
 
-                return Ok(productos);
-            }
-            catch (Exception ex)
+                    p.ClienteId,
+                    p.PrecioCosto,
+                    p.StockMinimo,
+                    StockFisico = p.StockActual,
+
+                    StockReservado = _context.ConsumosOrdenes
+                        .Where(c => c.MateriaPrimaId == p.Id &&
+                                    c.OrdenProduccion.Estado != EstadoOrden.Finalizada &&
+                                    c.OrdenProduccion.Estado != EstadoOrden.Cancelada)
+                        .Sum(c => (decimal?)c.CantidadKilos) ?? 0,
+                })
+                .ToListAsync();
+
+            var resultado = productos.Select(p => new
             {
-                string errorReal = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                return StatusCode(500, new { mensaje = $"Error de BD: {errorReal}" });
-            }
+                p.Id,
+                p.CodigoSku,
+                p.Nombre,
+                p.Rubro,
+                p.TipoMaterial,
+                p.Color,
+                p.EsMateriaPrima,
+                p.EsProductoTerminado,
+                p.EsFazon,
+                p.EsScrap,
+                p.ClienteId,
+                p.PrecioCosto,
+                p.StockMinimo,
+                p.StockFisico,
+                p.StockReservado,
+                p.EsGenerico, // Ya viaja como true
+                StockDisponible = p.StockFisico - p.StockReservado
+            });
+
+            return Ok(resultado);
         }
 
         // ==========================================
@@ -138,7 +150,6 @@ namespace EstruplastERP.Api.Controllers
             {
                 formulasFinales = producto.Formulas.ToList();
             }
-            // C. Si no tiene nada, lista vacía.
             else
             {
                 formulasFinales = new List<Formula>();
@@ -156,10 +167,12 @@ namespace EstruplastERP.Api.Controllers
                 Color = producto.Color,
                 EsProductoTerminado = producto.EsProductoTerminado,
                 EsMateriaPrima = producto.EsMateriaPrima,
-                EsGenerico = producto.EsGenerico,
+
+                // 🚨 MATAMOS LA LÓGICA VIEJA: Forzamos a true
+                EsGenerico = true,
+
                 Rubro = producto.Rubro,
 
-                // Usamos la lista 'formulasFinales' que calculamos arriba
                 Receta = formulasFinales.Select(f => new IngredienteDto
                 {
                     MateriaPrimaId = f.MateriaPrimaId,
@@ -199,6 +212,7 @@ namespace EstruplastERP.Api.Controllers
                     Color = data.Color,
                     StockActual = 0,
                     Activo = true,
+                    EsGenerico = true, // 🚨 Creados por defecto en true
                     FechaCreacion = DateTime.Now
                 };
 
@@ -233,12 +247,9 @@ namespace EstruplastERP.Api.Controllers
         [HttpPost("habilitar-fazon/{clienteId}")]
         public async Task<IActionResult> HabilitarFazonCliente(int clienteId)
         {
-            // 1. Validar que el cliente exista
             var cliente = await _context.Clientes.FindAsync(clienteId);
             if (cliente == null) return NotFound("❌ El cliente no existe.");
 
-            // 2. Validar que no tenga ya su "Bolsa de Material" creada
-            // Buscamos si existe alguna Materia Prima vinculada a este ClienteId
             var existeMaterial = await _context.Productos
                 .AnyAsync(p => p.ClienteId == clienteId && p.EsMateriaPrima);
 
@@ -248,24 +259,19 @@ namespace EstruplastERP.Api.Controllers
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // 3. Crear la Materia Prima "Cuenta Corriente"
                 var nuevoMaterial = new Producto
                 {
-                    // Nombre claro para identificarlo
                     Nombre = $"Material Recuperado: {cliente.RazonSocial}",
-
-                    // SKU automático: MP-CLI-005 (rellena con ceros)
                     CodigoSku = $"MP-CLI-{clienteId.ToString("D3")}",
+                    EsMateriaPrima = true,
+                    EsProductoTerminado = false,
+                    EsGenerico = true, // 🚨 Forzado a true
+                    ClienteId = clienteId,
 
-                    EsMateriaPrima = true,       // Se consume
-                    EsProductoTerminado = false, // No se vende directamente
-                    EsGenerico = false,          // Es un ítem único
-                    ClienteId = clienteId,       // ✅ VINCULADO AL CLIENTE (Candado)
-
-                    StockActual = 0,             // Empieza en 0
+                    StockActual = 0,
                     StockMinimo = 0,
-                    PrecioCosto = 0,             // El material es del cliente, costo 0 para nosotros
-                    PesoEspecifico = 1.1m,      // Valor por defecto (PAI), editable luego si es otro material
+                    PrecioCosto = 0,
+                    PesoEspecifico = 1.1m,
 
                     Activo = true,
                     FechaCreacion = DateTime.Now
@@ -288,6 +294,7 @@ namespace EstruplastERP.Api.Controllers
                 return StatusCode(500, "Error al crear material: " + ex.Message);
             }
         }
+
         // ==========================================
         // 6. PUT: ACTUALIZAR
         // ==========================================
@@ -303,7 +310,7 @@ namespace EstruplastERP.Api.Controllers
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
             producto.Color = data.Color;
-            // producto.EsGenerico = data.EsGenerico; // Descomentar si agregas esto al DTO
+            // producto.EsGenerico = data.EsGenerico; // 🚨 Esto se queda comentado para que no lo pise
 
             try
             {
@@ -407,7 +414,6 @@ namespace EstruplastERP.Api.Controllers
         [HttpPost("reparar-familias-v2")]
         public async Task<IActionResult> RepararFamiliasV2()
         {
-            // Buscamos solo materiales de CLIENTES (Fazón)
             var materialesCliente = await _context.Productos
                 .Where(p => p.EsMateriaPrima && p.ClienteId != null)
                 .ToListAsync();
@@ -418,7 +424,6 @@ namespace EstruplastERP.Api.Controllers
             {
                 int? nuevoId = null;
 
-                // Lógica de asignación por Nombre/SKU
                 if (mat.CodigoSku.Contains("AI-FIN")) nuevoId = 11;
                 else if (mat.CodigoSku.Contains("AI-GRU")) nuevoId = 12;
                 else if (mat.CodigoSku.Contains("AI-BIC")) nuevoId = 13;
@@ -441,6 +446,25 @@ namespace EstruplastERP.Api.Controllers
 
             await _context.SaveChangesAsync();
             return Ok($"Se especificaron las familias de {cambios} materiales de clientes.");
+        }
+
+        [HttpGet("{id}/reservas")]
+        public async Task<IActionResult> GetReservasProducto(int id)
+        {
+            var reservas = await _context.ConsumosOrdenes
+                .Where(c => c.MateriaPrimaId == id &&
+                            c.OrdenProduccion.Estado != EstadoOrden.Finalizada &&
+                            c.OrdenProduccion.Estado != EstadoOrden.Cancelada)
+                .Select(c => new
+                {
+                    Id = c.OrdenProduccion.Id,
+                    NotaPedido = c.OrdenProduccion.NotaPedido ?? c.OrdenProduccion.Id.ToString(),
+                    Cliente = c.OrdenProduccion.Cliente != null ? c.OrdenProduccion.Cliente.RazonSocial : "Interno / Stock",
+                    Cantidad = Math.Round(c.CantidadKilos, 2)
+                })
+                .ToListAsync();
+
+            return Ok(reservas);
         }
     }
 }

@@ -54,6 +54,7 @@ namespace EstruplastERP.Api.Controllers
                     ConBrillo = o.ConBrillo,
                     LlevaFilm = o.LlevaFilm,
                     TipoCorona = o.TipoCorona,
+                    EsImpreso = o.EsImpreso,
                     Estado = o.Estado.ToString(),
                     EsFinalizada = o.Estado == EstadoOrden.Finalizada,
                     Consumos = o.Consumos.Select(c => new {
@@ -96,6 +97,93 @@ namespace EstruplastERP.Api.Controllers
             {
                 string errorReal = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
                 return BadRequest(new { mensaje = $"Error al registrar: {errorReal}" });
+            }
+        }
+
+        [HttpPut("modificar/{id}")]
+        public async Task<IActionResult> ModificarOrden(int id, [FromBody] ModificarOrdenDto dto)
+        {
+            // Abrimos una transacción para que si algo falla, no se guarde nada a medias
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // 1. Buscamos la orden con sus consumos actuales
+                var orden = await _context.Ordenes
+                    .Include(o => o.Consumos)
+                    .ThenInclude(c => c.MateriaPrima)
+                    .FirstOrDefaultAsync(o => o.Id == id);
+
+                if (orden == null) return NotFound("Orden no encontrada.");
+
+                if (orden.Estado == EstadoOrden.Finalizada || orden.Estado == EstadoOrden.Cancelada)
+                    return BadRequest("No se puede modificar una orden que ya está Finalizada o Cancelada.");
+
+                // 2. LA MAGIA DEL STOCK: Validamos si alcanza para la nueva receta
+                foreach (var nuevoItem in dto.RecetaNueva)
+                {
+                    var mp = await _context.Productos.FindAsync(nuevoItem.MateriaPrimaId);
+                    if (mp == null) continue;
+
+                    // ¿Cuánto de esta materia prima ya le habíamos prestado a esta orden específica?
+                    var reservaPrevia = orden.Consumos
+                        .Where(c => c.MateriaPrimaId == mp.Id)
+                        .Sum(c => c.CantidadEsperada);
+
+                    // El stock real disponible para ESTA edición es: 
+                    // (Lo que hay libre en galpón) + (Lo que ya tenía agarrado esta orden)
+                    var stockLibreParaEstaOrden = (mp.StockActual - mp.StockReservado) + reservaPrevia;
+
+                    if (nuevoItem.CantidadEsperada > stockLibreParaEstaOrden)
+                    {
+                        return BadRequest($"Stock insuficiente para {mp.Nombre}. Necesitás {nuevoItem.CantidadEsperada}kg pero solo tenés {stockLibreParaEstaOrden}kg disponibles (contando la reserva previa). La orden no se modificó.");
+                    }
+                }
+
+                // 3. Si llegamos acá, HAY STOCK PARA TODO. Procedemos a limpiar lo viejo.
+                foreach (var consumoViejo in orden.Consumos)
+                {
+                    // Devolvemos el stock reservado viejo a la fábrica
+                    consumoViejo.MateriaPrima.StockReservado -= consumoViejo.CantidadEsperada;
+                }
+                // Borramos la receta vieja de la base de datos
+                _context.OrdenMateriaPrima.RemoveRange(orden.Consumos);
+
+                // 4. Aplicamos la receta nueva y reservamos el nuevo stock
+                var nuevosConsumos = new List<OrdenMateriaPrima>();
+                foreach (var item in dto.RecetaNueva)
+                {
+                    var mp = await _context.Productos.FindAsync(item.MateriaPrimaId);
+
+                    // Retenemos el stock de la nueva receta
+                    mp.StockReservado += item.CantidadEsperada;
+
+                    nuevosConsumos.Add(new OrdenMateriaPrima
+                    {
+                        MateriaPrimaId = mp.Id,
+                        CantidadEsperada = item.CantidadEsperada,
+                        TipoInsumo = item.TipoInsumo // "VIRGEN", "MASTERBATCH", etc.
+                    });
+                }
+
+                // 5. Actualizamos los datos principales de la orden
+                orden.Consumos = nuevosConsumos;
+                orden.KilosEstimados = dto.KilosTotales;
+                orden.MermaPorcentaje = dto.Merma;
+
+                // 🚨 ACA ESTÁ EL REQUISITO: Volvemos a marcar como NO impresa
+                orden.Impresa = false;
+                // Si estaba "En Cola" porque antes faltaba material, ahora quizás pasa a "Pendiente"
+                orden.Estado = EstadoOrden.Pendiente;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { mensaje = "✅ Orden modificada correctamente. Stock recalculado y orden desmarcada como impresa." });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, $"Error al modificar: {ex.Message}");
             }
         }
 
@@ -238,6 +326,18 @@ namespace EstruplastERP.Api.Controllers
 
             if (orden == null) return NotFound();
             return orden;
+        }
+
+        [HttpPost("marcar-impresa/{id}")]
+        public async Task<IActionResult> MarcarComoImpresa(int id)
+        {
+            var orden = await _context.Ordenes.FindAsync(id);
+            if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
+
+            orden.EsImpreso = true;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { mensaje = "Orden marcada como impresa." });
         }
     }
 }

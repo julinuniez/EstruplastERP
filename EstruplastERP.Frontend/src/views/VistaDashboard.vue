@@ -31,17 +31,18 @@ function cambiarMes(delta: number) {
     const nuevaFecha = new Date(fechaFiltro.value);
     nuevaFecha.setMonth(nuevaFecha.getMonth() + delta);
     fechaFiltro.value = nuevaFecha;
-    cargarDatos(); // Recarga el dashboard al cambiar
+    cargarDatos();
 }
 // --------------------------------------------
 
-const kpis = ref({ produccionMes: 0, variacionMes: 0, esPositivo: true });
+// 🚨 Agregamos la variable kilosPendientes
+const kpis = ref({ produccionMes: 0, variacionMes: 0, esPositivo: true, kilosPendientes: 0 });
 const resumenMensual = ref<any[]>([]);
 const produccionSemanal = ref<any[]>([]);
 const topProductos = ref<any[]>([]);
 const topMateriales = ref<any[]>([]);
 const topClientes = ref<any[]>([]);
-const stockMateriales = ref<any[]>([]); // 🚨 NUEVO: Para guardar el stock actual
+const stockMateriales = ref<any[]>([]); 
 
 const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
@@ -55,7 +56,6 @@ async function cargarDatos() {
     const query = `?mes=${mes}&anio=${anio}`;
 
     try {
-        // 🚨 Sumamos la llamada a /Productos para traernos el stock en tiempo real
         const [resKpis, resMes, resSemana, resProd, resMat, resClientes, resInventario] = await Promise.all([
             axios.get(`${apiUrl}/Estadisticas/resumen-kpis${query}`, getAuthConfig()),
             axios.get(`${apiUrl}/Estadisticas/resumen-mensual`, getAuthConfig()), 
@@ -63,25 +63,38 @@ async function cargarDatos() {
             axios.get(`${apiUrl}/Estadisticas/top-productos${query}`, getAuthConfig()),
             axios.get(`${apiUrl}/Estadisticas/top-materiales${query}`, getAuthConfig()),
             axios.get(`${apiUrl}/Estadisticas/top-clientes${query}`, getAuthConfig()),
-            axios.get(`${apiUrl}/Productos`, getAuthConfig()) // <-- Trae el catálogo con stock
+            axios.get(`${apiUrl}/Productos`, getAuthConfig()) 
         ]);
 
+        // 🚨 REDONDEOS APLICADOS
         resumenMensual.value = Array.isArray(resMes.data) ? resMes.data : [];
         produccionSemanal.value = Array.isArray(resSemana.data) ? resSemana.data : [];
         topProductos.value = Array.isArray(resProd.data) ? resProd.data : [];
         topMateriales.value = Array.isArray(resMat.data) ? resMat.data : [];
         topClientes.value = Array.isArray(resClientes.data) ? resClientes.data : [];
 
-        // 🚨 Procesamos el inventario para quedarnos solo con Materias Primas y ordenarlas por stock
         const todosLosProductos = Array.isArray(resInventario.data) ? resInventario.data : [];
         stockMateriales.value = todosLosProductos
-            .filter(p => p.esMateriaPrima)
-            .sort((a, b) => (b.stockActual || 0) - (a.stockActual || 0))
-            .slice(0, 10); // Nos quedamos con el Top 10 para no saturar el gráfico
+            .filter(p => {
+                const nombre = (p.nombre || '').toUpperCase();
+                const rubro = (p.rubro || '').toUpperCase();
+                
+                return p.esMateriaPrima && 
+                       !p.esScrap && 
+                       !rubro.includes('MOLIDO') && 
+                       !rubro.includes('CLIENTE') &&
+                       (p.clienteId === null || p.clienteId === 0) &&
+                       !nombre.includes('BASE') &&        // 🚨 Afuera los productos Base
+                       !nombre.includes('GENERICO') &&    // 🚨 Afuera los genéricos
+                       !nombre.includes('GENÉRICO') &&
+                       p.id !== 90; // (Por si tenés el típico producto comodín de sistema)
+            })
+            .sort((a, b) => ((b.stockDisponible ?? b.stockFisico ?? b.stockActual) || 0) - ((a.stockDisponible ?? a.stockFisico ?? a.stockActual) || 0))
+            .slice(0, 10);
 
-        // Cálculo de variación desde el backend
-        const prodActual = resKpis.data?.produccionMes || 0;
-        const prodAnterior = resKpis.data?.produccionMesAnterior || 0;
+        const prodActual = Math.round(resKpis.data?.produccionMes || 0);
+        const prodAnterior = Math.round(resKpis.data?.produccionMesAnterior || 0);
+        const pendientes = Math.round(resKpis.data?.kilosPendientes || 0);
         
         let variacion = 0;
         let positivo = true;
@@ -96,7 +109,8 @@ async function cargarDatos() {
         kpis.value = {
             produccionMes: prodActual,
             variacionMes: Math.abs(variacion),
-            esPositivo: positivo
+            esPositivo: positivo,
+            kilosPendientes: pendientes
         };
 
     } catch (e) {
@@ -106,14 +120,14 @@ async function cargarDatos() {
     }
 }
 
-// --- CONFIGURACIÓN DE GRÁFICOS ---
+// --- CONFIGURACIÓN DE GRÁFICOS (TODOS CON Math.round) ---
 const chartDataMensual = computed(() => ({
     labels: resumenMensual.value.map(m => m?.periodo || ''),
     datasets: [{
         label: 'Kilos (Últimos 12 meses)',
         borderColor: '#27ae60',
         backgroundColor: 'rgba(39, 174, 96, 0.2)',
-        data: resumenMensual.value.map(m => m?.kilos || 0),
+        data: resumenMensual.value.map(m => Math.round(m?.kilos || 0)),
         fill: true, tension: 0.3
     }]
 }));
@@ -124,7 +138,7 @@ const chartDataSemanal = computed(() => ({
         label: 'Kilos (Últimas 8 semanas)',
         backgroundColor: '#3498db',
         borderRadius: 4,
-        data: produccionSemanal.value.map(s => s?.kilos || 0)
+        data: produccionSemanal.value.map(s => Math.round(s?.kilos || 0))
     }]
 }));
 
@@ -134,18 +148,17 @@ const chartDataMateriales = computed(() => ({
         label: 'Kilos Consumidos',
         backgroundColor: '#9b59b6',
         borderRadius: 4,
-        data: topMateriales.value.map(m => m?.totalKilos || 0)
+        data: topMateriales.value.map(m => Math.round(m?.totalKilos || 0))
     }]
 }));
 
-// 🚨 NUEVO GRÁFICO DE STOCK
 const chartDataStock = computed(() => ({
     labels: stockMateriales.value.map(m => m?.nombre || 'Desconocido'),
     datasets: [{
-        label: 'Stock Actual (Kg)',
-        backgroundColor: '#1abc9c', // Verde esmeralda para diferenciarlo del consumo
+        label: 'Stock Disponible (Kg)',
+        backgroundColor: '#1abc9c', 
         borderRadius: 4,
-        data: stockMateriales.value.map(m => m?.stockActual || 0)
+        data: stockMateriales.value.map(m => Math.round((m?.stockDisponible ?? m?.stockFisico ?? m?.stockActual) || 0))
     }]
 }));
 
@@ -153,7 +166,7 @@ const chartDataProductos = computed(() => ({
     labels: topProductos.value.map(p => p?.producto || 'Desconocido'),
     datasets: [{
         backgroundColor: ['#3498db', '#e74c3c', '#f1c40f', '#2ecc71', '#34495e'],
-        data: topProductos.value.map(p => p?.totalKilos || 0)
+        data: topProductos.value.map(p => Math.round(p?.totalKilos || 0))
     }]
 }));
 
@@ -163,7 +176,7 @@ const chartDataClientes = computed(() => ({
         label: 'Kilos Comprados',
         backgroundColor: '#e67e22',
         borderRadius: 4,
-        data: topClientes.value.map(c => c?.totalKilos || 0)
+        data: topClientes.value.map(c => Math.round(c?.totalKilos || 0))
     }]
 }));
 
@@ -193,9 +206,18 @@ onMounted(() => cargarDatos());
                     <div class="icono">⚖️</div>
                     <div class="info">
                         <span class="titulo">Producción en {{ nombreMesSeleccionado.split(' ')[0] }}</span>
-                        <strong class="valor">{{ kpis.produccionMes.toLocaleString('es-AR', { maximumFractionDigits: 2 }) }} kg</strong>
+                        <strong class="valor">{{ kpis.produccionMes.toLocaleString('es-AR') }} kg</strong>
                     </div>
                 </div>
+                
+                <div class="card-kpi naranja">
+                    <div class="icono">🔥</div>
+                    <div class="info">
+                        <span class="titulo">Kilos Pendientes en Planta</span>
+                        <strong class="valor">{{ kpis.kilosPendientes.toLocaleString('es-AR') }} kg</strong>
+                    </div>
+                </div>
+
                 <div class="card-kpi" :class="kpis.esPositivo ? 'verde' : 'rojo'">
                     <div class="icono">{{ kpis.esPositivo ? '📈' : '📉' }}</div>
                     <div class="info">
@@ -210,7 +232,7 @@ onMounted(() => cargarDatos());
             <div class="grid-principal">
                 
                 <div class="card">
-                    <h3>📦 Stock Disponible (Top 10 Materias Primas)</h3>
+                    <h3>📦 Stock Disponible (MP Virgen - Top 10)</h3>
                     <div class="area-grafico" v-if="stockMateriales.length > 0">
                         <Bar :data="chartDataStock" :options="{ indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }" />
                     </div>
@@ -278,7 +300,7 @@ onMounted(() => cargarDatos());
 .btn-refresh:hover { background: #eef2f5; }
 
 .fila-kpis { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
-.card-kpi { flex: 1; min-width: 280px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: flex; align-items: center; border-left: 6px solid #ccc; }
+.card-kpi { flex: 1; min-width: 250px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: flex; align-items: center; border-left: 6px solid #ccc; }
 .card-kpi .icono { font-size: 3rem; margin-right: 20px; }
 .card-kpi .info { display: flex; flex-direction: column; }
 .card-kpi .titulo { font-size: 0.9rem; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; }
@@ -287,6 +309,7 @@ onMounted(() => cargarDatos());
 .azul { border-left-color: #3498db; }
 .verde { border-left-color: #2ecc71; }
 .rojo { border-left-color: #e74c3c; }
+.naranja { border-left-color: #e67e22; }
 
 .grid-principal { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 25px; }
 
