@@ -22,6 +22,9 @@ interface ProduccionItem {
     ancho?: number;
     espesor?: number;
     color?: string;
+    conBrillo?: boolean;
+    llevaFilm?: boolean;
+    tipoCorona?: string;
     consumos?: any[];
     productoId?: number;
     clienteId?: number;
@@ -37,6 +40,24 @@ const filtroFecha = ref('');
 const filtroLibre = ref(''); 
 
 const ordenesSeleccionadas = ref<number[]>([]);
+
+const mostrarModalEdicion = ref(false);
+const guardandoEdicion = ref(false);
+const ordenEditando = ref<ProduccionItem | null>(null);
+
+const formEdicion = ref({
+    largo: 0,
+    ancho: 0,
+    espesor: 0,
+    cantidad: 0,
+    kilosTotales: 0,
+    desperdicio: 8,
+    conBrillo: false,
+    llevaFilm: false,
+    tipoCorona: 'Ninguno',
+    color: '',
+    recetaNueva: [] as any[]
+});
 
 const produccionesFiltradas = computed(() => {
     return producciones.value.filter(item => {
@@ -257,6 +278,73 @@ function imprimirCargaConsolidada() {
     ordenesSeleccionadas.value = [];
 }
 
+const abrirModalEdicion = (orden: ProduccionItem) => {
+    ordenEditando.value = orden;
+    formEdicion.value = {
+        largo: orden.largo || 0,
+        ancho: orden.ancho || 0,
+        espesor: orden.espesor || 0,
+        cantidad: orden.cantidad || 0,
+        kilosTotales: orden.kilos || 0,
+        desperdicio: orden.desperdicio || 8,
+        conBrillo: orden.conBrillo || false,
+        llevaFilm: orden.llevaFilm || false,
+        tipoCorona: orden.tipoCorona || 'Ninguno',
+        color: orden.color || '',
+        recetaNueva: JSON.parse(JSON.stringify(orden.consumos || []))
+    };
+    mostrarModalEdicion.value = true;
+};
+
+const cerrarModalEdicion = () => {
+    mostrarModalEdicion.value = false;
+    ordenEditando.value = null;
+};
+
+const recalcularModal = () => {
+    if (!ordenEditando.value) return;
+    
+    const o = ordenEditando.value;
+    const oldVol = (o.largo || 1) * (o.ancho || 1) * (o.espesor || 1) * (o.cantidad || 1);
+    const newVol = (formEdicion.value.largo || 1) * (formEdicion.value.ancho || 1) * (formEdicion.value.espesor || 1) * (formEdicion.value.cantidad || 1);
+    
+    let ratio = 1;
+    if (oldVol > 0) ratio = newVol / oldVol;
+
+    formEdicion.value.kilosTotales = Number((o.kilos * ratio).toFixed(2));
+
+    formEdicion.value.recetaNueva = (o.consumos || []).map((c: any) => ({
+        materiaPrimaId: c.materiaPrimaId,
+        cantidadKilos: Number((c.cantidadKilos * ratio).toFixed(2))
+    }));
+};
+
+async function guardarEdicionRapida() {
+    if (!ordenEditando.value) return;
+    guardandoEdicion.value = true;
+    try {
+        await api.put(`/Ordenes/modificar/${ordenEditando.value.id}`, {
+            largo: formEdicion.value.largo,
+            ancho: formEdicion.value.ancho,
+            espesor: formEdicion.value.espesor,
+            cantidad: formEdicion.value.cantidad,
+            kilosTotales: formEdicion.value.kilosTotales,
+            desperdicio: formEdicion.value.desperdicio,
+            conBrillo: formEdicion.value.conBrillo,
+            llevaFilm: formEdicion.value.llevaFilm,
+            tipoCorona: formEdicion.value.tipoCorona,
+            color: formEdicion.value.color,
+            recetaNueva: formEdicion.value.recetaNueva
+        });
+        cerrarModalEdicion();
+        await cargarHistorial();
+    } catch (e: any) {
+        alert(e.response?.data?.mensaje || e.response?.data || "Error al modificar la orden.");
+    } finally {
+        guardandoEdicion.value = false;
+    }
+}
+
 onMounted(() => {
     cargarHistorial();
 })
@@ -359,12 +447,14 @@ defineExpose({ cargarHistorial })
                     
                     <td class="td-acciones">
                         <template v-if="p.estado === 'EnCola'">
+                            <button @click="abrirModalEdicion(p)" class="btn-action" title="Modificar Orden">✏️</button>
                             <button @click="activarOrden(p)" class="btn-action btn-check" title="Enviar a Máquina">🚀</button>
                             <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Imprimir OP">📄</button>
                             <button @click="cancelarOrden(p)" class="btn-action btn-cancel" title="Cancelar Orden">❌</button>
                         </template>
 
                         <template v-else-if="p.estado === 'Pendiente' || p.estado === 'EnProceso'">
+                            <button @click="abrirModalEdicion(p)" class="btn-action" title="Modificar Orden">✏️</button>
                             <button @click="confirmarOrdenRapida(p)" class="btn-action btn-check" title="Confirmar Producción Finalizada">✅</button>
                             <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Imprimir OP">📄</button>
                             <button @click="solicitarImpresion(p, 'carga')" class="btn-action btn-ciencia" title="Imprimir Hoja de Carga">🧪</button>
@@ -397,6 +487,68 @@ defineExpose({ cargarHistorial })
             <button class="btn-consolidado" @click="imprimirCargaConsolidada" v-if="ordenesSeleccionadas.length > 1">
                 🧪 Imprimir Hoja de Carga (Mezcla)
             </button>
+        </div>
+    </div>
+
+    <div v-if="mostrarModalEdicion" class="modal-overlay" @click.self="cerrarModalEdicion">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✏️ Edición Rápida | Orden #{{ ordenEditando?.id }}</h3>
+                <button class="btn-close" @click="cerrarModalEdicion">✕</button>
+            </div>
+            
+            <p class="warning-text">⚠️ Al modificar, la orden perderá su estado de "Impresa" y se recalculará el stock.</p>
+
+            <div class="grid-medidas">
+                <div class="campo-rapido">
+                    <label>Largo (mm)</label>
+                    <input type="number" v-model="formEdicion.largo" @input="recalcularModal">
+                </div>
+                <div class="campo-rapido">
+                    <label>Ancho (mm)</label>
+                    <input type="number" v-model="formEdicion.ancho" @input="recalcularModal">
+                </div>
+                <div class="campo-rapido">
+                    <label>Espesor</label>
+                    <input type="number" v-model="formEdicion.espesor" step="0.01" @input="recalcularModal">
+                </div>
+                <div class="campo-rapido">
+                    <label>Cantidad</label>
+                    <input type="number" v-model="formEdicion.cantidad" min="1" @input="recalcularModal">
+                </div>
+            </div>
+
+            <div class="kilos-recalculados">
+                Nuevo Peso Estimado: <strong>{{ formEdicion.kilosTotales }} kg</strong>
+            </div>
+
+            <h4 class="titulo-seccion">Aditivos & Opciones</h4>
+            <div class="grid-aditivos">
+                <label class="switch-label"><input type="checkbox" v-model="formEdicion.conBrillo" @change="recalcularModal"> ✨ Brillo</label>
+                <label class="switch-label"><input type="checkbox" v-model="formEdicion.llevaFilm" @change="recalcularModal"> 🛡️ Lleva Film</label>
+            </div>
+
+            <div class="grid-medidas" style="margin-top: 15px;">
+                <div class="campo-rapido">
+                    <label>⚡ Tratamiento Corona:</label>
+                    <select v-model="formEdicion.tipoCorona" @change="recalcularModal">
+                        <option value="Ninguno">Ninguno</option>
+                        <option value="Simple">Simple</option>
+                        <option value="Doble">Doble</option>
+                    </select>
+                </div>
+                <div class="campo-rapido">
+                    <label>🎨 Color:</label>
+                    <input type="text" v-model="formEdicion.color" placeholder="Ej: BLANCO" @input="recalcularModal">
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancelar" @click="cerrarModalEdicion">Cancelar</button>
+                <button class="btn-guardar" @click="guardarEdicionRapida" :disabled="guardandoEdicion">
+                    {{ guardandoEdicion ? 'Validando Stock...' : '💾 Confirmar Cambios' }}
+                </button>
+            </div>
         </div>
     </div>
   </div>
@@ -457,4 +609,31 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .btn-op:hover { background-color: #2980b9; }
 .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin-bottom: 10px; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(2px); }
+.modal-content { background: white; padding: 25px; border-radius: 12px; width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 15px; }
+.modal-header h3 { margin: 0; color: #1e293b; font-size: 1.2rem; }
+.btn-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #94a3b8; }
+.btn-close:hover { color: #ef4444; }
+
+.warning-text { font-size: 0.85rem; color: #b45309; background: #fef3c7; padding: 10px; border-radius: 6px; border-left: 4px solid #f59e0b; margin-bottom: 20px; }
+
+.grid-medidas { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+.campo-rapido label { display: block; font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 5px; }
+.campo-rapido input, .campo-rapido select { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+.campo-rapido input:focus, .campo-rapido select:focus { outline: none; border-color: #3b82f6; }
+
+.kilos-recalculados { text-align: center; background: #eff6ff; color: #1d4ed8; padding: 10px; border-radius: 6px; font-size: 1.1rem; margin-bottom: 20px; border: 1px dashed #93c5fd; }
+
+.titulo-seccion { font-size: 0.95rem; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 10px; }
+.grid-aditivos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.switch-label { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #475569; cursor: pointer; }
+
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; border-top: 1px solid #f1f5f9; padding-top: 15px; }
+.btn-cancelar { background: white; border: 1px solid #cbd5e1; color: #475569; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+.btn-cancelar:hover { background: #f8fafc; }
+.btn-guardar { background: #3b82f6; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+.btn-guardar:hover:not(:disabled) { background: #2563eb; }
+.btn-guardar:disabled { background: #94a3b8; cursor: not-allowed; }
 </style>

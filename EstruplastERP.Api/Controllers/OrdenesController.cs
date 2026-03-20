@@ -4,6 +4,7 @@ using EstruplastERP.Data;
 using EstruplastERP.Core;
 using EstruplastERP.Api.Dtos;
 using EstruplastERP.Api.Services;
+using EstruplastERP.Api.DTOs;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -99,91 +100,83 @@ namespace EstruplastERP.Api.Controllers
                 return BadRequest(new { mensaje = $"Error al registrar: {errorReal}" });
             }
         }
-
         [HttpPut("modificar/{id}")]
-        public async Task<IActionResult> ModificarOrden(int id, [FromBody] ModificarOrdenDto dto)
+        public async Task<IActionResult> ModificarOrdenRapida(int id, [FromBody] ModificarOrdenDto dto)
         {
-            // Abrimos una transacción para que si algo falla, no se guarde nada a medias
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // 1. Buscamos la orden con sus consumos actuales
+                // 1. Buscamos tu OrdenProduccion real
                 var orden = await _context.Ordenes
                     .Include(o => o.Consumos)
-                    .ThenInclude(c => c.MateriaPrima)
                     .FirstOrDefaultAsync(o => o.Id == id);
 
                 if (orden == null) return NotFound("Orden no encontrada.");
-
                 if (orden.Estado == EstadoOrden.Finalizada || orden.Estado == EstadoOrden.Cancelada)
-                    return BadRequest("No se puede modificar una orden que ya está Finalizada o Cancelada.");
+                    return BadRequest("No se puede modificar una orden Finalizada o Cancelada.");
 
-                // 2. LA MAGIA DEL STOCK: Validamos si alcanza para la nueva receta
+                // 2. VALIDACIÓN DE STOCK DINÁMICA CON LINQ
                 foreach (var nuevoItem in dto.RecetaNueva)
                 {
                     var mp = await _context.Productos.FindAsync(nuevoItem.MateriaPrimaId);
                     if (mp == null) continue;
 
-                    // ¿Cuánto de esta materia prima ya le habíamos prestado a esta orden específica?
-                    var reservaPrevia = orden.Consumos
+                    // Retenido por OTRAS órdenes (excluyendo la que estamos editando)
+                    var kilosRetenidosOtrasOrdenes = await _context.Ordenes
+                        .Where(o => o.Id != id &&
+                                    o.Estado != EstadoOrden.Finalizada &&
+                                    o.Estado != EstadoOrden.Cancelada)
+                        .SelectMany(o => o.Consumos)
                         .Where(c => c.MateriaPrimaId == mp.Id)
-                        .Sum(c => c.CantidadEsperada);
+                        .SumAsync(c => (decimal?)c.CantidadKilos) ?? 0;
 
-                    // El stock real disponible para ESTA edición es: 
-                    // (Lo que hay libre en galpón) + (Lo que ya tenía agarrado esta orden)
-                    var stockLibreParaEstaOrden = (mp.StockActual - mp.StockReservado) + reservaPrevia;
+                    var stockLibreParaEstaOrden = mp.StockActual - kilosRetenidosOtrasOrdenes;
 
-                    if (nuevoItem.CantidadEsperada > stockLibreParaEstaOrden)
+                    // Bloqueo estricto
+                    if (nuevoItem.CantidadKilos > stockLibreParaEstaOrden)
                     {
-                        return BadRequest($"Stock insuficiente para {mp.Nombre}. Necesitás {nuevoItem.CantidadEsperada}kg pero solo tenés {stockLibreParaEstaOrden}kg disponibles (contando la reserva previa). La orden no se modificó.");
+                        return BadRequest($"Stock insuficiente de '{mp.Nombre}'. Requiere {nuevoItem.CantidadKilos}kg pero solo quedan {stockLibreParaEstaOrden}kg libres en planta.");
                     }
                 }
 
-                // 3. Si llegamos acá, HAY STOCK PARA TODO. Procedemos a limpiar lo viejo.
-                foreach (var consumoViejo in orden.Consumos)
+                // 3. LIMPIAR RECETA VIEJA
+                _context.RemoveRange(orden.Consumos);
+
+                // 4. CREAR LA NUEVA RECETA (Usando tu clase ConsumoOrden)
+                var nuevosConsumos = dto.RecetaNueva.Select(item => new ConsumoOrden
                 {
-                    // Devolvemos el stock reservado viejo a la fábrica
-                    consumoViejo.MateriaPrima.StockReservado -= consumoViejo.CantidadEsperada;
-                }
-                // Borramos la receta vieja de la base de datos
-                _context.OrdenMateriaPrima.RemoveRange(orden.Consumos);
+                    MateriaPrimaId = item.MateriaPrimaId,
+                    CantidadKilos = item.CantidadKilos
+                }).ToList();
 
-                // 4. Aplicamos la receta nueva y reservamos el nuevo stock
-                var nuevosConsumos = new List<OrdenMateriaPrima>();
-                foreach (var item in dto.RecetaNueva)
-                {
-                    var mp = await _context.Productos.FindAsync(item.MateriaPrimaId);
-
-                    // Retenemos el stock de la nueva receta
-                    mp.StockReservado += item.CantidadEsperada;
-
-                    nuevosConsumos.Add(new OrdenMateriaPrima
-                    {
-                        MateriaPrimaId = mp.Id,
-                        CantidadEsperada = item.CantidadEsperada,
-                        TipoInsumo = item.TipoInsumo // "VIRGEN", "MASTERBATCH", etc.
-                    });
-                }
-
-                // 5. Actualizamos los datos principales de la orden
-                orden.Consumos = nuevosConsumos;
+                // 5. ACTUALIZAR LOS DATOS DE LA ORDEN
+                orden.Largo = dto.Largo;
+                orden.Ancho = dto.Ancho;
+                orden.Espesor = dto.Espesor;
+                orden.Cantidad = dto.Cantidad;
                 orden.KilosEstimados = dto.KilosTotales;
-                orden.MermaPorcentaje = dto.Merma;
+                orden.Desperdicio = dto.Desperdicio;
 
-                // 🚨 ACA ESTÁ EL REQUISITO: Volvemos a marcar como NO impresa
-                orden.Impresa = false;
-                // Si estaba "En Cola" porque antes faltaba material, ahora quizás pasa a "Pendiente"
-                orden.Estado = EstadoOrden.Pendiente;
+                orden.ConBrillo = dto.ConBrillo;
+                orden.LlevaFilm = dto.LlevaFilm;
+                orden.TipoCorona = dto.TipoCorona;
+                orden.Color = dto.Color;
+
+                orden.Consumos = nuevosConsumos;
+
+                // 6. CUMPLIMOS LOS REQUISITOS DEL NEGOCIO
+                orden.EsImpreso = false; // Desmarcar la impresión
+                orden.Estado = EstadoOrden.Pendiente; // Mandar a pendiente
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                return Ok(new { mensaje = "✅ Orden modificada correctamente. Stock recalculado y orden desmarcada como impresa." });
+                return Ok(new { mensaje = "✅ Orden modificada con éxito. Por favor, vuelva a imprimir la hoja de ruta." });
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                return StatusCode(500, $"Error al modificar: {ex.Message}");
+                return StatusCode(500, $"Error interno: {ex.Message}");
             }
         }
 
