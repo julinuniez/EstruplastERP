@@ -145,7 +145,6 @@ const tipoCorona = computed(() => {
     const val = props.form?.tipoCorona || props.form?.TipoCorona;
     return (val && val.toUpperCase() !== 'NINGUNO') ? val.toUpperCase() : null;
 });
-console.log("DATOS LLEGANDO A LA HOJA:", props.form);
 </script>
 
 <template>
