@@ -5,9 +5,7 @@
     public decimal Espesor { get; set; }
     public decimal Cantidad { get; set; }
     public decimal KilosTotales { get; set; }
-    public decimal Desperdicio { get; set; } // Tu columna de merma real
-
-    // Tus aditivos reales
+    public decimal Desperdicio { get; set; } 
     public bool ConBrillo { get; set; }
     public bool LlevaFilm { get; set; }
     public string TipoCorona { get; set; }
@@ -19,5 +17,5 @@
 public class ItemRecetaModificadaDto
 {
     public int MateriaPrimaId { get; set; }
-    public decimal CantidadKilos { get; set; } // Tu propiedad real
+    public decimal CantidadKilos { get; set; } 
 }

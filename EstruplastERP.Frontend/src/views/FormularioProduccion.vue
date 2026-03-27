@@ -4,7 +4,7 @@ import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import html2pdf from 'html2pdf.js'
 import HojaImpresion from '../components/HojaImpresion.vue'
 import ListaProduccion from '../components/ListaProduccion.vue'
-import api from '@/services/axiosInstance' 
+import { ProduccionAPI } from '@/services/produccionService'
 
 const DENSIDAD_DEFAULT = 1.1;
 
@@ -636,15 +636,16 @@ const imprimirDesdeHistorial = async (payload: { orden: any, tipo: string }) => 
         form.value.largo = orden.largo;
         form.value.ancho = orden.ancho;
         form.value.espesor = orden.espesor;
-        form.value.colorTexto = orden.color;
         form.value.esBobina = !!orden.esBobina;
         form.value.cantidad = orden.cantidad;
+        form.value.observacion = orden.observacion || '';
         
-        let obsLimpia = orden.observacion || '';
-        form.value.llevaFilm = obsLimpia.includes('[🛡️ LLEVA FILM PROTECTOR]');
-        const matchCorona = obsLimpia.match(/\[⚡ TRAT\. CORONA: (.*?)\]/);
-        form.value.tipoCorona = matchCorona ? matchCorona[1] : 'Ninguno';
-        form.value.observacion = obsLimpia.replace(/\[🛡️ LLEVA FILM PROTECTOR\]/g, '').replace(/\[⚡ TRAT\. CORONA:.*?\]/g, '').trim();
+        // 🚨 ACÁ ESTÁ LA CORRECCIÓN CLAVE: Leemos los aditivos directo de la DB
+        form.value.conBrillo = orden.conBrillo || false;
+        form.value.llevaFilm = orden.llevaFilm || false;
+        form.value.tipoCorona = orden.tipoCorona || 'Ninguno';
+        form.value.color = orden.color || '';
+        form.value.colorTexto = orden.color || ''; 
         
         const desp = Number(orden.desperdicio || 0);
         form.value.merma = desp;
@@ -1064,51 +1065,21 @@ const imprimirLoteOPsDesdeHistorial = async (ordenesArray: any[]) => {
 onMounted(async () => {
     try {
         loading.value = true;
+        
+        // Magia: Todo encapsulado y limpio
         const [resProd, resCli, resInv] = await Promise.all([
-            api.get('/Productos'),
-            api.get('/Clientes'),
-            api.get('/Productos/inventario-completo')
+            ProduccionAPI.obtenerProductos(),
+            ProduccionAPI.obtenerClientes(),
+            ProduccionAPI.obtenerInventarioCompleto()
         ]);
-        if (Array.isArray(resProd.data)) {
-            productos.value = resProd.data;
+        
+        if (Array.isArray(resProd)) {
+            productos.value = resProd;
             listaTodasMateriasPrimas.value = productos.value.filter(p => p.esMateriaPrima);
         }
-        if (Array.isArray(resCli.data)) clientes.value = resCli.data;
-        if (Array.isArray(resInv.data)) listaInventarioCompleto.value = resInv.data;
-
-        const borradorGuardado = localStorage.getItem(STORAGE_KEY);
-        if (borradorGuardado) {
-            try {
-                const datos = JSON.parse(borradorGuardado);
-                const unDia = 24 * 60 * 60 * 1000;
-                if (Date.now() - datos.timestamp < unDia) {
-                    if (confirm("📝 Encontré un trabajo sin terminar. ¿Quieres recuperarlo?")) {
-                        
-                        Object.assign(form.value, datos.form);
-                        recetaDinamica.value = datos.receta;
-                        
-                        setTimeout(() => {
-                            form.value.largo = datos.form.largo;
-                            form.value.ancho = datos.form.ancho;
-                            form.value.espesor = datos.form.espesor;
-                            form.value.cantidad = datos.form.cantidad;
-                            form.value.observacion = datos.form.observacion;
-                            form.value.kilosTotales = datos.form.kilosTotales;
-                            form.value.colorTexto = datos.form.colorTexto || '';
-                                
-                            mensaje.value = "📝 Datos y medidas recuperados con éxito.";
-                        }, 1500);
-
-                    } else {
-                        limpiarBorrador();
-                    }
-                }
-            } catch (e) {
-                console.error("Error leyendo borrador", e);
-                limpiarBorrador();
-            }
-        }
-
+        if (Array.isArray(resCli)) clientes.value = resCli;
+        if (Array.isArray(resInv)) listaInventarioCompleto.value = resInv;
+        
     } catch (e) {
         console.error("Error inicializando producción:", e);
     } finally {

@@ -160,12 +160,9 @@ namespace EstruplastERP.Api.Services
                     Ancho = request.Ancho,
                     Color = request.Color,
                     Espesor = request.Espesor,
-                    
-                    // 🚨 NUEVOS CAMPOS GUARDADOS EN LA BD 
                     ConBrillo = request.ConBrillo,
                     LlevaFilm = request.LlevaFilm,
                     TipoCorona = request.TipoCorona,
-
                     Consumos = new List<ConsumoOrden>()
                 };
 
@@ -190,9 +187,6 @@ namespace EstruplastERP.Api.Services
 
                 if (consumosCalculados.Any())
                 {
-                    var idsInsumos = consumosCalculados.Select(c => c.MateriaPrimaId).ToList();
-                    var inventarioInsumos = await _context.Productos.Where(p => idsInsumos.Contains(p.Id)).ToListAsync();
-
                     foreach (var item in consumosCalculados)
                     {
                         nuevaOrden.Consumos.Add(new ConsumoOrden
@@ -200,38 +194,13 @@ namespace EstruplastERP.Api.Services
                             MateriaPrimaId = item.MateriaPrimaId,
                             CantidadKilos = item.CantidadKilos
                         });
-
-                        if (hayStock)
-                        {
-                            var mp = inventarioInsumos.FirstOrDefault(p => p.Id == item.MateriaPrimaId);
-                            if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
-                            {
-                                mp.StockActual -= item.CantidadKilos;
-                                _context.Movimientos.Add(new Movimiento
-                                {
-                                    Fecha = DateTime.Now,
-                                    ProductoId = mp.Id,
-                                    Cantidad = -item.CantidadKilos,
-                                    TipoMovimiento = "CONSUMO",
-                                    Observacion = "Reserva Producción",
-                                    ClienteId = request.ClienteId
-                                });
-                            }
-                        }
                     }
                 }
 
                 _context.Ordenes.Add(nuevaOrden);
                 await _context.SaveChangesAsync();
-
-                if (hayStock)
-                {
-                    var movsRecientes = _context.Movimientos.Local.Where(m => m.Observacion == "Reserva Producción");
-                    foreach (var m in movsRecientes) m.Observacion = $"Reserva Orden #{nuevaOrden.Id}";
-                    await _context.SaveChangesAsync();
-                }
-
                 await transaction.CommitAsync();
+
                 return nuevaOrden;
             }
             catch

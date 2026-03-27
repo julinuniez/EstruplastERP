@@ -25,7 +25,7 @@ const cantidadCopias = computed(() => props.ocultarFormula ? 2 : 1);
 const kilosNetosExactos = computed(() => Number(props.form?.kilosTotales) || 0);
 
 const pesoBrutoExacto = computed(() => {
-    const porcentajeDesperdicio = Number(props.form?.merma) || 0; 
+    const porcentajeDesperdicio = Number(props.form?.merma) || Number(props.form?.desperdicio) || 0; 
     const resultado = kilosNetosExactos.value * (1 + (porcentajeDesperdicio / 100));
     return isNaN(resultado) ? 0 : resultado;
 });
@@ -46,8 +46,6 @@ const ceilKilos = (valor: number, decimales = 3) => {
 };
 
 const recetaVisual = computed(() => {
-    console.log("DEBUG 3 - Props receta llegando a la Hoja:", props.receta);
-    console.log("DEBUG 4 - ocultarFormula está en:", props.ocultarFormula);
     let lista = [...props.receta];
     return lista.sort((a, b) => (parseFloat(b.cantidad) || 0) - (parseFloat(a.cantidad) || 0));
 });
@@ -139,6 +137,15 @@ const nombreProductoLimpio = computed(() => {
     }
     return nombreOriginal;
 });
+
+// Variables computadas para los Aditivos leyendo tu base de datos
+const tieneBrillo = computed(() => props.form?.conBrillo === true || props.form?.ConBrillo === true);
+const llevaFilm = computed(() => props.form?.llevaFilm === true || props.form?.LlevaFilm === true);
+const tipoCorona = computed(() => {
+    const val = props.form?.tipoCorona || props.form?.TipoCorona;
+    return (val && val.toUpperCase() !== 'NINGUNO') ? val.toUpperCase() : null;
+});
+console.log("DATOS LLEGANDO A LA HOJA:", props.form);
 </script>
 
 <template>
@@ -167,7 +174,7 @@ const nombreProductoLimpio = computed(() => {
         </div>
 
         <div class="ficha-tecnica-pdf">
-            <div class="dato-box-pdf" v-if="!form.esConsolidado"><span class="label-tech-pdf">COLOR</span><span class="valor-tech-pdf">{{ colorFinal }}</span></div>
+            <div class="dato-box-pdf" v-if="!form.esConsolidado"><span class="label-tech-pdf">COLOR</span><span class="valor-tech-pdf">{{ colorFinal || form?.color || form?.Color || '-' }}</span></div>
             <div class="dato-box-pdf" v-if="!form.esConsolidado">
                 <span class="label-tech-pdf">{{ form.esBobina ? 'FORMATO' : 'LARGO' }}</span>
                 <span class="valor-tech-pdf">{{ form.esBobina ? 'BOBINA (' + (form.kilosPorBobina || 0) + ' Kg)' : (form.largo || 0) + ' mm' }}</span>
@@ -180,24 +187,21 @@ const nombreProductoLimpio = computed(() => {
             </div>
         </div>
 
-        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="ocultarFormula && (form.llevaFilm || (form.tipoCorona && form.tipoCorona !== 'Ninguno') || form.conBrillo)">
-            
-            <div class="dato-box-pdf" v-if="form.conBrillo" style="background-color: #f1f2f6; padding: 4px;">
-                <span class="label-tech-pdf" style="font-size: 10px;">BRILLO</span>
-                <span class="valor-tech-pdf" style="font-size: 14px; color: #2c3e50;">SÍ</span>
+        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="ocultarFormula && !form.esConsolidado && (tieneBrillo || llevaFilm || tipoCorona)">
+            <div class="dato-box-pdf" v-if="tieneBrillo">
+                <span class="label-tech-pdf">BRILLO</span>
+                <span class="valor-tech-pdf">SÍ</span>
             </div>
-
-            <div class="dato-box-pdf" v-if="form.llevaFilm" style="background-color: #f1f2f6; padding: 4px;">
-                <span class="label-tech-pdf" style="font-size: 10px;">FILM</span>
-                <span class="valor-tech-pdf" style="font-size: 14px; color: #2c3e50;">SÍ</span>
+            <div class="dato-box-pdf" v-if="llevaFilm">
+                <span class="label-tech-pdf">FILM</span>
+                <span class="valor-tech-pdf">SÍ</span>
             </div>
-
-            <div class="dato-box-pdf" v-if="form.tipoCorona && form.tipoCorona !== 'Ninguno'" style="background-color: #f1f2f6; padding: 4px;">
-                <span class="label-tech-pdf" style="font-size: 10px;">CORONA</span>
-                <span class="valor-tech-pdf" style="font-size: 14px; color: #2c3e50;">{{ form.tipoCorona.toUpperCase() }}</span>
+            <div class="dato-box-pdf" v-if="tipoCorona">
+                <span class="label-tech-pdf">Corona</span>
+                <span class="valor-tech-pdf">{{ tipoCorona }}</span>
             </div>
-            
         </div>
+
         <div v-show="!ocultarFormula" class="seccion-receta-pdf">
             <div class="titulo-receta-pdf">
                 {{ form.esConsolidado ? 'RESUMEN DE MEZCLA CONSOLIDADA' : `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(Number(densidad).toFixed(3))})` }}
@@ -220,7 +224,7 @@ const nombreProductoLimpio = computed(() => {
                     </tr>
                     <template v-for="(r, i) in recetaVisual" :key="i">
                         <tr>
-                            <td style="font-weight: 600;">{{ r.nombreInsumo }}</td>
+                            <td style="font-weight: 600;">{{ r.nombreInsumo || r.nombreMateriaPrima }}</td>
                             <td style="text-align:center; vertical-align: middle;" v-if="!form.esConsolidado">
                                 <div class="porcentaje-celda">
                                     {{ r.cantidad }} %
@@ -229,7 +233,7 @@ const nombreProductoLimpio = computed(() => {
                             <td style="text-align:right; font-size: 1.1em;">
                                 <strong>
                                     {{ form.esConsolidado 
-                                        ? parseFloat(r.cantidad).toFixed(3) 
+                                        ? parseFloat(r.cantidadKilos || r.cantidad).toFixed(3) 
                                         : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad.toString()) || 0)) / 100).toFixed(3) 
                                     }} kg
                                 </strong>
@@ -281,6 +285,7 @@ const nombreProductoLimpio = computed(() => {
 </template>
 
 <style>
+/* Tu estilo original sin los estilos de los carteles de colores */
 .contenedor-principal-pdf { background: white; width: 209mm; min-height: 290mm; padding: 0; box-sizing: border-box; color: black; font-family: Arial, sans-serif; position: relative; }
 .pagina-copia { padding: 15mm; box-sizing: border-box; width: 100%; height: 290mm; display: flex; flex-direction: column; position: relative; }
 .pagina-copia.modo-mitad { height: 145mm; padding: 5mm 15mm; border-bottom: 1px dashed #999; display: block; }
@@ -317,8 +322,6 @@ const nombreProductoLimpio = computed(() => {
 .marca-agua { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 50px; color: rgba(0,0,0,0.03); font-weight: 900; border: 5px solid rgba(0,0,0,0.03); padding: 10px 40px; border-radius: 20px; z-index: 0; pointer-events: none; }
 .linea-corte-pdf { position: absolute; bottom: -12px; left: 0; width: 100%; text-align: center; font-size: 10px; color: #999; z-index: 10; }
 .linea-corte-pdf span { background: white; padding: 0 10px; }
-
-/* Estilos devueltos para el buscador */
 .agregar-fila-pdf { padding: 5px; border-top: 1px solid #ccc; display: flex; gap: 5px; align-items: center; justify-content: flex-end; background: #f9f9f9; }
 .btn-add-insumo { background:#2ecc71; color:white; border:none; padding:5px 10px; cursor:pointer; font-weight: bold; border-radius: 4px; }
 .btn-borrar-insumo { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px; }
