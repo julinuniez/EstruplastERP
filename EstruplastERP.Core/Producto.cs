@@ -15,9 +15,6 @@ namespace EstruplastERP.Core
         [MaxLength(50)]
         public string? CodigoSku { get; set; } 
 
-        [MaxLength(50)]
-        public string? Color { get; set; } // Ej: "Gris Goff"
-
         public string? Rubro { get; set; }// Valores sugeridos: "VIRGEN", "SCRAP", "TUTTI", "ADITIVO", "MASTERBATCH"
         public string? TipoMaterial { get; set; } // Ej: "PAI", "ABS", "BIO", "PP"
         public bool EsFazon { get; set; } = false;

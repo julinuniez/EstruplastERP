@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '@/services/axiosInstance';
+import { useFiltrosInventario, detectarTipo } from '@/composables/useFiltrosInventario';
+import { useImportacionInventario } from '@/composables/useImportacionInventario';
+import { useModalesInventario } from '@/composables/useModalesInventario';
 
 const router = useRouter();
 
@@ -9,9 +12,7 @@ const listaProductos = ref<any[]>([]);
 const listaClientes = ref<any[]>([]);
 const busqueda = ref('');
 const cargando = ref(true);
-const importando = ref(false);
 const error = ref('');
-const fileInput = ref<HTMLInputElement | null>(null);
 
 const tabActual = ref('MP');
 const subTabMP = ref('VIRGEN'); 
@@ -20,260 +21,49 @@ const clienteFiltro = ref<number | string>('');
 const materialFiltro = ref<string>('');
 const importClienteFiltro = ref<number | string>('');
 
-const TIPOS_MATERIALES = [
-    'PAI', 'PEAD', 'PP', 'BIO', 'ABS', 'RESISTENTE FREON', 'POLIETILENO'
-];
-
-const mostrarModalNuevaMP = ref(false);
-const nuevaMP = ref({ nombre: '', codigoSku: '' });
-const guardandoMP = ref(false);
-
-const mostrarModalReservas = ref(false);
-const productoSeleccionado = ref<any>(null);
-const ordenesReserva = ref<any[]>([]);
-const cargandoReservas = ref(false);
-
-const verDetalleReserva = async (producto: any) => {
-    productoSeleccionado.value = producto;
-    mostrarModalReservas.value = true;
-    cargandoReservas.value = true;
-    ordenesReserva.value = [];
-    
-    try {
-        const res = await api.get(`/Productos/${producto.id}/reservas`);
-        ordenesReserva.value = res.data;
-        cargandoReservas.value = false;
-        
-    } catch (e) {
-        console.error(e);
-        cargandoReservas.value = false;
-        alert("Error al cargar el detalle de reservas.");
-    }
-};
-
-const guardarNuevaMateriaPrima = async () => {
-    if (!nuevaMP.value.nombre || !nuevaMP.value.codigoSku) {
-        return alert("⚠️ El Nombre y el SKU son obligatorios.");
-    }
-    guardandoMP.value = true;
-    try {
-        await api.post('/Productos/crear', {
-            nombre: nuevaMP.value.nombre.toUpperCase(),
-            codigoSku: nuevaMP.value.codigoSku.toUpperCase(),
-            precioCosto: 0,
-            stockMinimo: 0,
-            color: '',
-            receta: []
-        });
-        alert("✅ Insumo creado correctamente.");
-        nuevaMP.value = { nombre: '', codigoSku: '' };
-        mostrarModalNuevaMP.value = false;
-        await cargarDatos();
-    } catch (e: any) {
-        const msg = e.response?.data?.mensaje || e.response?.data || "Error de conexión";
-        alert("❌ Error al crear: " + msg);
-    } finally {
-        guardandoMP.value = false;
-    }
-};
-
-const getSku = (p: any) => (p.codigoSku || p.CodigoSku || '').toUpperCase();
-const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
-const getRubro = (p: any) => (p.rubro || p.Rubro || '').toUpperCase();
-const getClienteId = (p: any) => p.clienteId || p.ClienteId || 0;
-const checkEsPT = (p: any) => !!(p.esProductoTerminado || p.EsProductoTerminado);
-const checkEsMP = (p: any) => !!(p.esMateriaPrima || p.EsMateriaPrima);
-const checkEsFazon = (p: any) => !!(p.esFazon || p.EsFazon);
-const checkEsScrap = (p: any) => !!(p.esScrap || p.EsScrap);
-const checkGenerico = (p: any) => !!(p.esGenerico || p.EsGenerico);
-
-const checkEsMolido = (p: any) => {
-    const r = getRubro(p);
-    return r.includes('MOLIDO') || r.includes('SCRAP');
-};
-
-const esMpCliente = (p: any) => {
-    const r = getRubro(p);
-    return r.includes('CLIENTE') || (checkEsMP(p) && getClienteId(p) > 0);
-};
-
-const checkEsMasterbatch = (p: any) => {
-    const r = getRubro(p);
-    return r.includes('MASTER') || r.includes('MASTERBATCH') || getNombre(p).includes('PIGMENTO');
-};
-
-const checkEsAditivo = (p: any) => {
-    const r = getRubro(p);
-    return r.includes('ADITIVO');
-};
-
-const detectarTipo = (p: any) => {
-    if (p.tipoMaterial) {
-        const t = p.tipoMaterial.toUpperCase().trim();
-        if (TIPOS_MATERIALES.includes(t)) return t;
-    }
-    const n = getNombre(p);
-    if (n.includes('FREON') || n.includes('RESISTENTE')) return 'RESISTENTE FREON';
-    if (n.includes('BIO') || n.includes('DEGRADABLE')) return 'BIO';
-    if (n.includes('ABS')) return 'ABS';
-    if (n.includes('PEAD') || n.includes('ALTA') || n.includes('HDPE')) return 'PEAD';
-    if (n.includes('PP') || n.includes('POLIPROPILENO')) return 'PP';
-    if (n.includes('POLIETILENO') || n.includes('PEBD') || n.includes('BAJA') || n.includes('LDPE')) return 'POLIETILENO';
-    if (n.includes('PAI') || n.includes('TUTI') || n.includes('IMPACTO') || n.includes('A.I.')) return 'PAI';
-    return 'OTROS';
-};
-
 watch(clienteFiltro, () => { materialFiltro.value = ''; });
 watch(tabActual, () => { subTabMP.value = 'VIRGEN'; });
 
-const clientesFazon = computed(() => {
-    return listaClientes.value.filter(c => c.esFazon === true);
-});
+const { 
+    TIPOS_MATERIALES, clientesFazon, productosFiltrados, 
+    countMP, countPT, countCLI, getClienteId, checkEsFazon, 
+    checkEsMolido, checkEsScrap 
+} = useFiltrosInventario(
+    listaProductos, listaClientes, tabActual, subTabMP, 
+    subTabCliente, clienteFiltro, materialFiltro, busqueda
+);
 
-const productosFiltrados = computed(() => {
-    let lista = listaProductos.value;
-    const tab = tabActual.value;
-    
-    if (tab === 'MP') {
-        lista = lista.filter(p =>
-            checkEsMP(p) && 
-            !esMpCliente(p) && 
-            !checkEsScrap(p) && 
-            !checkEsMolido(p) && 
-            p.id !== 90
-        );
+const { 
+    mostrarModalNuevaMP, nuevaMP, guardandoMP, 
+    mostrarModalReservas, productoSeleccionado, ordenesReserva, cargandoReservas,
+    verDetalleReserva, guardarNuevaMateriaPrima
+} = useModalesInventario(cargarDatos);
 
-        if (subTabMP.value === 'MASTERBATCH') {
-            lista = lista.filter(p => checkEsMasterbatch(p));
-        } else if (subTabMP.value === 'ADITIVOS') {
-            lista = lista.filter(p => checkEsAditivo(p) && !checkEsMasterbatch(p));
-        } else if (subTabMP.value === 'VIRGEN') {
-            lista = lista.filter(p => {
-                const colorProd = (p.color || p.Color || '').toUpperCase();
-                const n = getNombre(p);
-                
-                if (colorProd.includes('GENERICO') || colorProd.includes('GENÉRICO')) return false;
-                if (n.includes('FAZON') || n.includes('FAZÓN') || n.includes('BASE')) return false;
-
-                return !checkEsMasterbatch(p) && !checkEsAditivo(p);
-            });
-        }
-
-    } else if (tab === 'PT') {
-        lista = lista.filter(p => checkEsPT(p));
-    } else if (tab === 'CLI') {
-        if (!clienteFiltro.value) return [];
-        const idFiltro = Number(clienteFiltro.value);
-        lista = lista.filter(p => getClienteId(p) === idFiltro);
-        
-        if (subTabCliente.value === 'MP_CLI') {
-            lista = lista.filter(p => checkEsMP(p) && !checkEsMolido(p) && !checkEsPT(p));
-        } else if (subTabCliente.value === 'MOLIDO_CLI') {
-            lista = lista.filter(p => checkEsMolido(p) || checkEsScrap(p));
-        } else {
-            lista = lista.filter(p => checkEsFazon(p) || checkEsPT(p));
-        }
-        
-        if (materialFiltro.value) {
-            lista = lista.filter(p => detectingTipo(p) === materialFiltro.value);
-        }
-    }
-
-    if (busqueda.value) {
-        const texto = busqueda.value.toUpperCase();
-        lista = lista.filter(p => getNombre(p).includes(texto) || getSku(p).includes(texto));
-    }
-    return lista;
-});
-
-const detectingTipo = (p: any) => detectarTipo(p);
-
-const baseMP = computed(() => listaProductos.value.filter(p => checkEsMP(p) && !esMpCliente(p) && !checkEsMolido(p) && !checkEsScrap(p) && !checkGenerico(p) && !getNombre(p).includes('GENERICO') && !getNombre(p).includes('BASE') && p.id !== 90));
-
-const countMP = computed(() => baseMP.value.length);
-const countPT = computed(() => listaProductos.value.filter(p => checkEsPT(p)).length);
-const countCLI = computed(() => listaProductos.value.filter(p => getClienteId(p) > 0).length);
+const {
+    fileInput, importando, clickImportar, subirArchivoFlexxus
+} = useImportacionInventario(tabActual, clienteFiltro, importClienteFiltro, cargarDatos);
 
 const irAEditar = (id: number) => {
     router.push({ name: 'editar-producto', params: { id } });
 };
 
-const clickImportar = () => fileInput.value?.click();
-
-const subirArchivoFlexxus = async (event: Event) => {
-    const target = event.target as HTMLInputElement;
-    if (!target.files || target.files.length === 0) return;
-    const archivo = target.files[0];
-    if (!archivo) return;
-
-    const esExcel = archivo.name.toLowerCase().endsWith('.xlsx');
-    const esCsv = archivo.name.toLowerCase().endsWith('.csv');
-
-    if (esCsv && tabActual.value === 'CLI' && !clienteFiltro.value) {
-        alert("⚠️ ATENCIÓN:\nPara importar un CSV de stock específico, por favor seleccione primero el CLIENTE en el filtro.");
-        target.value = '';
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('archivo', archivo);
-
-    if (esCsv && clienteFiltro.value) {
-        formData.append('clienteId', clienteFiltro.value.toString());
-    }
-
-    if (esExcel && importClienteFiltro.value) {
-        formData.append('clienteIdFiltro', importClienteFiltro.value.toString());
-    }
-
-    try {
-        importando.value = true;
-        let urlEndpoint = '';
-        if (esExcel) {
-            urlEndpoint = `/Integration/importar-excel-multicliente`;
-        } else {
-            urlEndpoint = `/Integration/importar-maestro`;
-        }
-
-        const res = await api.post(urlEndpoint, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data'
-            }
-        });
-
-        alert(`✅ ÉXITO:\n${res.data.mensaje}`);
-
-        if (res.data.logs && res.data.logs.length > 0) {
-            console.warn("Reporte de Importación (Hojas omitidas):", res.data.logs);
-            if (!importClienteFiltro.value) {
-                alert("⚠️ Atención: Algunas hojas fueron omitidas por no coincidir con ningún cliente registrado. Revisa la consola (F12) para más detalles.");
-            }
-        }
-
-        await cargarDatos();
-
-    } catch (e: any) {
-        console.error(e);
-        const msg = e.response?.data || "Error al procesar el archivo.";
-        alert(`❌ ERROR: ${msg}`);
-    } finally {
-        importando.value = false;
-        if (fileInput.value) fileInput.value.value = '';
-    }
-};
-
-const cargarDatos = async () => {
+async function cargarDatos() {
     try {
         cargando.value = true;
         const [resProd, resCli] = await Promise.all([
             api.get('/Productos'),
             api.get('/Clientes')
         ]);
+        
+        const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
+        
         if (Array.isArray(resProd.data)) {
+            const productosActivos = resProd.data.filter(p => p.activo !== false && p.estado !== 0);
             listaProductos.value = resProd.data.sort((a: any, b: any) => getNombre(a).localeCompare(getNombre(b)));
         } else {
             listaProductos.value = [];
         }
+        
         if (Array.isArray(resCli.data)) {
             listaClientes.value = resCli.data;
         } else {
@@ -288,7 +78,7 @@ const cargarDatos = async () => {
     } finally {
         cargando.value = false;
     }
-};
+}
 
 onMounted(() => {
     cargarDatos();
@@ -386,7 +176,6 @@ onMounted(() => {
                         <th>Descripción</th>
                         <th v-if="tabActual === 'PT'">Dueño</th>
                         <th v-if="tabActual === 'CLI'">Material</th> 
-                        <th>Color / Var.</th>
                         <th style="text-align:right; width: 90px;" title="Stock Real en Galpón">Físico (Kg)</th>
                         <th style="text-align:center; width: 90px;" title="Retenido en Órdenes de Producción">Reservado</th>
                         <th style="text-align:right; width: 90px;" title="Stock Libre para usar">Disponible</th>
@@ -417,8 +206,6 @@ onMounted(() => {
                                 {{ detectingTipo(p) }}
                             </span>
                         </td>
-
-                        <td>{{ p.color || '-' }}</td>
 
                         <td style="text-align:right; font-weight: 500;">
                             {{ p.stockFisico ?? p.stockActual ?? 0 }}

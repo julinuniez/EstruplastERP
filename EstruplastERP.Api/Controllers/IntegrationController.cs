@@ -276,7 +276,6 @@ namespace EstruplastERP.Api.Controllers
                 prod.StockActual = stock;
                 prod.Nombre = nombreFinal;
                 prod.TipoMaterial = descripcionExcel;
-                prod.Color = descripcionExcel;
                 prod.EsScrap = esModoScrap;
                 prod.EsMateriaPrima = true;
                 prod.Activo = true;
@@ -294,7 +293,6 @@ namespace EstruplastERP.Api.Controllers
                     Nombre = nombreFinal,
                     Rubro = esModoScrap ? "MOLIDO CLIENTE" : "MATERIA PRIMA CLIENTE",
                     TipoMaterial = descripcionExcel,
-                    Color = descripcionExcel,
                     ClienteId = clienteId,
                     EsScrap = esModoScrap,
                     EsMateriaPrima = true,

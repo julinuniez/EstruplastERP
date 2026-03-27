@@ -201,21 +201,12 @@ namespace EstruplastERP.Api.Controllers
 
                     string nombreFinal = $"[RECUPERADO] {nombreBase}";
 
-                    if (!string.IsNullOrEmpty(productoScrap.Color))
-                    {
-                        if (!nombreFinal.ToUpper().Contains(productoScrap.Color.ToUpper()))
-                        {
-                            nombreFinal += $" {productoScrap.Color.ToUpper()}";
-                        }
-                    }
-
                     productoRecuperado = new Producto
                     {
                         CodigoSku = skuRecuperado,
                         Nombre = nombreFinal,
                         Rubro = "MATERIA PRIMA RECUPERADA",
                         TipoMaterial = productoScrap.TipoMaterial,
-                        Color = productoScrap.Color,
                         ClienteId = request.ClienteId,
                         EsScrap = false,
                         EsMateriaPrima = true,

@@ -1,0 +1,75 @@
+import { ref } from 'vue';
+import api from '@/services/axiosInstance';
+
+export function useModalesInventario(cargarDatos: () => Promise<void>) {
+    
+    // --- LÓGICA: MODAL DE ALTA DE MATERIA PRIMA MANUAL ---
+    const mostrarModalNuevaMP = ref(false);
+    const nuevaMP = ref({ nombre: '', codigoSku: '' });
+    const guardandoMP = ref(false);
+
+    const guardarNuevaMateriaPrima = async () => {
+        if (!nuevaMP.value.nombre || !nuevaMP.value.codigoSku) {
+            return alert("⚠️ El Nombre y el SKU son obligatorios.");
+        }
+        guardandoMP.value = true;
+        try {
+            await api.post('/Productos/crear', {
+                nombre: nuevaMP.value.nombre.toUpperCase(),
+                codigoSku: nuevaMP.value.codigoSku.toUpperCase(),
+                precioCosto: 0,
+                stockMinimo: 0,
+                receta: []
+            });
+            alert("✅ Insumo creado correctamente.");
+            nuevaMP.value = { nombre: '', codigoSku: '' };
+            mostrarModalNuevaMP.value = false;
+            
+            // Recargamos la tabla para que aparezca el nuevo material
+            await cargarDatos();
+            
+        } catch (e: any) {
+            const msg = e.response?.data?.mensaje || e.response?.data || "Error de conexión";
+            alert("❌ Error al crear: " + msg);
+        } finally {
+            guardandoMP.value = false;
+        }
+    };
+
+
+    // --- LÓGICA: MODAL DE DETALLE DE RESERVAS ---
+    const mostrarModalReservas = ref(false);
+    const productoSeleccionado = ref<any>(null);
+    const ordenesReserva = ref<any[]>([]);
+    const cargandoReservas = ref(false);
+
+    const verDetalleReserva = async (producto: any) => {
+        productoSeleccionado.value = producto;
+        mostrarModalReservas.value = true;
+        cargandoReservas.value = true;
+        ordenesReserva.value = [];
+        
+        try {
+            const res = await api.get(`/Productos/${producto.id}/reservas`);
+            ordenesReserva.value = res.data;
+            cargandoReservas.value = false;
+        } catch (e) {
+            console.error(e);
+            cargandoReservas.value = false;
+            alert("Error al cargar el detalle de reservas.");
+        }
+    };
+
+    return {
+        mostrarModalNuevaMP,
+        nuevaMP,
+        guardandoMP,
+        guardarNuevaMateriaPrima,
+
+        mostrarModalReservas,
+        productoSeleccionado,
+        ordenesReserva,
+        cargandoReservas,
+        verDetalleReserva
+    };
+}

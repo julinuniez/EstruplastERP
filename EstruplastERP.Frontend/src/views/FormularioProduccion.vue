@@ -289,6 +289,7 @@ onMounted(async () => {
 
     await cargarNotaPedidoSugerida();
 });
+defineExpose({ form, error, mensaje, registrarProduccion });
 </script>
 
 <template>

@@ -78,6 +78,7 @@ namespace EstruplastERP.Api.Controllers
         public async Task<IActionResult> GetProductos()
         {
             var productos = await _context.Productos
+                .Where(p => p.Activo)
                 .Select(p => new
                 {
                     p.Id,
@@ -85,7 +86,6 @@ namespace EstruplastERP.Api.Controllers
                     p.Nombre,
                     p.Rubro,
                     p.TipoMaterial,
-                    p.Color,
                     p.EsMateriaPrima,
                     p.EsProductoTerminado,
                     p.EsFazon,
@@ -114,7 +114,6 @@ namespace EstruplastERP.Api.Controllers
                 p.Nombre,
                 p.Rubro,
                 p.TipoMaterial,
-                p.Color,
                 p.EsMateriaPrima,
                 p.EsProductoTerminado,
                 p.EsFazon,
@@ -164,7 +163,6 @@ namespace EstruplastERP.Api.Controllers
                 PrecioCosto = producto.PrecioCosto,
                 StockMinimo = producto.StockMinimo,
                 PesoEspecifico = producto.PesoEspecifico,
-                Color = producto.Color,
                 EsProductoTerminado = producto.EsProductoTerminado,
                 EsMateriaPrima = producto.EsMateriaPrima,
 
@@ -209,7 +207,6 @@ namespace EstruplastERP.Api.Controllers
                     EsMateriaPrima = !esProductoTerminado,
                     StockMinimo = data.StockMinimo,
                     PrecioCosto = data.PrecioCosto,
-                    Color = data.Color,
                     StockActual = 0,
                     Activo = true,
                     EsGenerico = true, // 🚨 Creados por defecto en true
@@ -309,7 +306,6 @@ namespace EstruplastERP.Api.Controllers
             producto.Nombre = data.Nombre.Trim();
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
-            producto.Color = data.Color;
             // producto.EsGenerico = data.EsGenerico; // 🚨 Esto se queda comentado para que no lo pise
 
             try

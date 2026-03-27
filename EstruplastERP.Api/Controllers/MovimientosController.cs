@@ -114,8 +114,7 @@ namespace EstruplastERP.Api.Controllers
                         TipoMaterial = "RECUPERADO",
                         FechaCreacion = DateTime.Now,
                         EspesorMinimo = 0,
-                        EspesorMaximo = 0,
-                        Color = "GENERICO"
+                        EspesorMaximo = 0
                     };
                     _context.Productos.Add(producto);
                     await _context.SaveChangesAsync();
@@ -182,8 +181,7 @@ namespace EstruplastERP.Api.Controllers
                         PesoEspecifico = productoBase.PesoEspecifico,
                         FechaCreacion = DateTime.Now,
                         EspesorMinimo = 0,
-                        EspesorMaximo = 0,
-                        Color = nombreColor ?? "GENERICO"
+                        EspesorMaximo = 0
                     };
                     _context.Productos.Add(productoDestino);
                     await _context.SaveChangesAsync();
@@ -260,7 +258,6 @@ namespace EstruplastERP.Api.Controllers
                             EsScrap = true,
                             EsMateriaPrima = false,
                             EsProductoTerminado = false,
-                            Color = variedadLimpia,
                             Activo = true,
                             FechaCreacion = DateTime.Now,
                             PesoEspecifico = 1,

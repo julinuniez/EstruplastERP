@@ -13,7 +13,6 @@ namespace EstruplastERP.Api.Dtos
         public bool EsProductoTerminado { get; set; }
         public bool EsMateriaPrima { get; set; }
 
-        // ✅ AGREGADO: Necesario para que el Frontend sepa si bloquear medidas
         public bool EsGenerico { get; set; }
         public bool EsPremezcla { get; set; }
     }
@@ -27,7 +26,6 @@ namespace EstruplastERP.Api.Dtos
         public decimal Espesor { get; set; }
         public decimal PesoEspecifico { get; set; }
         public decimal StockMinimo { get; set; }
-        public string? Color { get; set; }
         public decimal PrecioCosto { get; set; }
         public string? Rubro { get; set; }
 
@@ -39,7 +37,6 @@ namespace EstruplastERP.Api.Dtos
     {
         public string Nombre { get; set; } = string.Empty;
         public string CodigoSku { get; set; } = string.Empty;
-        public string? Color { get; set; }
         public decimal PrecioCosto { get; set; }
         public decimal StockMinimo { get; set; }
 
@@ -54,7 +51,6 @@ namespace EstruplastERP.Api.Dtos
     {
         public string Nombre { get; set; }
         public string CodigoSku { get; set; }
-        public string? Color { get; set; }
         public decimal StockMinimo { get; set; }
     }
 
@@ -77,8 +73,6 @@ namespace EstruplastERP.Api.Dtos
         public bool EsPremezcla { get; set; }
         public decimal PrecioCosto { get; set; }
         public string? Rubro { get; set; }
-
-        // 🔥 AGREGADO: La lista de ingredientes para guardar
         public List<IngredienteDto>? Receta { get; set; }
     }
 }
