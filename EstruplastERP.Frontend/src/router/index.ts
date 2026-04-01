@@ -4,9 +4,9 @@ import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-rou
 import Login from '../views/Login.vue';
 import VistaDashboard from '../views/VistaDashboard.vue';        
 import FormularioProduccion from '../views/FormularioProduccion.vue'; 
-import GestionProductos from '../views/GestionProductos.vue';     
-import IngresoStock from '../views/IngresoStock.vue';
-import VistaGestionScrap from '../views/VistaGestionScrap.vue';   
+import GestionProductos from '../views/GestionProductos.vue';  
+import GestionScrap from '../views/GestionScrap.vue';     
+import IngresoStock from '../views/IngresoStock.vue'; 
 import VistaRemitos from '../views/VistaRemitos.vue';
 import DespachoRemitos from '../views/DespachoRemitos.vue';
 import Administracion from '../views/Administracion.vue';
@@ -42,14 +42,6 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true } 
     },
 
-    // --- RECUPERADO / SCRAP ---
-    { 
-        path: '/scrap', 
-        name: 'scrap', 
-        component: VistaGestionScrap,
-        meta: { requiresAuth: true } 
-    },
-
     // --- GESTIÓN PRODUCTOS (INVENTARIO) ---
     { 
         path: '/productos', 
@@ -58,10 +50,10 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: true }
     },
     {
-  path: '/ingreso-scrap',
-  name: 'ingreso-scrap',
-  component: () => import('../views/IngresoScrap.vue')
-},
+        path: '/scrap',
+        name: 'Scrap',
+        component: () => import('../views/GestionScrap.vue') // Apunta al contenedor nuevo
+      },
     
     {
         path: '/tablero-pedidos',

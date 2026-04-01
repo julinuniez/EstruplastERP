@@ -4,7 +4,6 @@ const TIPOS_MATERIALES = [
     'PAI', 'PEAD', 'PP', 'ABS', 'RESISTENTE FREON', 'POLIETILENO'
 ];
 
-// Funciones puras de ayuda (no necesitan ser exportadas)
 const getSku = (p: any) => (p.codigoSku || p.CodigoSku || '').toUpperCase();
 const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
 const getRubro = (p: any) => (p.rubro || p.Rubro || '').toUpperCase();
@@ -53,19 +52,26 @@ export function useFiltrosInventario(
         const tab = tabActual.value;
         
         if (tab === 'MP') {
-            lista = lista.filter((p: any) => checkEsMP(p) && !esMpCliente(p) && !checkEsScrap(p) && !checkEsMolido(p) && p.id !== 90);
+            if (subTabMP.value === 'MOLIDO_PROPIO') {
+                lista = lista.filter((p: any) => 
+                    checkEsMP(p) && 
+                    checkEsMolido(p) && 
+                    getClienteId(p) === 0
+                );
+            } else {
+                lista = lista.filter((p: any) => checkEsMP(p) && !esMpCliente(p) && !checkEsScrap(p) && !checkEsMolido(p) && p.id !== 90);
 
-            if (subTabMP.value === 'MASTERBATCH') {
-                lista = lista.filter(checkEsMasterbatch);
-            } else if (subTabMP.value === 'ADITIVOS') {
-                lista = lista.filter((p: any) => checkEsAditivo(p) && !checkEsMasterbatch(p));
-            } else if (subTabMP.value === 'VIRGEN') {
-                lista = lista.filter((p: any) => {
-                    const n = getNombre(p);
-                    if (colorProd.includes('GENERICO') || colorProd.includes('GENÉRICO')) return false;
-                    if (n.includes('FAZON') || n.includes('FAZÓN') || n.includes('BASE')) return false;
-                    return !checkEsMasterbatch(p) && !checkEsAditivo(p);
-                });
+                if (subTabMP.value === 'MASTERBATCH') {
+                    lista = lista.filter(checkEsMasterbatch);
+                } else if (subTabMP.value === 'ADITIVOS') {
+                    lista = lista.filter((p: any) => checkEsAditivo(p) && !checkEsMasterbatch(p));
+                } else if (subTabMP.value === 'VIRGEN') {
+                    lista = lista.filter((p: any) => {
+                        const n = getNombre(p);
+                        if (n.includes('FAZON') || n.includes('FAZÓN') || n.includes('BASE')) return false;
+                        return !checkEsMasterbatch(p) && !checkEsAditivo(p);
+                    });
+                }
             }
         } else if (tab === 'PT') {
             lista = lista.filter(checkEsPT);
@@ -91,12 +97,21 @@ export function useFiltrosInventario(
             const texto = busqueda.value.toUpperCase();
             lista = lista.filter((p: any) => getNombre(p).includes(texto) || getSku(p).includes(texto));
         }
-        return lista;
+        return lista.filter((p: any) => 
+            !(p.codigoSku || '').toUpperCase().includes('BASE') &&
+            !(p.nombre || '').toUpperCase().includes('BASE')
+        );
     });
 
     const baseMP = computed(() => listaProductos.value.filter((p: any) => 
-        checkEsMP(p) && !esMpCliente(p) && !checkEsMolido(p) && !checkEsScrap(p) && !checkGenerico(p) && 
-        !getNombre(p).includes('GENERICO') && !getNombre(p).includes('BASE') && p.id !== 90
+        checkEsMP(p) && 
+        !esMpCliente(p) && 
+        !checkEsMolido(p) && 
+        !checkEsScrap(p) && 
+        !getNombre(p).includes('GENERICO') && 
+        !getNombre(p).includes('BASE') && 
+        !(p.codigoSku || '').toUpperCase().includes('BASE') && 
+        p.id !== 90
     ));
 
     const countMP = computed(() => baseMP.value.length);

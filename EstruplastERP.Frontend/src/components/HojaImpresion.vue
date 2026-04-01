@@ -67,31 +67,7 @@ const obtenerTipoMaterial = (item: any) => {
 const sugerenciasFiltradas = computed(() => {
     const texto = insumoBusquedaTexto.value.trim().toUpperCase();
     let lista = props.materiasPrimas || [];
-    const idClienteOrden = props.cliente ? props.cliente.id : 0;
-    const materialRequerido = obtenerTipoMaterial(props.producto);
-    lista = lista.filter(mp => {
-        const nombreMP = (mp.nombre || '').toUpperCase();
-        const rubroMP = (mp.rubro || '').toUpperCase();
-        const idDuenioMaterial = mp.clienteId || 0;
-        if (nombreMP.includes('SCRAP') || nombreMP.includes('SUCIO')) return false;
-        const esMolido = mp.esScrap || rubroMP.includes('MOLIDO');
-        if (esMolido && idDuenioMaterial === 0) return false;
-        const esDelClienteActual = (idClienteOrden > 0 && idDuenioMaterial === idClienteOrden);
-        const materialMP = obtenerTipoMaterial(mp);
-        if (esDelClienteActual) {
-            if (materialRequerido && materialMP && materialRequerido !== materialMP) return false;
-            return true;
-        }
-        if (idDuenioMaterial > 0 && idDuenioMaterial !== idClienteOrden) return false;
-        if (nombreMP.includes('BASE') && !nombreMP.includes('ALTA')) return false; 
-        if (nombreMP.includes('GENERICO') || nombreMP.includes('GENÉRICO')) return false;
-        if (mp.id >= 990 && mp.id <= 999) return false;
-        if (materialRequerido && materialMP) {
-            const esAditivo = rubroMP.includes('ADITIVO') || rubroMP.includes('MASTER') || nombreMP.includes('MASTER') || nombreMP.includes('COLOR') || nombreMP.includes('CARGA');
-            if (!esAditivo && materialRequerido !== materialMP) return false;
-        }
-        return true;
-    });
+    
     if (texto) {
         lista = lista.filter(mp => {
             const nombre = (mp.nombre || '').toUpperCase();
@@ -99,12 +75,8 @@ const sugerenciasFiltradas = computed(() => {
             return nombre.includes(texto) || rubro.includes(texto);
         });
     }
-    return [...lista].sort((a, b) => {
-        const aEsCliente = a.clienteId === idClienteOrden ? 1 : 0;
-        const bEsCliente = b.clienteId === idClienteOrden ? 1 : 0;
-        if (aEsCliente !== bEsCliente) return bEsCliente - aEsCliente; 
-        return a.nombre.localeCompare(b.nombre);
-    });
+    
+    return [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre));
 });
 
 const seleccionarInsumo = (mp: any) => { insumoBusquedaTexto.value = mp.nombre; mostrarLista.value = false; };
@@ -127,20 +99,25 @@ const solicitarQuitar = (item: any) => {
 };
 
 const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-const nombreProductoLimpio = computed(() => {
-    let nombreOriginal = props.producto?.nombre || '';
-    const nombreTrim = nombreOriginal.trimStart();
-    const upper = nombreTrim.toUpperCase();
-    const prefijos = ['LAMINADO A FAZON -', 'LAMINADO A FAZON-'];
+
+const tituloLimpioParaPDF = computed(() => {
+    let crudo = props.form?.productoNombre || props.producto?.nombre || '';
+    crudo = crudo.trim();
+    const upper = crudo.toUpperCase();
+    
+    const prefijos = ['LAMINADO A FAZON -', 'LAMINADO A FAZON-', 'FAZON -', 'FAZON-', 'FAZON '];
+    
     for (const pref of prefijos) {
-        if (upper.startsWith(pref)) return nombreTrim.substring(pref.length).trimStart() || nombreTrim;
+        if (upper.startsWith(pref)) {
+            return crudo.substring(pref.length).trim();
+        }
     }
-    return nombreOriginal;
+    return crudo;
 });
 
-// Variables computadas para los Aditivos leyendo tu base de datos
 const tieneBrillo = computed(() => props.form?.conBrillo === true || props.form?.ConBrillo === true);
 const llevaFilm = computed(() => props.form?.llevaFilm === true || props.form?.LlevaFilm === true);
+const esGofrado = computed(() => props.form?.esGofrado === true || props.form?.EsGofrado === true);
 const tipoCorona = computed(() => {
     const val = props.form?.tipoCorona || props.form?.TipoCorona;
     return (val && val.toUpperCase() !== 'NINGUNO') ? val.toUpperCase() : null;
@@ -168,7 +145,7 @@ const tipoCorona = computed(() => {
 
         <div class="caja-producto-pdf">
             <div class="titulo-seccion-pdf">PRODUCTO A FABRICAR</div>
-            <div class="producto-nombre-pdf">{{ form.productoNombre || nombreProductoLimpio }}</div>
+            <div class="producto-nombre-pdf">{{ tituloLimpioParaPDF }}</div>
             <div v-if="!ocultarFormula && !form.esConsolidado" class="producto-sku-pdf">CÓDIGO: {{ producto?.codigoSku }}</div>
         </div>
 
@@ -186,7 +163,7 @@ const tipoCorona = computed(() => {
             </div>
         </div>
 
-        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="ocultarFormula && !form.esConsolidado && (tieneBrillo || llevaFilm || tipoCorona)">
+        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="!form.esConsolidado && (tieneBrillo || llevaFilm || tipoCorona || esGofrado)">
             <div class="dato-box-pdf" v-if="tieneBrillo">
                 <span class="label-tech-pdf">BRILLO</span>
                 <span class="valor-tech-pdf">SÍ</span>
@@ -196,8 +173,12 @@ const tipoCorona = computed(() => {
                 <span class="valor-tech-pdf">SÍ</span>
             </div>
             <div class="dato-box-pdf" v-if="tipoCorona">
-                <span class="label-tech-pdf">Corona</span>
+                <span class="label-tech-pdf">CORONA</span>
                 <span class="valor-tech-pdf">{{ tipoCorona }}</span>
+            </div>
+            <div class="dato-box-pdf" v-if="esGofrado">
+                <span class="label-tech-pdf">ACABADO</span>
+                <span class="valor-tech-pdf">GOFRADO</span>
             </div>
         </div>
 
@@ -223,7 +204,15 @@ const tipoCorona = computed(() => {
                     </tr>
                     <template v-for="(r, i) in recetaVisual" :key="i">
                         <tr>
-                            <td style="font-weight: 600;">{{ r.nombreInsumo || r.nombreMateriaPrima }}</td>
+                            <td style="font-weight: 600;">
+                                {{ r.nombreInsumo || r.nombreMateriaPrima }}
+                                <span v-if="r.clienteId > 0" style="font-size: 0.85em; font-style: italic; color: #555;">
+                                    (De {{ cliente?.razonSocial || 'Cliente' }})
+                                </span>
+                                <span v-else-if="r.nombreInsumo?.toUpperCase().includes('MOLIDO') || r.nombreMateriaPrima?.toUpperCase().includes('MOLIDO')" style="font-size: 0.85em; font-style: italic; color: #27ae60;">
+                                    (Stock Estruplast)
+                                </span>
+                            </td>
                             <td style="text-align:center; vertical-align: middle;" v-if="!form.esConsolidado">
                                 <div class="porcentaje-celda">
                                     {{ r.cantidad }} %
@@ -284,7 +273,6 @@ const tipoCorona = computed(() => {
 </template>
 
 <style>
-/* Tu estilo original sin los estilos de los carteles de colores */
 .contenedor-principal-pdf { background: white; width: 209mm; min-height: 290mm; padding: 0; box-sizing: border-box; color: black; font-family: Arial, sans-serif; position: relative; }
 .pagina-copia { padding: 15mm; box-sizing: border-box; width: 100%; height: 290mm; display: flex; flex-direction: column; position: relative; }
 .pagina-copia.modo-mitad { height: 145mm; padding: 5mm 15mm; border-bottom: 1px dashed #999; display: block; }

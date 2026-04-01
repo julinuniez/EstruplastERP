@@ -1,6 +1,5 @@
 import type { Ref } from 'vue';
 
-// Nos traemos las constantes para acá y las borramos del componente principal
 const DENSIDAD_DEFAULT = 1.1;
 const ID_BRILLO_777 = 1073; 
 const ID_ESTEARATO = 1074; 
@@ -60,16 +59,26 @@ export function useRecetaProduccion(
             if (mpId === 0) m = listaTodasMateriasPrimas.value.find(x => x.nombre.toUpperCase().includes(nom));
             else m = listaTodasMateriasPrimas.value.find(x => x.id === mpId);
 
-            nueva.push({
-                id: tipo,
-                cantidad: cant,
-                nombreInsumo: m ? m.nombre : (nom === 'COLOR' ? 'MASTERBATCH' : nom),
-                densidad: m ? (m.pesoEspecifico || dens) : dens,
-                materiaPrimaId: m ? m.id : mpId,
-                [tipo]: true,
-                esColor: tipo === 'esColor',
-                esEstearato: tipo === 'esEstearato' 
-            });
+            const idBuscado = m ? m.id : mpId;
+            const existeIdx = nueva.findIndex(x => x.materiaPrimaId === idBuscado);
+            const cId = m ? Number(m.clienteId || m.ClienteId) || 0 : 0;
+
+            if (existeIdx !== -1) {
+                nueva[existeIdx][tipo] = true;
+                nueva[existeIdx].cantidad = cant;
+            } else {
+                nueva.push({
+                    id: tipo,
+                    cantidad: cant,
+                    nombreInsumo: m ? m.nombre : (nom === 'COLOR' ? 'MASTERBATCH' : nom),
+                    densidad: m ? (m.pesoEspecifico || dens) : dens,
+                    materiaPrimaId: idBuscado,
+                    [tipo]: true,
+                    esColor: tipo === 'esColor',
+                    esEstearato: tipo === 'esEstearato',
+                    clienteId: cId
+                });
+            }
         };
 
         if (form.value.conBrillo) {
@@ -103,14 +112,22 @@ export function useRecetaProduccion(
                    listaInventarioCompleto.value.find(m => m.id === item.id);
         
         if (mp) {
-            recetaDinamica.value.push({
-                id: 'manual_' + Date.now(),
-                materiaPrimaId: mp.id,
-                nombreInsumo: mp.nombre,
-                cantidad: item.porcentaje,
-                densidad: mp.pesoEspecifico || 1.1,
-                esBase: false
-            });
+            const existe = recetaDinamica.value.find(r => r.materiaPrimaId === mp.id);
+            const cId = Number(mp.clienteId || mp.ClienteId) || 0; // 🚨 Arreglo de tipeo de C#
+
+            if (existe) {
+                existe.cantidad = Number(existe.cantidad) + Number(item.porcentaje);
+            } else {
+                recetaDinamica.value.push({
+                    id: 'manual_' + Date.now(),
+                    materiaPrimaId: mp.id,
+                    nombreInsumo: mp.nombre,
+                    cantidad: item.porcentaje,
+                    densidad: mp.pesoEspecifico || 1.1,
+                    esBase: false,
+                    clienteId: cId
+                });
+            }
             balancearBase();
         } else {
             alert("⚠️ Ocurrió un error: No pudimos encontrar los datos técnicos de este material.");

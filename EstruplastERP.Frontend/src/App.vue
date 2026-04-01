@@ -38,48 +38,44 @@ function toggleMenu() {
           <span class="text" v-show="!menuReducido">Tablero</span>
         </router-link>
 
-        <router-link :to="{ name: 'produccion' }" class="nav-btn" active-class="activo" title="Producción">
-          <span class="icon">⚙️</span>
+        <router-link :to="{ name: 'produccion' }" class="nav-btn" active-class="activo" title="Órdenes de Producción">
+          <span class="icon">🏭</span>
           <span class="text" v-show="!menuReducido">Producción</span>
         </router-link>
 
-        <router-link to="/tablero-pedidos" class="nav-btn" active-class="activo" title="Pedidos">
+        <router-link to="/tablero-pedidos" class="nav-btn" active-class="activo" title="Gestión de Pedidos">
           <span class="icon">📋</span>
           <span class="text" v-show="!menuReducido">Pedidos</span>
         </router-link>
         
-        <router-link :to="{ name: 'inventario' }" class="nav-btn" active-class="activo" title="Inventario">
+        <router-link :to="{ name: 'inventario' }" class="nav-btn" active-class="activo" title="Control de Stock">
           <span class="icon">📦</span>
           <span class="text" v-show="!menuReducido">Inventario</span>
         </router-link>
 
-        <router-link :to="{ name: 'ingreso-stock' }" class="nav-btn" active-class="activo" title="Compras">
+        <router-link :to="{ name: 'ingreso-stock' }" class="nav-btn" active-class="activo" title="Recepción de Materiales">
           <span class="icon">📥</span>
-          <span class="text" v-show="!menuReducido">Compras MP</span>
+          <span class="text" v-show="!menuReducido">Ingreso Material</span>
         </router-link>
 
-        <router-link :to="{ name: 'ingreso-scrap' }" class="nav-btn" active-class="activo" title="Ingreso Scrap">
-          <span class="icon">🗑️</span>
-          <span class="text" v-show="!menuReducido">Ingreso Scrap</span>
-        </router-link>
-        <router-link :to="{ name: 'scrap' }" class="nav-btn" active-class="activo" title="Recuperado">
+        <router-link :to="{ name: 'Scrap' }" class="nav-btn" active-class="activo" title="Planta de Recuperado">
           <span class="icon">♻️</span>
-          <span class="text" v-show="!menuReducido">Recuperado</span>
+          <span class="text" v-show="!menuReducido">Molienda</span>
         </router-link>
 
-        <router-link :to="{ name: 'remitos' }" class="nav-btn" active-class="activo" title="Despacho">
+        <router-link :to="{ name: 'remitos' }" class="nav-btn" active-class="activo" title="Despacho y Logística">
           <span class="icon">🚚</span>
           <span class="text" v-show="!menuReducido">Despacho</span>
         </router-link>
 
-        <router-link :to="{ name: 'configuracion' }" class="nav-btn" active-class="activo" title="Configuración">
+        <router-link :to="{ name: 'configuracion' }" class="nav-btn" active-class="activo" title="Configuración del Sistema">
           <span class="icon">🔧</span>
           <span class="text" v-show="!menuReducido">Configuración</span>
         </router-link>
       </div>
       <div style="margin-top: auto; padding: 10px; font-size: 0.8rem; text-align: center; color: #666; border-top: 1px solid #444;">
         v{{ version }}
-     </div>
+      </div>
     </nav>
 
     <div class="main-wrapper" :class="{ 'margen-reducido': menuReducido, 'margen-normal': !menuReducido, 'full-screen': !mostrarMenu }">
@@ -89,8 +85,8 @@ function toggleMenu() {
         <div class="left-spacer"></div>
 
         <div class="center-brand">
-         <img :src="logoImg" alt="Logo Empresa" class="logo-central" />
-     </div>
+          <img :src="logoImg" alt="Logo Empresa" class="logo-central" />
+        </div>
 
         <div class="user-area">
             <span class="user-name">Hola, <strong>{{ sesion.usuario?.nombre || 'Admin' }}</strong></span>

@@ -4,8 +4,6 @@ import { mount, flushPromises } from '@vue/test-utils';
 import FormularioProduccion from '@/views/FormularioProduccion.vue'; // O la ruta correcta donde esté
 import { ProduccionAPI } from '@/services/produccionService';
 
-
-// 1. MOCK DE LA API: Evitamos que le pegue a tu base de datos real (C#)
 vi.mock('@/services/produccionService', () => ({
     ProduccionAPI: {
         obtenerProductos: vi.fn(() => Promise.resolve([
@@ -78,7 +76,7 @@ describe('Test de Regresión: FormularioProduccion', () => {
 
         // 2. Le inyectamos una receta válida (para evitar el error de "material en cero o prohibido")
         wrapper.vm.recetaDinamica = [
-            { materiaPrimaId: 1, cantidad: 100, nombreInsumo: 'Plástico Test', densidad: 1.1 }
+            { id: 1,materiaPrimaId: 1, cantidad: 100, nombreInsumo: 'Plástico Test', densidad: 1.1 }
         ];
 
         // Forzamos a Vue a actualizar todo su estado interno

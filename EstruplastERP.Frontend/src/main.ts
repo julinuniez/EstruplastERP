@@ -23,5 +23,4 @@ app.use(router)
 
 // Opcional: Hacer dayjs global (para usar $dayjs en templates)
 app.config.globalProperties.$dayjs = dayjs;
-
 app.mount('#app')

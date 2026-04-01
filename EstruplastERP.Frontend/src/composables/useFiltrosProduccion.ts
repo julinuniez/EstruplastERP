@@ -110,8 +110,8 @@ export function useFiltrosProduccion(
     });
 
     const materiasPrimasLimpias = computed(() => {
-        const esFazon = productoSeleccionado.value?.esFazon || 
-                        (productoSeleccionado.value?.nombre || '').toUpperCase().includes('FAZON');
+        const esFazonOp = productoSeleccionado.value?.esFazon || 
+                          (productoSeleccionado.value?.nombre || '').toUpperCase().includes('FAZON');
 
         const materialesBaseAbstractos = [
             "POLIPROPILENO", "PEAD", "PEBD", "PAI", "POLIETILENO", 
@@ -120,20 +120,28 @@ export function useFiltrosProduccion(
 
         return listaTodasMateriasPrimas.value.filter(mp => {
             const nombre = (mp.nombre || '').toUpperCase().trim();
-            const rubro = (mp.rubro || '').toUpperCase();
+            const rubro = (mp.rubro || '').toUpperCase().trim();
+            const clienteIdMp = Number(mp.clienteId) || 0;
 
+            // 1. Ocultamos las familias genéricas (los nombres puros)
             if (materialesBaseAbstractos.includes(nombre)) return false;
 
-            const esScrapPuro = mp.esScrap || nombre.includes('SCRAP') || rubro.includes('SCRAP');
-            if (esScrapPuro) return false;
-
-            const esMolido = rubro.includes('MOLIDO') || nombre.includes('RECUPERADO');
-
-            if (!clienteTieneFazonActivo.value || !esFazon) {
-                if (esMolido) return false;
-                if (nombre.includes('FAZON') || mp.esFazon) return false;
+            // 2. ♻️ DETECCIÓN INFALIBLE POR NOMBRE: Busca la etiqueta "[MOLIDO]"
+            if (nombre.includes('[MOLIDO]') || rubro.includes('MOLIDO')) {
+                // Si NO tiene cliente (es Estruplast), pasa directo a la lista
+                if (clienteIdMp === 0) return true;
+                
+                // Si TIENE cliente (Fazón), lo ocultamos de acá
+                return false; 
             }
 
+            // 3. 🚫 BLOQUEO DE SCRAP: Si llegó acá y es Scrap, es el sucio sin procesar. Afuera.
+            if (mp.esScrap || nombre.includes('SCRAP') || rubro.includes('SCRAP')) return false;
+
+            // 4. MATERIALES DE FAZON (Cajas, tubos del cliente): Solo para OPs de Fazón
+            if (mp.esFazon || nombre.includes('FAZON')) return esFazonOp;
+
+            // El resto (Virgen, Aditivos, Masterbatches) pasa siempre
             return true; 
         });
     });
@@ -166,7 +174,7 @@ export function useFiltrosProduccion(
             if (stockDisponible < (consumoReal - 0.001)) {
                 faltantes.push({
                     nombre: nombreMaterial,
-                    necesario: consumoReal,
+                    necesorio: consumoReal,
                     disponible: stockDisponible,
                     diferencia: Number((consumoReal - stockDisponible).toFixed(2))
                 });

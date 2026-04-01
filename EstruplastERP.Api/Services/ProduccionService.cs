@@ -162,6 +162,7 @@ namespace EstruplastERP.Api.Services
                     Espesor = request.Espesor,
                     ConBrillo = request.ConBrillo,
                     LlevaFilm = request.LlevaFilm,
+                    EsGofrado = request.EsGofrado,
                     TipoCorona = request.TipoCorona,
                     Consumos = new List<ConsumoOrden>()
                 };

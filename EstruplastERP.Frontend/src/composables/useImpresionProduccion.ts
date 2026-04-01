@@ -154,6 +154,7 @@ export function useImpresionProduccion(
             form.value.conBrillo = orden.conBrillo || false;
             form.value.llevaFilm = orden.llevaFilm || false;
             form.value.tipoCorona = orden.tipoCorona || 'Ninguno';
+            form.value.esGofrado = orden.esGofrado || orden.EsGofrado || false;
             form.value.color = orden.color || '';
             form.value.colorTexto = orden.color || ''; 
             
@@ -242,7 +243,8 @@ export function useImpresionProduccion(
                 form.value.conBrillo = !!orden.conBrillo;
                 form.value.llevaFilm = !!orden.llevaFilm;
                 form.value.tipoCorona = orden.tipoCorona || 'Ninguno';
-
+                form.value.esGofrado = orden.esGofrado || orden.EsGofrado || false;
+                
                 const desp = Number(orden.desperdicio || 0);
                 form.value.merma = desp;
                 form.value.kilosTotales = orden.kilos; 

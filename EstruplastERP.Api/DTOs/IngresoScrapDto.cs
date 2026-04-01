@@ -7,7 +7,7 @@
         public decimal Cantidad { get; set; }
     }
 
-    public class IngresoScrapRequest
+    public class IngresoMolidoRequest
     {
         public int? ClienteId { get; set; }     // Null = Interno
         public int MaterialBaseId { get; set; } // ID del "Polipropileno" generico

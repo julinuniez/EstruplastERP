@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import HojaImpresion from '../components/HojaImpresion.vue'
 import ListaProduccion from '../components/ListaProduccion.vue'
 import { ProduccionAPI } from '@/services/produccionService'
@@ -14,7 +14,7 @@ import { useGuardadoProduccion } from '@/composables/useGuardadoProduccion';
 interface Producto {
     id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean;
     esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; esScrap?: boolean; rubro?: string;
-    largo: number; ancho: number; espesor: number; color?: string; pesoEspecifico: number;
+    largo: number; ancho: number; espesor: number; pesoEspecifico: number;
     receta?: any[]; espesorMinimo?: number; espesorMaximo?: number; clienteId?: number;
     tipoMaterial?: string;
 }
@@ -27,6 +27,7 @@ interface ItemReceta {
 }
 
 const loading = ref(false);
+const guardando = ref(false); 
 const productos = ref<Producto[]>([])
 const listaInventarioCompleto = ref<any[]>([])
 const listaTodasMateriasPrimas = ref<any[]>([])
@@ -60,6 +61,7 @@ const form = ref({
     tipoBrillo: '777',
     porcBrillo: 2.00, 
     llevaFilm: false, tipoCorona: 'Ninguno',
+    esGofrado: false,
     conEstearato: false, esProductoColor: false, masterbatchId: '' as string | number, colorTexto: '',
     aditivoUV: false, porcentajeUv: 1.00, aditivoCaucho: false, porcentajeCaucho: 1.00,
     aditivoCarga: 0,
@@ -74,7 +76,9 @@ const form = ref({
 const productoSeleccionado = computed(() => productos.value.find(p => p.id === Number(form.value.productoTerminadoId)) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Number(form.value.clienteId)) || null);
 
-const { limpiarBorrador, revisarYRecuperarBorrador } = useBorradorProduccion(form, recetaDinamica, mensaje);
+const { 
+    borradorDisponible, revisarBorrador, recuperarBorrador, descartarBorrador, limpiarBorrador
+} = useBorradorProduccion(form, recetaDinamica, mensaje);
 
 const { 
     totalPorcentajeReceta, 
@@ -138,10 +142,11 @@ const {
     cargarNotaPedidoSugerida, 
     aplicarNotaPedidoSugerida 
 } = useGuardadoProduccion(
-    form, recetaDinamica, notaPedidoSugerida, mensaje, error, loading, 
+    form, recetaDinamica, notaPedidoSugerida, mensaje, error, guardando, 
     idProduccionGenerada, totalPorcentajeReceta, espesorValido, limiteMinimo, 
     limiteMaximo, kilosCalculados, colorFinalParaPDF, listaProduccionRef, 
-    limpiarBorrador, emit
+    limpiarBorrador,
+    emit
 );
 
 const { imprimirDesdeHistorial, imprimirLoteOPsDesdeHistorial } = useImpresionProduccion(
@@ -195,9 +200,9 @@ async function CargarDatosProductos(id: number) {
             form.value.espesor = prod.espesor || 0;
         }
 
-        if (!form.value.colorTexto || form.value.colorTexto === '') {
-            form.value.colorTexto = prod.color || '';
-        }
+        // 🚨 ACÁ ESTÁ LA MAGIA: Le pasamos los límites del producto a Vue
+        limiteMinimo.value = prod.espesorMinimo || 0;
+        limiteMaximo.value = prod.espesorMaximo || 0;
 
     } catch (e) { 
         console.error("Error cargando datos maestros:", e); 
@@ -208,24 +213,46 @@ watch(mostrarCajaColor, (v) => {
     if (!v) form.value.masterbatchId = '';
 });
 
+// 1. Mejoramos el Watch del Cliente
 watch(() => form.value.clienteId, async (nuevoCli) => {
-    if (nuevoCli && !form.value.productoTerminadoId) {
+    if (nuevoCli) {
+        // Siempre recargamos los productos disponibles para ese cliente
         await CargarProductosFiltrados(nuevoCli);
-    }
-    if (nuevoCli && form.value.productoTerminadoId) {
-        const prod = productos.value.find(p => p.id === Number(form.value.productoTerminadoId));
-        if (prod) {
-            setTimeout(async () => { await actualizarRecetaFazonConCliente(nuevoCli, prod); }, 200);
+        
+        // Si ya había un producto seleccionado, refrescamos sus lotes
+        if (form.value.productoTerminadoId) {
+            const prod = productos.value.find(p => p.id === Number(form.value.productoTerminadoId));
+            if (prod) {
+                await actualizarRecetaFazonConCliente(nuevoCli, prod);
+            }
         }
+    } else {
+        listaLotesCliente.value = [];
+        loteFazonSeleccionadoId.value = '';
     }
 });
 
-watch(() => form.value.productoTerminadoId, (v) => {
+// 2. 🚨 ACÁ ESTÁ LA MAGIA: El Watch del Producto
+watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
     if (form.value.esConsolidado) return;
-    if (v && !imprimiendoHistorial.value) {
-        CargarDatosProductos(Number(v));
-    } else if (!v) {
+    
+    if (nuevoProdId && !imprimiendoHistorial.value) {
+        // A. Cargar la receta base normal
+        await CargarDatosProductos(Number(nuevoProdId)); 
+        
+        // B. LÓGICA FAZON: Si el producto nuevo es de Fazón, forzamos a buscar su lote exacto
+        const prodFinal = productos.value.find(p => p.id === Number(nuevoProdId));
+        if (prodFinal && prodFinal.esFazon && form.value.clienteId) {
+            await actualizarRecetaFazonConCliente(form.value.clienteId, prodFinal);
+        } else {
+            // C. Si elegiste un producto propio, limpiamos la cajita verde de Fazón para que no moleste
+            listaLotesCliente.value = [];
+            loteFazonSeleccionadoId.value = '';
+        }
+    } else if (!nuevoProdId) {
         recetaDinamica.value = [];
+        listaLotesCliente.value = [];
+        loteFazonSeleccionadoId.value = '';
     }
 });
 
@@ -280,7 +307,7 @@ onMounted(async () => {
         if (Array.isArray(resCli)) clientes.value = resCli;
         if (Array.isArray(resInv)) listaInventarioCompleto.value = resInv;
 
-        revisarYRecuperarBorrador();
+        revisarBorrador();
     } catch (e) {
         console.error("Error inicializando producción:", e);
     } finally {
@@ -289,7 +316,14 @@ onMounted(async () => {
 
     await cargarNotaPedidoSugerida();
 });
-defineExpose({ form, error, mensaje, registrarProduccion });
+
+const procesarGuardado = async () => {
+    if (guardando.value) return; 
+    error.value = ''; 
+    await registrarProduccion();
+};
+
+defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
 </script>
 
 <template>
@@ -318,6 +352,17 @@ defineExpose({ form, error, mensaje, registrarProduccion });
 
         <div class="panel-derecho">
             <div class="header-control"><h3>⚙️ Configuración</h3></div>
+            
+            <div v-if="borradorDisponible" class="banner-borrador">
+                <div class="banner-texto">
+                    <span>📝 <strong>Tenés una orden sin terminar.</strong></span>
+                    <small>Se guardó automáticamente la última vez.</small>
+                </div>
+                <div class="banner-acciones">
+                    <button @click="recuperarBorrador" class="btn-borrador-ok">Recuperar</button>
+                    <button @click="descartarBorrador" class="btn-borrador-no">Descartar</button>
+                </div>
+            </div>
             
             <label>Cliente / Producto:</label>
             <select v-model="form.clienteId" style="margin-bottom:5px">
@@ -457,6 +502,7 @@ defineExpose({ form, error, mensaje, registrarProduccion });
                 </div>
 
                 <div class="fila-control-aditivo"><label class="check-container" :class="{ 'disabled': !form.conBrillo }"><input type="checkbox" v-model="form.llevaFilm" :disabled="!form.conBrillo"> 🛡️ Con Film</label></div>
+                <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.esGofrado"> 🧇 Gofrado</label></div>
                 <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.conEstearato"> 🧪 Estearato</label></div>
                 <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.aditivoUV"> ☀️ UV</label><div v-if="form.aditivoUV" class="bloque-derecha"><div class="input-porcentaje"><input type="number" v-model="form.porcentajeUv" step="0.01" min="0"> %</div></div></div>
                 <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.aditivoCaucho"> 🚜 Caucho</label><div v-if="form.aditivoCaucho" class="bloque-derecha"><div class="input-porcentaje"><input type="number" v-model="form.porcentajeCaucho" step="0.01" min="0"> %</div></div></div>
@@ -483,12 +529,14 @@ defineExpose({ form, error, mensaje, registrarProduccion });
 
             <button 
                 class="btn-guardar" 
-                @click="registrarProduccion" 
-                :disabled="loading || !form.clienteId || !form.productoTerminadoId" 
-                :class="{ 'btn-warning': hayBloqueoDeStock && form.clienteId && form.productoTerminadoId }"
+                @click="procesarGuardado" 
+                :disabled="guardando || loading || form.clienteId === '' || !form.productoTerminadoId || !espesorValido" 
+                :class="{ 'btn-warning': hayBloqueoDeStock && form.clienteId !== '' && form.productoTerminadoId && espesorValido }"
             >
-                <span v-if="loading">⏳ PROCESANDO...</span>
-                <span v-else-if="!form.clienteId || !form.productoTerminadoId">🚫 SELECCIONE CLIENTE Y PRODUCTO</span>
+                <span v-if="guardando">⏳ GUARDANDO ORDEN...</span>
+                <span v-else-if="loading">⏳ PROCESANDO...</span>
+                <span v-else-if="form.clienteId === '' || !form.productoTerminadoId">🚫 SELECCIONE CLIENTE Y PRODUCTO</span>
+                <span v-else-if="!espesorValido">🚫 ERROR: ESPESOR FUERA DE RANGO</span>
                 <span v-else-if="hayBloqueoDeStock">📥 GUARDAR EN COLA</span>
                 <span v-else>💾 GUARDAR ORDEN LISTA</span>
             </button>
@@ -633,6 +681,30 @@ select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; 
     color: #856404;
     border: 1px solid #ffeeba;
 }
+.banner-borrador {
+    background-color: #34495e;
+    border-left: 4px solid #f1c40f;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.banner-texto span { color: #f1c40f; font-size: 13px; display: block; }
+.banner-texto small { color: #bdc3c7; font-size: 11px; }
+.banner-acciones { display: flex; gap: 8px; }
+.btn-borrador-ok {
+    flex: 1; background: #27ae60; color: white; border: none; 
+    padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px;
+}
+.btn-borrador-ok:hover { background: #2ecc71; }
+.btn-borrador-no {
+    flex: 1; background: transparent; color: #bdc3c7; border: 1px solid #7f8c8d; 
+    padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px;
+}
+.btn-borrador-no:hover { background: #95a5a6; color: white; }
 
 @media (max-width: 1000px) { 
     .bloque-superior { flex-direction: column; } 

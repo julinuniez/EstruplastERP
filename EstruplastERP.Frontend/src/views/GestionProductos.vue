@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useMaestrosStore } from '@/stores/useMaestrosStore';
+import { storeToRefs } from 'pinia';
 import api from '@/services/axiosInstance';
 import { useFiltrosInventario, detectarTipo } from '@/composables/useFiltrosInventario';
 import { useImportacionInventario } from '@/composables/useImportacionInventario';
 import { useModalesInventario } from '@/composables/useModalesInventario';
 
 const router = useRouter();
-
-const listaProductos = ref<any[]>([]);
-const listaClientes = ref<any[]>([]);
+const maestrosStore = useMaestrosStore();
+const { productos: listaProductos, clientes: listaClientes, cargando } = storeToRefs(maestrosStore);
 const busqueda = ref('');
-const cargando = ref(true);
 const error = ref('');
 
 const tabActual = ref('MP');
@@ -47,41 +47,17 @@ const irAEditar = (id: number) => {
     router.push({ name: 'editar-producto', params: { id } });
 };
 
-async function cargarDatos() {
+async function cargarDatos(forzar = false) {
     try {
-        cargando.value = true;
-        const [resProd, resCli] = await Promise.all([
-            api.get('/Productos'),
-            api.get('/Clientes')
-        ]);
-        
-        const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
-        
-        if (Array.isArray(resProd.data)) {
-            const productosActivos = resProd.data.filter(p => p.activo !== false && p.estado !== 0);
-            listaProductos.value = resProd.data.sort((a: any, b: any) => getNombre(a).localeCompare(getNombre(b)));
-        } else {
-            listaProductos.value = [];
-        }
-        
-        if (Array.isArray(resCli.data)) {
-            listaClientes.value = resCli.data;
-        } else {
-            listaClientes.value = [];
-        }
+        error.value = '';
+        await maestrosStore.cargarDatosMaestros(forzar);
     } catch (e: any) {
-        console.error("Error cargando datos:", e);
         error.value = "Error conectando al servidor. Revisa la consola.";
-        if (e.response && e.response.status === 401) {
-            error.value = "Sesión caducada.";
-        }
-    } finally {
-        cargando.value = false;
     }
 }
 
 onMounted(() => {
-    cargarDatos();
+    cargarDatos(true);
 });
 </script>
 
@@ -136,6 +112,7 @@ onMounted(() => {
                 <button :class="{ 'sub-active': subTabMP === 'VIRGEN' }" @click="subTabMP = 'VIRGEN'">🧪 Material Virgen</button>
                 <button :class="{ 'sub-active': subTabMP === 'ADITIVOS' }" @click="subTabMP = 'ADITIVOS'">⚙️ Aditivos</button>
                 <button :class="{ 'sub-active': subTabMP === 'MASTERBATCH' }" @click="subTabMP = 'MASTERBATCH'">🎨 Masterbatch / Colores</button>
+                <button :class="{ 'sub-active': subTabMP === 'MOLIDO_PROPIO' }" @click="subTabMP = 'MOLIDO_PROPIO'">♻️ Molienda Propia</button>
             </div>
         </div>
 
@@ -202,8 +179,8 @@ onMounted(() => {
                         </td>
 
                         <td v-if="tabActual === 'CLI'">
-                            <span class="badge-material" v-if="detectingTipo(p) !== 'OTROS'" :class="detectingTipo(p).toLowerCase().replace(' ', '-')">
-                                {{ detectingTipo(p) }}
+                            <span class="badge-material" v-if="detectarTipo(p) !== 'OTROS'" :class="detectarTipo(p).toLowerCase().replace(' ', '-')">
+                                {{ detectarTipo(p) }}
                             </span>
                         </td>
 

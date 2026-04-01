@@ -8,6 +8,7 @@
     public decimal Desperdicio { get; set; } 
     public bool ConBrillo { get; set; }
     public bool LlevaFilm { get; set; }
+    public bool EsGofrado { get; set; }
     public string TipoCorona { get; set; }
     public string Color { get; set; }
 

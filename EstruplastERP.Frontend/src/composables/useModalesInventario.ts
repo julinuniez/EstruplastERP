@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 import api from '@/services/axiosInstance';
 
-export function useModalesInventario(cargarDatos: () => Promise<void>) {
+export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<void>) {
     
     // --- LÓGICA: MODAL DE ALTA DE MATERIA PRIMA MANUAL ---
     const mostrarModalNuevaMP = ref(false);
@@ -25,8 +25,7 @@ export function useModalesInventario(cargarDatos: () => Promise<void>) {
             nuevaMP.value = { nombre: '', codigoSku: '' };
             mostrarModalNuevaMP.value = false;
             
-            // Recargamos la tabla para que aparezca el nuevo material
-            await cargarDatos();
+            await cargarDatos(true);
             
         } catch (e: any) {
             const msg = e.response?.data?.mensaje || e.response?.data || "Error de conexión";

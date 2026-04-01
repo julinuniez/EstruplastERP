@@ -18,6 +18,7 @@ export interface PayloadOrdenNueva {
     consumos: any[];
     conBrillo: boolean;
     llevaFilm: boolean;
+    esGofrado: boolean;
     tipoCorona: string;
 }
 

@@ -148,10 +148,11 @@ const solicitarImpresion = (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
     emit('imprimir-historial', { orden, tipo });
 };
 
-function normalizarNombreFamilia(nombre: string) {
-    if (!nombre) return '';
+function normalizarNombreFamilia(nombre: any) {
+    if (!nombre || typeof nombre !== 'string') return '';
+    
     let n = nombre.toUpperCase().trim();
-    const prefijos = ['LAMINADO A FAZON -', 'LAMINADO A FAZON-', 'LAMINADO A FAZON', 'SERVICIO DE FAZON -', 'SERVICIO DE FAZON'];
+    const prefijos = ['FAZON -', 'FAZON-', 'FAZON', 'SERVICIO DE FAZON -', 'SERVICIO DE FAZON'];
     for (const pref of prefijos) {
         if (n.startsWith(pref)) {
             n = n.substring(pref.length).trim();

@@ -55,6 +55,7 @@ namespace EstruplastERP.Api.Controllers
                     EsBobina = o.EsBobina,
                     ConBrillo = o.ConBrillo,
                     LlevaFilm = o.LlevaFilm,
+                    EsGofrado = o.EsGofrado,
                     TipoCorona = o.TipoCorona,
                     EsImpreso = o.EsImpreso,
                     Estado = o.Estado.ToString(),
@@ -156,6 +157,7 @@ namespace EstruplastERP.Api.Controllers
 
                 orden.ConBrillo = dto.ConBrillo;
                 orden.LlevaFilm = dto.LlevaFilm;
+                orden.EsGofrado = dto.EsGofrado;
                 orden.TipoCorona = dto.TipoCorona;
                 orden.Color = dto.Color;
 

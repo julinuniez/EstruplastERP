@@ -101,8 +101,8 @@ namespace EstruplastERP.Api.Controllers
 
                     StockReservado = _context.ConsumosOrdenes
                         .Where(c => c.MateriaPrimaId == p.Id &&
-                                    c.OrdenProduccion.Estado != EstadoOrden.Finalizada &&
-                                    c.OrdenProduccion.Estado != EstadoOrden.Cancelada)
+                                    (c.OrdenProduccion.Estado == EstadoOrden.Pendiente ||
+                                     c.OrdenProduccion.Estado == EstadoOrden.EnProceso)) // 🚨 AHORA SÓLO RESERVA LAS ACTIVAS
                         .Sum(c => (decimal?)c.CantidadKilos) ?? 0,
                 })
                 .ToListAsync();
@@ -449,8 +449,8 @@ namespace EstruplastERP.Api.Controllers
         {
             var reservas = await _context.ConsumosOrdenes
                 .Where(c => c.MateriaPrimaId == id &&
-                            c.OrdenProduccion.Estado != EstadoOrden.Finalizada &&
-                            c.OrdenProduccion.Estado != EstadoOrden.Cancelada)
+                            (c.OrdenProduccion.Estado == EstadoOrden.Pendiente ||
+                             c.OrdenProduccion.Estado == EstadoOrden.EnProceso)) 
                 .Select(c => new
                 {
                     Id = c.OrdenProduccion.Id,

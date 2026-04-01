@@ -5,7 +5,7 @@ export function useImportacionInventario(
     tabActual: any,
     clienteFiltro: any,
     importClienteFiltro: any,
-    cargarDatos: () => Promise<void>
+    cargarDatos: (forzar?: boolean) => Promise<void> 
 ) {
     const fileInput = ref<HTMLInputElement | null>(null);
     const importando = ref(false);
@@ -54,9 +54,7 @@ export function useImportacionInventario(
                     alert("⚠️ Atención: Algunas hojas fueron omitidas por no coincidir con ningún cliente registrado. Revisa la consola (F12) para más detalles.");
                 }
             }
-
-            // Llamamos a la función de tu componente principal para recargar la tabla
-            await cargarDatos();
+            await cargarDatos(true);
 
         } catch (e: any) {
             console.error(e);

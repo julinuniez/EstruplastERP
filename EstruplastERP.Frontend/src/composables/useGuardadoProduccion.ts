@@ -19,8 +19,8 @@ export function useGuardadoProduccion(
     kilosCalculados: Ref<number>,
     colorFinalParaPDF: Ref<string>,
     listaProduccionRef: Ref<any>,
-    limpiarBorrador: () => void,
-    emit: (evento: 'guardado') => void
+    limpiarBorrador: any, 
+    emit?: any
 ) {
 
     function limpiarFormulario() {
@@ -34,6 +34,7 @@ export function useGuardadoProduccion(
             largo: 0, ancho: 0, espesor: 0, color: '',
             conBrillo: false, tipoBrillo: '777', porcBrillo: 2.00,
             llevaFilm: false, tipoCorona: 'Ninguno',
+            esGofrado: false,
             conEstearato: false, esProductoColor: false, masterbatchId: '', colorTexto: '',
             aditivoUV: false, porcentajeUv: 1.00, aditivoCaucho: false, porcentajeCaucho: 1.00,
             aditivoCarga: 0, merma: 8, kilosTotales: 0,
@@ -43,7 +44,10 @@ export function useGuardadoProduccion(
         };
         recetaDinamica.value = [];
         idProduccionGenerada.value = false;
-        limpiarBorrador();
+        
+        if (typeof limpiarBorrador === 'function') {
+            limpiarBorrador();
+        }
     }
 
     async function registrarProduccion() {
@@ -113,17 +117,30 @@ export function useGuardadoProduccion(
                 consumos: consumosRealesBrutos,
                 conBrillo: form.value.conBrillo,
                 llevaFilm: form.value.llevaFilm,
+                esGofrado: form.value.esGofrado,
                 tipoCorona: form.value.tipoCorona
             });
 
+            // LLEGAMOS HASTA ACÁ SIN ERRORES DEL BACKEND
             mensaje.value = `✅ Orden Generada (Neto: ${pesoNetoGeometrico.toFixed(2)}kg). Insumos con ${porcentajeDesperdicio}% de desperdicio.`;
             idProduccionGenerada.value = true;
-            limpiarBorrador(); 
-            if (listaProduccionRef.value) listaProduccionRef.value.cargarHistorial();
-            emit('guardado');
-            limpiarFormulario(); 
+
+            // AISLAMOS LA LIMPIEZA VISUAL DEL TRY/CATCH PRINCIPAL
+            setTimeout(() => {
+                try {
+                    if (typeof limpiarBorrador === 'function') limpiarBorrador(); 
+                    if (listaProduccionRef.value) listaProduccionRef.value.cargarHistorial();
+                    if (typeof emit === 'function') emit('guardado');
+                    limpiarFormulario(); 
+                } catch (err) {
+                    console.warn("Se ignoró un error reactivo al limpiar el formulario:", err);
+                }
+            }, 50);
+
             setTimeout(() => { mensaje.value = ''; }, 5000);
+            
         } catch (e: any) {
+            // ESTO SOLO ATRAPARÁ ERRORES REALES DE C# / BASE DE DATOS
             error.value = '❌ ' + (e.response?.data?.mensaje || e.message);
         } finally {
             loading.value = false;

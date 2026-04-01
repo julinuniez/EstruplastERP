@@ -211,56 +211,81 @@ namespace EstruplastERP.Api.Controllers
             }
         }
 
-        [HttpPost("ingresar-scrap-sucio")]
-        public async Task<IActionResult> IngresarScrapSucio([FromBody] IngresoScrapRequest request)
+        [HttpPost("ingresar-molido")]
+        public async Task<IActionResult> IngresarMolido([FromBody] IngresoMolidoRequest request)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 Producto productoScrap = null;
 
-                // ESTRATEGIA 1: Si el Frontend nos manda el ID exacto, usamos ese.
                 if (request.ProductoExistenteId.HasValue && request.ProductoExistenteId.Value > 0)
                 {
                     productoScrap = await _context.Productos.FindAsync(request.ProductoExistenteId.Value);
                     if (productoScrap == null) return NotFound("El producto seleccionado no existe.");
                 }
-                // ESTRATEGIA 2: Si no hay ID, intentamos buscar o crear por nombre (Lógica anterior)
                 else
                 {
                     var materialBase = await _context.Productos.FindAsync(request.MaterialBaseId);
                     if (materialBase == null) return BadRequest("Material base no encontrado.");
 
-                    string variedadLimpia = request.Variedad?.Trim().ToUpper() ?? "GRAL";
-                    string nombreScrap = $"[SCRAP] {materialBase.Nombre.ToUpper()}";
+                    string variedadLimpia = string.IsNullOrWhiteSpace(request.Variedad) ? "GRAL" : request.Variedad.Trim().ToUpper();
 
-                    if (!nombreScrap.Contains(variedadLimpia) && variedadLimpia != "GRAL")
+                    // Nombre seguro homologado al Excel
+                    string nombreMaterial = materialBase.Nombre?.ToUpper() ?? "MATERIAL";
+                    string nombreScrap = $"[MOLIDO] {variedadLimpia} ({nombreMaterial})";
+
+                    // Tipo de material seguro para el SKU
+                    string materialSeguro = materialBase.TipoMaterial ?? materialBase.Nombre ?? "BASE";
+                    string tipoMatLimpio = new string(materialSeguro.Where(char.IsLetterOrDigit).ToArray()).ToUpper();
+                    if (tipoMatLimpio.Length > 4) tipoMatLimpio = tipoMatLimpio.Substring(0, 4);
+
+                    string clienteSufijo = request.ClienteId.HasValue ? request.ClienteId.Value.ToString() : "0";
+                    string prefixBusqueda = $"MOL-{tipoMatLimpio}";
+                    string suffixBusqueda = $"-C{clienteSufijo}";
+
+                    var skusExistentes = await _context.Productos
+                        .Where(p => p.CodigoSku != null &&
+                                    p.CodigoSku.StartsWith(prefixBusqueda) &&
+                                    p.CodigoSku.EndsWith(suffixBusqueda))
+                        .Select(p => p.CodigoSku)
+                        .ToListAsync();
+
+                    int maxNumero = 0;
+
+                    foreach (var skuExistente in skusExistentes)
                     {
-                        nombreScrap += $" {variedadLimpia}";
+                        string numStr = skuExistente.Replace(prefixBusqueda, "").Replace(suffixBusqueda, "");
+                        if (int.TryParse(numStr, out int num))
+                        {
+                            if (num > maxNumero) maxNumero = num;
+                        }
                     }
 
-                    string sku = $"SCRAP-{materialBase.TipoMaterial}-{variedadLimpia}".Replace(" ", "").ToUpper();
+                    // Generador Autonumérico (si maxNumero es 0, arranca en "001")
+                    string codigoAutonumerico = (maxNumero + 1).ToString("D3");
+                    string sku = $"{prefixBusqueda}{codigoAutonumerico}{suffixBusqueda}";
 
                     productoScrap = await _context.Productos
                         .FirstOrDefaultAsync(p => p.CodigoSku == sku && p.ClienteId == request.ClienteId);
 
                     if (productoScrap == null)
                     {
-                        // Crear nuevo si no existe
                         productoScrap = new Producto
                         {
                             Nombre = nombreScrap,
                             CodigoSku = sku,
                             ClienteId = request.ClienteId,
                             StockActual = 0,
-                            Rubro = "SCRAP",
+                            Rubro = request.ClienteId.HasValue ? "MOLIDO CLIENTE" : "MOLIDO",
                             TipoMaterial = materialBase.TipoMaterial,
                             EsScrap = true,
-                            EsMateriaPrima = false,
+                            EsMateriaPrima = true,
+                            EsFazon = false,
                             EsProductoTerminado = false,
                             Activo = true,
                             FechaCreacion = DateTime.Now,
-                            PesoEspecifico = 1,
+                            PesoEspecifico = materialBase.PesoEspecifico > 0 ? materialBase.PesoEspecifico : 1,
                             EspesorMinimo = 0,
                             EspesorMaximo = 0
                         };
@@ -269,7 +294,6 @@ namespace EstruplastERP.Api.Controllers
                     }
                 }
 
-                // 3. Sumar Stock (Común a ambas estrategias)
                 productoScrap.StockActual += request.Kilos;
 
                 _context.Movimientos.Add(new Movimiento
@@ -278,8 +302,8 @@ namespace EstruplastERP.Api.Controllers
                     ClienteId = request.ClienteId,
                     Fecha = DateTime.Now,
                     Cantidad = request.Kilos,
-                    TipoMovimiento = "INGRESO_SCRAP",
-                    Observacion = $"Ingreso Scrap: {productoScrap.Nombre}"
+                    TipoMovimiento = "INGRESO_MOLIDO",
+                    Observacion = $"Ingreso Molienda: {productoScrap.Nombre}"
                 });
 
                 await _context.SaveChangesAsync();
@@ -287,15 +311,16 @@ namespace EstruplastERP.Api.Controllers
 
                 return Ok(new
                 {
-                    mensaje = "Scrap ingresado correctamente",
+                    mensaje = "Molienda ingresada correctamente",
                     producto = productoScrap.Nombre,
                     stock = productoScrap.StockActual
                 });
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
-                return StatusCode(500, ex.Message);
+                try { await transaction.RollbackAsync(); } catch { }
+                Console.WriteLine($"\n\n❌ ERROR FATAL EN INGRESAR MOLIDO: {ex.Message}\n{ex.StackTrace}\n\n");
+                return StatusCode(500, new { mensaje = ex.Message, detalle = ex.InnerException?.Message });
             }
         }
     }
