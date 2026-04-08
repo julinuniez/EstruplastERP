@@ -127,9 +127,20 @@ namespace EstruplastERP.Api.Services
 
                 bool esGenerico = mp.Id >= 990 && mp.Id <= 999;
 
-                if (!esGenerico && mp.StockActual < item.CantidadKilos)
+                if (!esGenerico)
                 {
-                    return new { posible = false, mensaje = $"❌ Falta {mp.Nombre}. Req: {item.CantidadKilos:N2} - Hay: {mp.StockActual:N2}" };
+                    var retenidoPorOtras = await _context.Ordenes
+                        .Where(o => o.Estado != EstadoOrden.Finalizada && o.Estado != EstadoOrden.Cancelada)
+                        .SelectMany(o => o.Consumos)
+                        .Where(c => c.MateriaPrimaId == mp.Id)
+                        .SumAsync(c => (decimal?)c.CantidadKilos) ?? 0;
+
+                    var stockLibre = mp.StockActual - retenidoPorOtras;
+
+                    if (stockLibre < item.CantidadKilos)
+                    {
+                        return new { posible = false, mensaje = $"❌ Falta {mp.Nombre}. Req: {item.CantidadKilos:N2} - Libre: {stockLibre:N2}" };
+                    }
                 }
             }
             return new { posible = true, mensaje = "✅ Stock Disponible." };

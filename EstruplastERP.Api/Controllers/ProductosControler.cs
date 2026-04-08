@@ -165,10 +165,9 @@ namespace EstruplastERP.Api.Controllers
                 PesoEspecifico = producto.PesoEspecifico,
                 EsProductoTerminado = producto.EsProductoTerminado,
                 EsMateriaPrima = producto.EsMateriaPrima,
-
-                // 🚨 MATAMOS LA LÓGICA VIEJA: Forzamos a true
+                EspesorMinimo = producto.EspesorMinimo ?? 0,
+                EspesorMaximo = producto.EspesorMaximo ?? 0,
                 EsGenerico = true,
-
                 Rubro = producto.Rubro,
 
                 Receta = formulasFinales.Select(f => new IngredienteDto

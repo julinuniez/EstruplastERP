@@ -82,19 +82,9 @@ namespace EstruplastERP.Api.Controllers
 
             try
             {
-                dynamic check = await _produccionService.VerificarStock(dto);
-                var jsonCheck = System.Text.Json.JsonSerializer.Serialize(check);
-                using var doc = System.Text.Json.JsonDocument.Parse(jsonCheck);
+                var orden = await _produccionService.RegistrarOrden(dto, true);
 
-                bool hayStock = doc.RootElement.GetProperty("posible").GetBoolean();
-
-                var orden = await _produccionService.RegistrarOrden(dto, hayStock);
-
-                string msg = hayStock
-                    ? "Hay stock. Orden enviada directo a Máquina."
-                    : "Material insuficiente. Orden guardada en Cola.";
-
-                return CreatedAtAction("GetOrden", new { id = orden.Id }, new { mensaje = msg, id = orden.Id });
+                return CreatedAtAction("GetOrden", new { id = orden.Id }, new { mensaje = "Orden registrada correctamente en Producción.", id = orden.Id });
             }
             catch (Exception ex)
             {
@@ -223,7 +213,7 @@ namespace EstruplastERP.Api.Controllers
         }
 
         [HttpPost("confirmar/{id}")]
-        public async Task<IActionResult> ConfirmarOrden(int id)
+        public async Task<IActionResult> ConfirmarOrden(int id, [FromBody] ConfirmacionCierreDto dto)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
@@ -236,39 +226,84 @@ namespace EstruplastERP.Api.Controllers
                 if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
                 if (orden.Estado == EstadoOrden.Finalizada) return BadRequest(new { mensaje = "Esta orden ya fue finalizada." });
 
-                // 🚨 1. ACÁ SÍ DESCONTAMOS LA MATERIA PRIMA FÍSICA
-                foreach (var consumo in orden.Consumos)
+                // 🚨 1. NUEVO CANDADO ESTRICTO DE STOCK FÍSICO 🚨
+                // Agrupamos los consumos que manda el usuario por si puso el mismo material dos veces (en la receta y como extra)
+                var consumosAgrupados = dto.ConsumosReales
+                    .GroupBy(c => c.MateriaPrimaId)
+                    .Select(g => new { MateriaPrimaId = g.Key, TotalKilos = g.Sum(c => c.CantidadKilosReales) })
+                    .ToList();
+
+                var faltantes = new List<string>();
+
+                foreach (var consumo in consumosAgrupados)
                 {
                     var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
-                    if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
+                    if (mp != null && !(mp.Id >= 990 && mp.Id <= 999)) // Ignoramos los genéricos
                     {
-                        mp.StockActual -= consumo.CantidadKilos;
-
-                        _context.Movimientos.Add(new Movimiento
+                        if (mp.StockActual < consumo.TotalKilos)
                         {
-                            Fecha = DateTime.Now,
-                            ProductoId = mp.Id,
-                            Cantidad = -consumo.CantidadKilos,
-                            TipoMovimiento = "CONSUMO_PRODUCCION",
-                            Observacion = $"Cierre OP #{id}",
-                            ClienteId = orden.ClienteId
-                        });
+                            faltantes.Add($"- {mp.Nombre}: Faltan {(consumo.TotalKilos - mp.StockActual):N2} Kg físicos en el sistema.");
+                        }
                     }
                 }
 
-                // 🚨 2. SUMAMOS EL PRODUCTO TERMINADO AL INVENTARIO
+                // Si hay faltantes, abortamos la operación entera antes de tocar nada
+                if (faltantes.Any())
+                {
+                    return BadRequest(new { mensaje = "⛔ STOCK NEGATIVO DETECTADO.\nCargue los ingresos/remitos de estos materiales antes de cerrar la orden:\n\n" + string.Join("\n", faltantes) });
+                }
+
+                // 🚨 2. SI PASA LA VALIDACIÓN, PROCEDEMOS A ACTUALIZAR (Tu código actual sigue igual desde acá)
+                orden.KilosEstimados = dto.KilosProducidosReales;
+                orden.Desperdicio = dto.DesperdicioReal;
+                orden.Observacion = dto.Observacion; // Guardamos la nota
+
+                _context.RemoveRange(orden.Consumos);
+                var consumosDefinitivos = new List<ConsumoOrden>();
+
+                foreach (var consumoUsuario in dto.ConsumosReales)
+                {
+                    var mp = await _context.Productos.FindAsync(consumoUsuario.MateriaPrimaId);
+                    if (mp != null)
+                    {
+                        consumosDefinitivos.Add(new ConsumoOrden
+                        {
+                            MateriaPrimaId = mp.Id,
+                            CantidadKilos = consumoUsuario.CantidadKilosReales
+                        });
+
+                        if (!(mp.Id >= 990 && mp.Id <= 999))
+                        {
+                            mp.StockActual -= consumoUsuario.CantidadKilosReales;
+
+                            _context.Movimientos.Add(new Movimiento
+                            {
+                                Fecha = DateTime.Now,
+                                ProductoId = mp.Id,
+                                Cantidad = -consumoUsuario.CantidadKilosReales,
+                                TipoMovimiento = "CONSUMO_PRODUCCION",
+                                Observacion = $"Cierre OP #{id}: {dto.Observacion}", // Guardamos la nota en Kardex
+                                OrdenProduccionId = id
+                            });
+                        }
+                    }
+                }
+
+                orden.Consumos = consumosDefinitivos;
+
+                // 🚨 4. SUMAR EL PRODUCTO TERMINADO AL INVENTARIO
                 if (orden.Producto != null)
                 {
-                    orden.Producto.StockActual += orden.KilosEstimados;
+                    orden.Producto.StockActual += dto.KilosProducidosReales;
 
                     _context.Movimientos.Add(new Movimiento
                     {
                         Fecha = DateTime.Now,
                         ProductoId = orden.ProductoId,
-                        Cantidad = orden.KilosEstimados,
+                        Cantidad = dto.KilosProducidosReales,
                         TipoMovimiento = "PRODUCCION_TERMINADA",
                         Observacion = $"Cierre OP #{id}",
-                        ClienteId = orden.ClienteId
+                        OrdenProduccionId = id
                     });
                 }
 
@@ -278,7 +313,7 @@ namespace EstruplastERP.Api.Controllers
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                return Ok(new { mensaje = "Producción confirmada. Materia prima consumida y PT sumado al inventario." });
+                return Ok(new { mensaje = "Producción confirmada con valores reales. Inventario actualizado." });
             }
             catch (Exception ex)
             {
@@ -320,6 +355,78 @@ namespace EstruplastERP.Api.Controllers
 
             if (orden == null) return NotFound();
             return orden;
+        }
+
+        [HttpPost("revertir/{id}")]
+        public async Task<IActionResult> RevertirOrden(int id)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var orden = await _context.Ordenes
+                    .Include(o => o.Producto)
+                    .Include(o => o.Consumos)
+                    .FirstOrDefaultAsync(o => o.Id == id);
+
+                if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
+
+                // 1. REVERSIÓN DE ORDEN FINALIZADA (Devolver stock físico)
+                if (orden.Estado == EstadoOrden.Finalizada)
+                {
+                    // Restamos el producto terminado que habíamos sumado al inventario
+                    if (orden.Producto != null)
+                    {
+                        orden.Producto.StockActual -= orden.KilosEstimados; // O los kilos reales que guardes
+
+                        _context.Movimientos.Add(new Movimiento
+                        {
+                            Fecha = DateTime.Now,
+                            ProductoId = orden.ProductoId,
+                            Cantidad = -orden.KilosEstimados, // Movimiento negativo de compensación
+                            TipoMovimiento = "REVERSION_PRODUCCION",
+                            Observacion = $"Reversión de cierre por error humano - OP #{id}",
+                            OrdenProduccionId = id
+                        });
+                    }
+
+                    // Devolvemos la materia prima que habíamos descontado
+                    foreach (var consumo in orden.Consumos)
+                    {
+                        var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
+                        if (mp != null && !(mp.Id >= 990 && mp.Id <= 999)) // Ignorando genéricos
+                        {
+                            mp.StockActual += consumo.CantidadKilos; // Devolvemos al físico
+
+                            _context.Movimientos.Add(new Movimiento
+                            {
+                                Fecha = DateTime.Now,
+                                ProductoId = mp.Id,
+                                Cantidad = consumo.CantidadKilos, // Movimiento positivo de compensación
+                                TipoMovimiento = "REVERSION_CONSUMO",
+                                Observacion = $"Reversión de consumo por error humano - OP #{id}",
+                                OrdenProduccionId = id
+                            });
+                        }
+                    }
+
+                    // Reseteamos las fechas y el estado
+                    orden.Estado = EstadoOrden.Pendiente;
+                    orden.FechaFin = null;
+                }
+
+                // 2. REVERSIÓN DE IMPRESIÓN (Aplica tanto si estaba finalizada como si solo estaba pendiente)
+                orden.EsImpreso = false;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { mensaje = "Orden revertida exitosamente. El inventario fue restaurado." });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { mensaje = $"Error al revertir la orden: {ex.Message}" });
+            }
         }
 
         [HttpPost("marcar-impresa/{id}")]

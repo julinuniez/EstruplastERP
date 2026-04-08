@@ -4,6 +4,7 @@ import type { Ref } from 'vue';
 export function useFazonProduccion(
     recetaDinamica: Ref<any[]>,
     listaInventarioCompleto: Ref<any[]>,
+    listaTodasMateriasPrimas: Ref<any[]>, // 👈 ACÁ AGREGAMOS LA LISTA FALTANTE
     listaLotesCliente: Ref<any[]>,
     loteFazonSeleccionadoId: Ref<string | number>,
     stockFazonDetectado: Ref<number | null>,
@@ -37,7 +38,7 @@ export function useFazonProduccion(
     };
 
     function aplicarLoteFazonAReceta(lote: any) {
-        let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || String(r.nombreInsumo).includes('CAJA VERDE'));
+        let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || String(r.nombreInsumo).includes('CAJA VERDE') || String(r.nombreInsumo).includes('ELIJA'));
         
         const cId = Number(lote.clienteId || lote.ClienteId) || 0;
 
@@ -109,30 +110,36 @@ export function useFazonProduccion(
 
         listaLotesCliente.value = todoElStockCliente.sort((a, b) => b.stockActual - a.stockActual);
 
-        // 🚨 EL BLINDAJE: Detectamos si la orden YA ESTÁ GUARDADA y CARGADA
         const cIdNum = Number(clienteId);
-        const materialYaCargado = recetaDinamica.value.find(r => 
-            (Number(r.clienteId) === cIdNum || String(r.nombreInsumo).toUpperCase().includes('DE ')) && 
-            r.materiaPrimaId > 0 && 
-            !String(r.nombreInsumo).includes('CAJA VERDE') &&
-            !String(r.nombreInsumo).includes('ELIJA')
-        );
+        const materialYaCargado = recetaDinamica.value.find(r => {
+            const tieneIdValido = r.materiaPrimaId > 0;
+            const noEsAlerta = !String(r.nombreInsumo).includes('CAJA VERDE') && !String(r.nombreInsumo).includes('ELIJA');
+            
+            // 👈 ACÁ ESTÁN LAS CORRECCIONES DE ANY
+            const mpMaestro = listaInventarioCompleto.value.find((m: any) => m.id === r.materiaPrimaId) || 
+                              listaTodasMateriasPrimas.value.find((m: any) => m.id === r.materiaPrimaId);
+            
+            const duenioReal = mpMaestro ? Number(mpMaestro.clienteId || mpMaestro.ClienteId || 0) : Number(r.clienteId || 0);
+
+            const esDelCliente = (duenioReal === cIdNum) || String(r.nombreInsumo).toUpperCase().includes('DE ');
+
+            return tieneIdValido && noEsAlerta && esDelCliente;
+        });
 
         if (materialYaCargado) {
-            // Si abrimos la hoja de impresión de una orden guardada, respetamos el material
             loteFazonSeleccionadoId.value = materialYaCargado.materiaPrimaId;
-            materialYaCargado.esFazonInput = true; // Restauramos la bandera interna
+            materialYaCargado.esFazonInput = true; 
             
-            // Aseguramos que el material exista en la caja verde (incluso si se quedó sin stock)
-            const existeEnCombo = listaLotesCliente.value.find(l => l.id === materialYaCargado.materiaPrimaId);
+            // 👈 ACÁ TAMBIÉN CORREGIMOS EL ANY
+            const existeEnCombo = listaLotesCliente.value.find((l: any) => l.id === materialYaCargado.materiaPrimaId);
             if (!existeEnCombo) {
-                const mpPerdida = listaInventarioCompleto.value.find(m => m.id === materialYaCargado.materiaPrimaId);
+                const mpPerdida = listaInventarioCompleto.value.find((m: any) => m.id === materialYaCargado.materiaPrimaId) || 
+                                  listaTodasMateriasPrimas.value.find((m: any) => m.id === materialYaCargado.materiaPrimaId);
                 if (mpPerdida) listaLotesCliente.value.push(mpPerdida);
             }
-            return; // 🛑 CORTAMOS ACÁ PARA NO PISAR LA RECETA IMPRESA
+            return; 
         }
 
-        // Si llegamos acá, es una ORDEN NUEVA. Limpiamos el combo y obligamos a elegir
         loteFazonSeleccionadoId.value = '';
 
         if (listaLotesCliente.value.length === 1) {
@@ -140,7 +147,7 @@ export function useFazonProduccion(
             loteFazonSeleccionadoId.value = unicaOpcion.id;
             aplicarLoteFazonAReceta(unicaOpcion);
         } else if (listaLotesCliente.value.length > 1) {
-            let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || String(r.nombreInsumo).includes('CAJA VERDE'));
+            let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || String(r.nombreInsumo).includes('CAJA VERDE') || String(r.nombreInsumo).includes('ELIJA'));
             
             if (itemFazon) {
                 itemFazon.nombreInsumo = "⚠️ ELIJA UN LOTE EN LA CAJA VERDE";
@@ -169,7 +176,7 @@ export function useFazonProduccion(
             }
             balancearBase();
         } else {
-            let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || String(r.nombreInsumo).includes('CAJA VERDE'));
+            let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || String(r.nombreInsumo).includes('CAJA VERDE') || String(r.nombreInsumo).includes('ELIJA'));
             if (!itemFazon) itemFazon = recetaDinamica.value.find(r => r.esBase);
             if (itemFazon) {
                 itemFazon.nombreInsumo = "⚠️ CLIENTE SIN MATERIAL RECUPERADO/MOLIDO";
@@ -183,7 +190,7 @@ export function useFazonProduccion(
 
     function alCambiarLoteFazon() {
         const loteIdStr = String(loteFazonSeleccionadoId.value);
-        const lote = listaLotesCliente.value.find(l => String(l.id) === loteIdStr);
+        const lote = listaLotesCliente.value.find((l: any) => String(l.id) === loteIdStr);
         if (lote) aplicarLoteFazonAReceta(lote);
     }
 

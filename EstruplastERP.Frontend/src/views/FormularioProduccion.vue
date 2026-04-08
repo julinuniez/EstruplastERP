@@ -73,6 +73,25 @@ const form = ref({
     clienteNombre: ''
 })
 
+// 👇 ESTADOS PARA LA CONTINUIDAD DE PEDIDOS
+const ultimoPedidoGuardado = ref({
+    clienteId: '' as string | number,
+    numeroPedidoCliente: '',
+    notaPedido: ''
+});
+const mostrarOpcionMismoPedido = ref(false);
+
+const espesorValido = computed(() => {
+    if (limiteMinimo.value === 0 && limiteMaximo.value === 0) return true;
+    
+    const esp = Number(form.value.espesor) || 0;
+    if (esp === 0) return false;
+    if (limiteMaximo.value === 0) {
+        return esp >= limiteMinimo.value;
+    }
+    return esp >= limiteMinimo.value && esp <= limiteMaximo.value;
+});
+
 const productoSeleccionado = computed(() => productos.value.find(p => p.id === Number(form.value.productoTerminadoId)) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Number(form.value.clienteId)) || null);
 
@@ -95,7 +114,6 @@ const {
     clienteTieneFazonActivo,
     clientesHabilitados,
     medidasBloqueadas,
-    espesorValido,
     listaProductosDisponibles,
     materiasPrimasLimpias,
     insumosSinStock,
@@ -129,6 +147,7 @@ const {
 } = useFazonProduccion(
     recetaDinamica, 
     listaInventarioCompleto, 
+    listaTodasMateriasPrimas,
     listaLotesCliente, 
     loteFazonSeleccionadoId, 
     stockFazonDetectado, 
@@ -175,34 +194,42 @@ async function CargarDatosProductos(id: number) {
         const prod = await ProduccionAPI.obtenerProductoPorId(id);
 
         if (prod.receta && Array.isArray(prod.receta) && prod.receta.length > 0) {
-            recetaDinamica.value = prod.receta.map((r: any) => ({
-                id: r.id || Math.random(),
-                materiaPrimaId: r.materiaPrimaId || r.id,
-                nombreInsumo: r.nombreInsumo || r.nombreMateriaPrima || r.nombre,
-                cantidad: r.cantidad || r.porcentaje || 0,
-                densidad: r.densidad || r.pesoEspecifico || 1.1,
-                esBase: r.esBase || false
-            }));
+            recetaDinamica.value = prod.receta.map((r: any) => {
+                const mpId = r.materiaPrimaId || r.id;
+                const mp = listaTodasMateriasPrimas.value.find(m => m.id === mpId) || 
+                           listaInventarioCompleto.value.find(m => m.id === mpId);
+                
+                const idDuenioReal = mp ? Number(mp.clienteId || mp.ClienteId || 0) : Number(r.clienteId || 0);
+
+                return {
+                    id: r.id || Math.random(),
+                    materiaPrimaId: mpId,
+                    nombreInsumo: r.nombreInsumo || r.nombreMateriaPrima || r.nombre,
+                    cantidad: r.cantidad || r.porcentaje || 0,
+                    densidad: r.densidad || r.pesoEspecifico || 1.1,
+                    esBase: r.esBase || false,
+                    clienteId: idDuenioReal 
+                };
+            });
             
             if (typeof balancearBase === 'function') balancearBase();
         }
 
         if (!form.value.largo || form.value.largo === 0) {
             form.value.esBobina = (prod.nombre || '').toUpperCase().includes('BOBINA');
-            form.value.largo = form.value.esBobina ? 0 : (prod.largo || 0);
+            form.value.largo = form.value.esBobina ? 0 : Number(prod.largo || prod.Largo || 0);
         }
         
         if (!form.value.ancho || form.value.ancho === 0) {
-            form.value.ancho = prod.ancho || 0;
+            form.value.ancho = Number(prod.ancho || prod.Ancho || 0);
         }
         
         if (!form.value.espesor || form.value.espesor === 0) {
-            form.value.espesor = prod.espesor || 0;
+            form.value.espesor = Number(prod.espesor || prod.Espesor || 0);
         }
 
-        // 🚨 ACÁ ESTÁ LA MAGIA: Le pasamos los límites del producto a Vue
-        limiteMinimo.value = prod.espesorMinimo || 0;
-        limiteMaximo.value = prod.espesorMaximo || 0;
+        limiteMinimo.value = Number(prod.espesorMinimo || prod.EspesorMinimo || 0);
+        limiteMaximo.value = Number(prod.espesorMaximo || prod.EspesorMaximo || 0);
 
     } catch (e) { 
         console.error("Error cargando datos maestros:", e); 
@@ -213,13 +240,10 @@ watch(mostrarCajaColor, (v) => {
     if (!v) form.value.masterbatchId = '';
 });
 
-// 1. Mejoramos el Watch del Cliente
 watch(() => form.value.clienteId, async (nuevoCli) => {
     if (nuevoCli) {
-        // Siempre recargamos los productos disponibles para ese cliente
         await CargarProductosFiltrados(nuevoCli);
         
-        // Si ya había un producto seleccionado, refrescamos sus lotes
         if (form.value.productoTerminadoId) {
             const prod = productos.value.find(p => p.id === Number(form.value.productoTerminadoId));
             if (prod) {
@@ -232,20 +256,16 @@ watch(() => form.value.clienteId, async (nuevoCli) => {
     }
 });
 
-// 2. 🚨 ACÁ ESTÁ LA MAGIA: El Watch del Producto
 watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
     if (form.value.esConsolidado) return;
     
     if (nuevoProdId && !imprimiendoHistorial.value) {
-        // A. Cargar la receta base normal
         await CargarDatosProductos(Number(nuevoProdId)); 
         
-        // B. LÓGICA FAZON: Si el producto nuevo es de Fazón, forzamos a buscar su lote exacto
         const prodFinal = productos.value.find(p => p.id === Number(nuevoProdId));
         if (prodFinal && prodFinal.esFazon && form.value.clienteId) {
             await actualizarRecetaFazonConCliente(form.value.clienteId, prodFinal);
         } else {
-            // C. Si elegiste un producto propio, limpiamos la cajita verde de Fazón para que no moleste
             listaLotesCliente.value = [];
             loteFazonSeleccionadoId.value = '';
         }
@@ -317,10 +337,36 @@ onMounted(async () => {
     await cargarNotaPedidoSugerida();
 });
 
+// 👇 NUEVA LÓGICA DE GUARDADO CON RECUPERACIÓN DE PEDIDO
 const procesarGuardado = async () => {
     if (guardando.value) return; 
     error.value = ''; 
+    mostrarOpcionMismoPedido.value = false; // Resetear cartel si había quedado
+
+    // 1. Guardamos los datos clave ANTES de que el sistema limpie el formulario
+    ultimoPedidoGuardado.value = {
+        clienteId: form.value.clienteId,
+        numeroPedidoCliente: form.value.numeroPedidoCliente,
+        notaPedido: form.value.notaPedido
+    };
+
+    // 2. Ejecutamos el guardado original (limpia los campos)
     await registrarProduccion();
+
+    // 3. Si no saltó ningún error, mostramos el cartel de recuperación
+    if (!error.value) {
+        mostrarOpcionMismoPedido.value = true;
+    }
+};
+
+const continuarMismoPedido = () => {
+    // Restauramos los 3 campos clave
+    form.value.clienteId = ultimoPedidoGuardado.value.clienteId;
+    form.value.numeroPedidoCliente = ultimoPedidoGuardado.value.numeroPedidoCliente;
+    form.value.notaPedido = ultimoPedidoGuardado.value.notaPedido;
+    
+    mostrarOpcionMismoPedido.value = false;
+    mensaje.value = "Datos del pedido recuperados. Seleccione el siguiente producto.";
 };
 
 defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
@@ -465,12 +511,17 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 </div>
                 
                 <div class="fila-input">
-                    <div>
-                        <label>Espesor</label>
+                    <div :class="{ 'error-espesor': !espesorValido }">
+                        <label>Espesor (mm)</label>
                         <input type="number" v-model="form.espesor" step="0.01" 
                             :disabled="medidasBloqueadas" 
                             :class="{'input-lock': medidasBloqueadas, 'input-error': !espesorValido}" 
                             style="font-weight:bold;">
+                        
+                        <span v-if="!espesorValido" style="color: #e74c3c; font-size: 11px; font-weight: bold; display: block; margin-top: 4px;">
+                            <span v-if="limiteMaximo > 0">⚠️ Rango permitido: {{ limiteMinimo }} a {{ limiteMaximo }} mm</span>
+                            <span v-else>⚠️ Espesor mínimo permitido: {{ limiteMinimo }} mm</span>
+                        </span>
                     </div>
                     <div><label>Cant.</label><input type="number" v-model="form.cantidad" min="1"></div>
                 </div>
@@ -518,11 +569,11 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
             <div v-if="Math.abs(totalPorcentajeReceta - 100) > 0.5" class="alerta-error">⚠️ Receta suma {{ totalPorcentajeReceta }}%.</div>
             
             <div v-if="hayBloqueoDeStock" class="alerta-stock-warning">
-                <h4>⚠️ Material Insuficiente (Irá a la Cola)</h4>
-                <p style="margin: 0 0 5px 0; font-size: 11px;">La orden se guardará en el Backlog hasta que ingrese este stock:</p>
+                <h4>⚠️ Material Insuficiente (Stock Libre Negativo)</h4>
+                <p style="margin: 0 0 5px 0; font-size: 11px;">La orden nacerá como <strong>Pendiente</strong>, pero requerirá compras para producirse:</p>
                 <ul>
                     <li v-for="(falla, i) in insumosSinStock" :key="i">
-                        <strong>{{ falla.nombre }}</strong>: Falta {{ falla.diferencia.toFixed(2) }} kg (Disp: {{ falla.disponible }})
+                        <strong>{{ falla.nombre }}</strong>: Faltan {{ falla.diferencia.toFixed(2) }} kg (Disp: {{ falla.disponible }})
                     </li>
                 </ul>
             </div>
@@ -537,12 +588,23 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 <span v-else-if="loading">⏳ PROCESANDO...</span>
                 <span v-else-if="form.clienteId === '' || !form.productoTerminadoId">🚫 SELECCIONE CLIENTE Y PRODUCTO</span>
                 <span v-else-if="!espesorValido">🚫 ERROR: ESPESOR FUERA DE RANGO</span>
-                <span v-else-if="hayBloqueoDeStock">📥 GUARDAR EN COLA</span>
+                <span v-else-if="hayBloqueoDeStock">💾 GUARDAR PENDIENTE (FALTA STOCK)</span>
                 <span v-else>💾 GUARDAR ORDEN LISTA</span>
             </button>
             
-            <p class="success">{{ mensaje }}</p>
-            <p class="error">{{ error }}</p>
+            <div v-if="mostrarOpcionMismoPedido" class="banner-borrador" style="border-left-color: #2ecc71; margin-top: 15px;">
+                <div class="banner-texto">
+                    <span style="color: #2ecc71;">✅ <strong>Orden Guardada</strong></span>
+                    <small style="color: #ecf0f1;">¿Deseas seguir cargando ítems en este pedido?</small>
+                </div>
+                <div class="banner-acciones" style="margin-top: 8px;">
+                    <button @click="continuarMismoPedido" class="btn-borrador-ok" style="background-color: #3498db; width: 100%;">Sí, mantener cliente y OC</button>
+                    <button @click="mostrarOpcionMismoPedido = false" class="btn-borrador-no" style="color: #ecf0f1; width: 100%;">Terminar</button>
+                </div>
+            </div>
+
+            <p v-else-if="mensaje" class="success">{{ mensaje }}</p>
+            <p v-if="error" class="error">{{ error }}</p>
         </div>
     </div>
 
@@ -559,6 +621,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
 </template>
 
 <style scoped>
+/* Sin cambios en los estilos */
 .contenedor-principal-produccion {
     display: flex; flex-direction: column; width: 100%; min-height: 100vh;
     font-family: 'Segoe UI', sans-serif; background-color: #ecf0f1;
@@ -665,7 +728,7 @@ select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; 
 }
 
 .caja-detalles-producto {
-    background-color: #34495e; /* Un tono más claro que el azul oscuro de atrás */
+    background-color: #34495e; 
     padding: 15px;
     border-radius: 8px;
     margin-top: 15px;

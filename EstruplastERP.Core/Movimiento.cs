@@ -32,6 +32,10 @@ namespace EstruplastERP.Core
 
         [MaxLength(50)]
         public string? NumeroRemito { get; set; }
+        public int? OrdenProduccionId { get; set; }
+
+        [ForeignKey("OrdenProduccionId")]
+        public OrdenProduccion? OrdenProduccion { get; set; }
 
     }
 }

@@ -24,6 +24,8 @@ namespace EstruplastERP.Api.Dtos
         public decimal Largo { get; set; }
         public decimal Ancho { get; set; }
         public decimal Espesor { get; set; }
+        public decimal EspesorMinimo { get; set; }
+        public decimal EspesorMaximo { get; set; }
         public decimal PesoEspecifico { get; set; }
         public decimal StockMinimo { get; set; }
         public decimal PrecioCosto { get; set; }
