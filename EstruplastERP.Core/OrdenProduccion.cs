@@ -8,8 +8,7 @@ namespace EstruplastERP.Core
         Cancelada = -1,
         Pendiente = 0,
         EnProceso = 1,
-        Finalizada = 2,
-        EnCola = 3
+        Finalizada = 2
     }
 
     public class OrdenProduccion

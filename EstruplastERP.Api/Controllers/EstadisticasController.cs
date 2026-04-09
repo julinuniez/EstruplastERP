@@ -149,8 +149,7 @@ namespace EstruplastERP.Controllers
 
             // 🚨 NUEVO: Calculamos los Kilos Pendientes (Todo lo que está en planta sin finalizar)
             var kilosPendientes = await _context.Ordenes
-                .Where(o => o.Estado == EstadoOrden.EnCola ||
-                            o.Estado == EstadoOrden.Pendiente ||
+                .Where(o => o.Estado == EstadoOrden.Pendiente ||
                             o.Estado == EstadoOrden.EnProceso)
                 .SumAsync(o => (decimal?)o.KilosEstimados) ?? 0;
 

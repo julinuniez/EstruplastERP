@@ -135,11 +135,8 @@ async function activarOrden(item: ProduccionItem) {
     }
 }
 
-// 👇 FUNCIÓN DE REVERSIÓN
 async function revertirOrden(item: ProduccionItem) {
-    const mensaje = item.estado === 'Finalizada' 
-        ? `⚠️ PELIGRO: Vas a revertir la orden #${item.id} a Pendiente.\n\nEsto devolverá los materiales al stock y restará el producto terminado del inventario.\n¿Estás completamente seguro?`
-        : `¿Quitar la marca de "Impresa" de la orden #${item.id}?`;
+    const mensaje = `⚠️ PELIGRO: Vas a revertir la orden #${item.id} a Pendiente.\n\nEsto devolverá los materiales al stock y restará el producto terminado del inventario.\n¿Estás completamente seguro?`;
 
     if (!confirm(mensaje)) return;
 
@@ -480,22 +477,18 @@ defineExpose({ cargarHistorial })
                     </td>
                     
                     <td class="td-acciones">
-                        
                         <template v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso'">
                             <button @click="abrirModalEdicion(p)" class="btn-action" title="Modificar Orden">✏️</button>
                             <button @click="abrirModalCierre(p)" class="btn-action btn-check" title="Declarar Consumos y Cerrar OP">✅</button>
                             <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Imprimir OP">📄</button>
                             <button @click="solicitarImpresion(p, 'carga')" class="btn-action btn-ciencia" title="Imprimir Hoja de Carga">🧪</button>
-                            
-                            <button v-if="p.esImpreso" @click="revertirOrden(p)" class="btn-action" style="color: #f39c12; border-color: #f39c12;" title="Deshacer Impresión">↩️</button>
-                            
                             <button @click="cancelarOrden(p)" class="btn-action btn-cancel" title="Cancelar y Devolver Material">❌</button>
                         </template>
                         
                         <template v-else-if="p.estado === 'Finalizada'">
-                             <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Reimprimir Orden">📄</button>
-                             
-                             <button @click="revertirOrden(p)" class="btn-action" style="color: #e67e22; border-color: #e67e22;" title="Revertir Cierre de Producción">⏪</button>
+                            <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Reimprimir Orden">📄</button>
+                            
+                            <button @click="revertirOrden(p)" class="btn-action" style="color: #e67e22; border-color: #e67e22;" title="Revertir Cierre de Producción">⏪</button>
                         </template>
                     </td>
                 </tr>

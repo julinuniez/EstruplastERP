@@ -175,7 +175,6 @@ namespace EstruplastERP.Api.Controllers
             {
                 var orden = await _context.Ordenes.Include(o => o.Consumos).FirstOrDefaultAsync(o => o.Id == id);
                 if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
-                if (orden.Estado != EstadoOrden.EnCola) return BadRequest(new { mensaje = "Solo las órdenes 'En Cola' pueden ser enviadas a producción." });
 
                 // 🚨 1. Solo validamos si hay stock. NO lo descontamos.
                 var faltantes = new List<string>();

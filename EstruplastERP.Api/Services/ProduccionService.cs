@@ -166,7 +166,7 @@ namespace EstruplastERP.Api.Services
                     Desperdicio = request.Desperdicio,
                     EsBobina = request.EsBobina,
                     Observacion = request.Observacion,
-                    Estado = hayStock ? EstadoOrden.Pendiente : EstadoOrden.EnCola,
+                    Estado = EstadoOrden.Pendiente,
                     Largo = request.Largo,
                     Ancho = request.Ancho,
                     Color = request.Color,
