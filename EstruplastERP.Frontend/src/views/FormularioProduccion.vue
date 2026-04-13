@@ -73,7 +73,6 @@ const form = ref({
     clienteNombre: ''
 })
 
-// 👇 ESTADOS PARA LA CONTINUIDAD DE PEDIDOS
 const ultimoPedidoGuardado = ref({
     clienteId: '' as string | number,
     numeroPedidoCliente: '',
@@ -95,16 +94,41 @@ const espesorValido = computed(() => {
 const productoSeleccionado = computed(() => productos.value.find(p => p.id === Number(form.value.productoTerminadoId)) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Number(form.value.clienteId)) || null);
 
-const { 
-    borradorDisponible, revisarBorrador, recuperarBorrador, descartarBorrador, limpiarBorrador
-} = useBorradorProduccion(form, recetaDinamica, mensaje);
+// 👇 NUEVA LÓGICA DE DENSIDAD 👇
+const densidadPT = computed(() => {
+    return productoSeleccionado.value?.pesoEspecifico || 1.1; 
+});
+
+// Sobrescribimos o re-creamos los cálculos que dependían del viejo hook si es necesario, 
+// o le pasamos la nueva densidad al composable (dependiendo de cómo esté hecho useCalculosProduccion).
+// Como useCalculosProduccion ya existe, te recomiendo modificar el composable directamente, pero 
+// para arreglarlo rápido desde acá, forzamos el recálculo:
 
 const { 
     totalPorcentajeReceta, 
-    densidadMezcla, 
-    kilosCalculados, 
+    // Densidad Mezcla ya no la usamos de acá, usamos densidadPT
+    // kilosCalculados lo re-escribimos abajo para estar seguros
     factorMerma 
 } = useCalculosProduccion(form, recetaDinamica, productoSeleccionado);
+
+const kilosCalculados = computed(() => {
+    if (!form.value.largo || !form.value.ancho || !form.value.espesor || !form.value.cantidad) return 0;
+    
+    let k = 0;
+    if (form.value.esBobina && form.value.kilosPorBobina) {
+        k = form.value.kilosPorBobina * form.value.cantidad;
+    } else {
+        const mm3 = form.value.largo * form.value.ancho * form.value.espesor;
+        // 👇 ACA USA LA NUEVA DENSIDAD 👇
+        const pesoUnaPiezaKg = (mm3 * densidadPT.value) / 1000000;
+        k = pesoUnaPiezaKg * form.value.cantidad;
+    }
+    return Math.ceil(k);
+});
+
+const { 
+    borradorDisponible, revisarBorrador, recuperarBorrador, descartarBorrador, limpiarBorrador
+} = useBorradorProduccion(form, recetaDinamica, mensaje);
 
 const { 
     listaMasterbatches,
@@ -337,30 +361,25 @@ onMounted(async () => {
     await cargarNotaPedidoSugerida();
 });
 
-// 👇 NUEVA LÓGICA DE GUARDADO CON RECUPERACIÓN DE PEDIDO
 const procesarGuardado = async () => {
     if (guardando.value) return; 
     error.value = ''; 
-    mostrarOpcionMismoPedido.value = false; // Resetear cartel si había quedado
+    mostrarOpcionMismoPedido.value = false; 
 
-    // 1. Guardamos los datos clave ANTES de que el sistema limpie el formulario
     ultimoPedidoGuardado.value = {
         clienteId: form.value.clienteId,
         numeroPedidoCliente: form.value.numeroPedidoCliente,
         notaPedido: form.value.notaPedido
     };
 
-    // 2. Ejecutamos el guardado original (limpia los campos)
     await registrarProduccion();
 
-    // 3. Si no saltó ningún error, mostramos el cartel de recuperación
     if (!error.value) {
         mostrarOpcionMismoPedido.value = true;
     }
 };
 
 const continuarMismoPedido = () => {
-    // Restauramos los 3 campos clave
     form.value.clienteId = ultimoPedidoGuardado.value.clienteId;
     form.value.numeroPedidoCliente = ultimoPedidoGuardado.value.numeroPedidoCliente;
     form.value.notaPedido = ultimoPedidoGuardado.value.notaPedido;
@@ -385,7 +404,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     :cliente="clienteSeleccionado" 
                     :receta="recetaDinamica" 
                     :colorFinal="colorFinalParaPDF" 
-                    :densidad="densidadMezcla" 
+                    :densidad="densidadPT" 
                     :totalPorcentaje="totalPorcentajeReceta" 
                     :materiasPrimas="materiasPrimasLimpias" 
                     :ocultarFormula="ocultarFormula" 

@@ -7,6 +7,7 @@ import api from '@/services/axiosInstance';
 import { useFiltrosInventario, detectarTipo } from '@/composables/useFiltrosInventario';
 import { useImportacionInventario } from '@/composables/useImportacionInventario';
 import { useModalesInventario } from '@/composables/useModalesInventario';
+import ModalHistorialStock from '@/components/ModalHistorialStock.vue';
 
 const router = useRouter();
 const maestrosStore = useMaestrosStore();
@@ -24,6 +25,10 @@ const importClienteFiltro = ref<number | string>('');
 const mostrarModalGlobal = ref(false);
 const detalleGlobal = ref<any[]>([]);
 const resumenGlobal = ref({ fisico: 0, reservado: 0, libre: 0 });
+
+const mostrarModalHistorial = ref(false);
+const productoIdSeleccionado = ref<number | null>(null);
+const productoNombreSeleccionado = ref('');
 
 watch(clienteFiltro, () => { materialFiltro.value = ''; });
 watch(tabActual, () => { subTabMP.value = 'VIRGEN'; });
@@ -51,6 +56,12 @@ const irAEditar = (id: number) => {
     router.push({ name: 'editar-producto', params: { id } });
 };
 
+const abrirKardex = (producto: any) => {
+    productoIdSeleccionado.value = producto.id;
+    productoNombreSeleccionado.value = producto.nombre;
+    mostrarModalHistorial.value = true;
+};
+
 async function cargarDatos(forzar = false) {
     try {
         error.value = '';
@@ -72,7 +83,6 @@ const abrirPantallazoGlobal = (palabraClave: string = 'TUTI') => {
     mostrarModalGlobal.value = true;
 };
 
-// 👇 NUEVA LÓGICA DE AGRUPACIÓN PARA EL MOLIDO (AHORA GLOBAL) 👇
 const verMolidoAgrupado = ref(true);
 const gruposExpandidos = ref<string[]>([]);
 
@@ -97,14 +107,10 @@ const molidosAgrupados = computed(() => {
         
         const partesSku = sku.split('-');
         
-        // 1. Agarramos el bloque del medio (ej: "ABS000")
         const materialBruto = partesSku.length > 1 ? partesSku[1].trim() : 'VARIOS';
         
-        // 2. 🔥 MAGIA ACÁ: Le borramos todos los números del 0 al 9 (Queda "ABS")
         const material = materialBruto.replace(/[0-9]/g, '').trim() || 'VARIOS';
 
-        // 3. Extraer color limpiando palabras clave. 
-        // Borramos tanto el "ABS000" como el "ABS" por si en el nombre lo escribieron de otra forma
         let colorRaw = nombre.replace(/MOLIDO/i, '')
                              .replace(new RegExp(materialBruto, 'i'), '')
                              .replace(new RegExp(material, 'i'), '');
@@ -117,7 +123,7 @@ const molidosAgrupados = computed(() => {
         if (!grupos[key]) {
             grupos[key] = {
                 idGrupo: key,
-                material: material, // Pasamos el material ya limpio sin números
+                material: material, 
                 color: color,
                 fisico: 0,
                 reservado: 0,
@@ -141,11 +147,11 @@ const molidosAgrupados = computed(() => {
         return a.color.localeCompare(b.color);
     });
 });
+
 onMounted(() => {
     cargarDatos(true);
 });
 </script>
-
 <template>
     <div class="contenedor-stock">
         <div class="header-stock">
@@ -269,7 +275,8 @@ onMounted(() => {
                                 </span>
                                 <span v-else class="badge-propio" style="margin-left:8px;">Propio</span>
                                 
-                                <button @click="irAEditar(p.id)" class="btn-editar btn-mini" title="Editar Lote">✏️</button>
+                                <button @click="irAEditar(p.id)" class="btn-editar btn-mini" title="Editar Lote" style="margin-left: 10px;">✏️</button>
+                                <button @click="abrirKardex(p)" class="btn-editar btn-mini" title="Ver Historial de Movimientos" style="margin-left: 5px;">🕒</button>
                             </td>
                             <td style="text-align:right; color:#7f8c8d;">{{ (p.stockFisico ?? p.stockActual ?? 0).toFixed(2) }}</td>
                             <td style="text-align:center; color:#7f8c8d;">
@@ -347,8 +354,9 @@ onMounted(() => {
                             {{ p.stockDisponible ?? ((p.stockFisico ?? p.stockActual ?? 0) - (p.stockReservado ?? 0)) }}
                         </td>
 
-                        <td style="text-align:center;">
+                        <td style="text-align:center; display: flex; justify-content: center; gap: 5px;">
                             <button @click="irAEditar(p.id)" class="btn-editar" title="Editar">✏️</button>
+                            <button @click="abrirKardex(p)" class="btn-editar" title="Ver Historial de Movimientos">🕒</button>
                         </td>
                     </tr>
                 </tbody>
@@ -487,6 +495,14 @@ onMounted(() => {
                 </div>
             </div>
         </div>
+
+        <ModalHistorialStock 
+            :visible="mostrarModalHistorial"
+            :productoId="productoIdSeleccionado"
+            :productoNombre="productoNombreSeleccionado"
+            @close="mostrarModalHistorial = false"
+        />
+
     </div>
 </template>
 

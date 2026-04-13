@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using EstruplastERP.Data;
 using EstruplastERP.Core;
 using EstruplastERP.Api.Dtos;
+using CsvHelper.Configuration.Attributes;
 
 namespace EstruplastERP.Api.Controllers
 {
@@ -51,9 +52,6 @@ namespace EstruplastERP.Api.Controllers
             }
         }
 
-        // ==========================================
-        // 2. GET: MATERIAS PRIMAS
-        // ==========================================
         [HttpGet("materias-primas")]
         public async Task<ActionResult<IEnumerable<object>>> GetMateriasPrimas()
         {
@@ -66,14 +64,12 @@ namespace EstruplastERP.Api.Controllers
                     p.Nombre,
                     p.CodigoSku,
                     p.PesoEspecifico,
-                    p.StockActual
+                    p.StockActual,
+                    ClienteId = p.ClienteId
                 })
                 .ToListAsync();
         }
 
-        // ==========================================
-        // 3. GET: TODOS LOS PRODUCTOS
-        // ==========================================
         [HttpGet]
         public async Task<IActionResult> GetProductos()
         {
@@ -90,19 +86,16 @@ namespace EstruplastERP.Api.Controllers
                     p.EsProductoTerminado,
                     p.EsFazon,
                     p.EsScrap,
-
-                    // 🚨 MATAMOS LA LÓGICA VIEJA: Forzamos a true para que todo sea editable
                     EsGenerico = true,
-
                     p.ClienteId,
                     p.PrecioCosto,
                     p.StockMinimo,
+                    p.PesoEspecifico,
                     StockFisico = p.StockActual,
-
                     StockReservado = _context.ConsumosOrdenes
                         .Where(c => c.MateriaPrimaId == p.Id &&
                                     (c.OrdenProduccion.Estado == EstadoOrden.Pendiente ||
-                                     c.OrdenProduccion.Estado == EstadoOrden.EnProceso)) // 🚨 AHORA SÓLO RESERVA LAS ACTIVAS
+                                     c.OrdenProduccion.Estado == EstadoOrden.EnProceso))
                         .Sum(c => (decimal?)c.CantidadKilos) ?? 0,
                 })
                 .ToListAsync();
@@ -121,18 +114,16 @@ namespace EstruplastERP.Api.Controllers
                 p.ClienteId,
                 p.PrecioCosto,
                 p.StockMinimo,
+                p.PesoEspecifico,
                 p.StockFisico,
                 p.StockReservado,
-                p.EsGenerico, // Ya viaja como true
+                p.EsGenerico,
                 StockDisponible = p.StockFisico - p.StockReservado
             });
 
             return Ok(resultado);
         }
 
-        // ==========================================
-        // 4. GET: UN PRODUCTO (Para Edición)
-        // ==========================================
         [HttpGet("{id}")]
         public async Task<ActionResult<ProductoDetalleDto>> GetProducto(int id)
         {
@@ -169,7 +160,6 @@ namespace EstruplastERP.Api.Controllers
                 EspesorMaximo = producto.EspesorMaximo ?? 0,
                 EsGenerico = true,
                 Rubro = producto.Rubro,
-
                 Receta = formulasFinales.Select(f => new IngredienteDto
                 {
                     MateriaPrimaId = f.MateriaPrimaId,
@@ -181,9 +171,6 @@ namespace EstruplastERP.Api.Controllers
             return dto;
         }
 
-        // ==========================================
-        // 5. POST: CREAR
-        // ==========================================
         [HttpPost("crear")]
         public async Task<IActionResult> CrearProductoConReceta([FromBody] NuevoProductoDto data)
         {
@@ -208,7 +195,7 @@ namespace EstruplastERP.Api.Controllers
                     PrecioCosto = data.PrecioCosto,
                     StockActual = 0,
                     Activo = true,
-                    EsGenerico = true, // 🚨 Creados por defecto en true
+                    EsGenerico = true,
                     FechaCreacion = DateTime.Now
                 };
 
@@ -239,6 +226,32 @@ namespace EstruplastERP.Api.Controllers
             }
         }
 
+        [HttpGet("movimientos/{productoId}")]
+        public async Task<IActionResult> GetMovimientos(int productoId, [FromQuery] int mes, [FromQuery] int anio)
+        {
+            try
+            {
+                var movimientos = await _context.Movimientos
+                    .Where(m => m.ProductoId == productoId
+                             && m.Fecha.Month == mes
+                             && m.Fecha.Year == anio)
+                    .OrderByDescending(m => m.Fecha)
+                    .Select(m => new {
+                        Id = m.Id,
+                        Fecha = m.Fecha,
+                        TipoMovimiento = m.TipoMovimiento,
+                        Cantidad = m.Cantidad,
+                        Observacion = m.Observacion
+                    })
+                    .ToListAsync();
+
+                return Ok(movimientos);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { mensaje = "Error al obtener el historial.", detalle = ex.Message });
+            }
+        }
 
         [HttpPost("habilitar-fazon/{clienteId}")]
         public async Task<IActionResult> HabilitarFazonCliente(int clienteId)
@@ -261,14 +274,12 @@ namespace EstruplastERP.Api.Controllers
                     CodigoSku = $"MP-CLI-{clienteId.ToString("D3")}",
                     EsMateriaPrima = true,
                     EsProductoTerminado = false,
-                    EsGenerico = true, // 🚨 Forzado a true
+                    EsGenerico = true,
                     ClienteId = clienteId,
-
                     StockActual = 0,
                     StockMinimo = 0,
                     PrecioCosto = 0,
                     PesoEspecifico = 1.1m,
-
                     Activo = true,
                     FechaCreacion = DateTime.Now
                 };
@@ -291,9 +302,6 @@ namespace EstruplastERP.Api.Controllers
             }
         }
 
-        // ==========================================
-        // 6. PUT: ACTUALIZAR
-        // ==========================================
         [HttpPut("actualizar/{id}")]
         public async Task<IActionResult> ActualizarProducto(int id, [FromBody] ProductoEditarDto data)
         {
@@ -305,7 +313,6 @@ namespace EstruplastERP.Api.Controllers
             producto.Nombre = data.Nombre.Trim();
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
-            // producto.EsGenerico = data.EsGenerico; // 🚨 Esto se queda comentado para que no lo pise
 
             try
             {
@@ -318,9 +325,6 @@ namespace EstruplastERP.Api.Controllers
             }
         }
 
-        // ==========================================
-        // 7. DELETE: ELIMINAR
-        // ==========================================
         [HttpDelete("eliminar/{id}")]
         public async Task<IActionResult> EliminarProducto(int id)
         {
@@ -354,16 +358,12 @@ namespace EstruplastERP.Api.Controllers
             }
         }
 
-        // ==========================================
-        // 8. PUT: CONFIGURACIÓN TÉCNICA (Peso, Tipos)
-        // ==========================================
         [HttpPut("configurar/{id}")]
         public async Task<IActionResult> ConfigurarProducto(int id, [FromBody] ProductoConfigDto dto)
         {
             var producto = await _context.Productos.FindAsync(id);
             if (producto == null) return NotFound("Producto no encontrado");
 
-            // 1. Actualizar Datos Técnicos
             producto.StockMinimo = dto.StockMinimo;
             producto.PesoEspecifico = dto.PesoEspecifico;
             producto.EsMateriaPrima = dto.EsMateriaPrima;
@@ -395,7 +395,7 @@ namespace EstruplastERP.Api.Controllers
                 }
 
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync(); // Confirmar todo
+                await transaction.CommitAsync();
 
                 return Ok(new { mensaje = "✅ Configuración y Receta guardadas." });
             }
@@ -423,12 +423,9 @@ namespace EstruplastERP.Api.Controllers
                 else if (mat.CodigoSku.Contains("AI-GRU")) nuevoId = 12;
                 else if (mat.CodigoSku.Contains("AI-BIC")) nuevoId = 13;
                 else if (mat.CodigoSku.Contains("AI-TRI")) nuevoId = 14;
-
                 else if (mat.CodigoSku.Contains("ABS-GRU")) nuevoId = 21;
-
                 else if (mat.CodigoSku.Contains("POLI-FIN")) nuevoId = 31;
                 else if (mat.CodigoSku.Contains("POLI-GRU")) nuevoId = 32;
-
                 else if (mat.CodigoSku.Contains("PEAD-BIC")) nuevoId = 41;
 
                 if (nuevoId.HasValue && mat.FamiliaId != nuevoId)
@@ -449,7 +446,7 @@ namespace EstruplastERP.Api.Controllers
             var reservas = await _context.ConsumosOrdenes
                 .Where(c => c.MateriaPrimaId == id &&
                             (c.OrdenProduccion.Estado == EstadoOrden.Pendiente ||
-                             c.OrdenProduccion.Estado == EstadoOrden.EnProceso)) 
+                             c.OrdenProduccion.Estado == EstadoOrden.EnProceso))
                 .Select(c => new
                 {
                     Id = c.OrdenProduccion.Id,

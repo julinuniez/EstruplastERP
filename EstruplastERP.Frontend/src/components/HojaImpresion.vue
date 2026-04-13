@@ -21,8 +21,21 @@ const insumoBusquedaTexto = ref('');
 const insumoExtraPorc = ref<number | ''>('');
 const mostrarLista = ref(false); 
 
+const esConsolidadoReal = computed(() => {
+    return props.form?.observacion?.includes('MEZCLA CONSOLIDADA') || props.form?.esConsolidado;
+});
+
+const codigoLoteVisible = computed(() => {
+    if (!props.form?.observacion) return props.form?.id;
+    const match = props.form.observacion.match(/\[LOTE: (HC-[^\]]+)\]/);
+    return match ? match[1] : props.form?.id;
+});
+
 const cantidadCopias = computed(() => props.ocultarFormula ? 2 : 1);
-const kilosNetosExactos = computed(() => Number(props.form?.kilosTotales) || 0);
+
+const kilosNetosExactos = computed(() => {
+    return Number(props.form?.kilosTotales) || Number(props.form?.kilosEstimados) || Number(props.form?.kilos) || 0;
+});
 
 const pesoBrutoExacto = computed(() => {
     const porcentajeDesperdicio = Number(props.form?.merma) || Number(props.form?.desperdicio) || 0; 
@@ -33,8 +46,8 @@ const pesoBrutoExacto = computed(() => {
 const pesoVisualRedondeado = computed(() => Math.ceil(pesoBrutoExacto.value));
 
 const kilosCabeceraRedondeado = computed(() => {
-    if (props.form?.esConsolidado) {
-        return Math.round(Number(props.form?.kilosTotales) || 0);
+    if (esConsolidadoReal.value) {
+        return Math.round(kilosNetosExactos.value);
     }
     return props.ocultarFormula ? Math.ceil(kilosNetosExactos.value) : Math.ceil(pesoBrutoExacto.value);
 });
@@ -45,9 +58,16 @@ const ceilKilos = (valor: number, decimales = 3) => {
     return Math.ceil(num * factor) / factor;
 };
 
+const densidadReal = computed(() => {
+    if (esConsolidadoReal.value) return 0;
+    if (props.producto?.pesoEspecifico > 0) return Number(props.producto.pesoEspecifico);
+    if (props.form?.producto?.pesoEspecifico > 0) return Number(props.form.producto.pesoEspecifico);
+    return Number(props.densidad) || 0;
+});
+
 const recetaVisual = computed(() => {
     let lista = [...props.receta];
-    return lista.sort((a, b) => (parseFloat(b.cantidad) || 0) - (parseFloat(a.cantidad) || 0));
+    return lista.sort((a, b) => (parseFloat(b.cantidadKilos || b.cantidad) || 0) - (parseFloat(a.cantidadKilos || a.cantidad) || 0));
 });
 
 const obtenerTipoMaterial = (item: any) => {
@@ -98,6 +118,23 @@ const solicitarQuitar = (item: any) => {
     if (indexReal !== -1) emit('remove-insumo', indexReal); 
 };
 
+const getOrigenMaterial = (item: any) => {
+    const mpId = item.materiaPrimaId || item.id;
+    const mp = props.materiasPrimas?.find(m => m.id === mpId);
+    const idDueño = mp?.clienteId || item.clienteId || 0;
+
+    if (idDueño > 0) {
+        return `(De ${props.cliente?.razonSocial || props.form?.clienteNombre || 'Cliente'})`;
+    }
+
+    const nombre = (item.nombreInsumo || item.nombreMateriaPrima || '').toUpperCase();
+    if (idDueño === 0 && nombre.includes('MOLIDO')) {
+        return "(Stock Estruplast)";
+    }
+
+    return ""; 
+};
+
 const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 const tituloLimpioParaPDF = computed(() => {
@@ -122,48 +159,59 @@ const tipoCorona = computed(() => {
     const val = props.form?.tipoCorona || props.form?.TipoCorona;
     return (val && val.toUpperCase() !== 'NINGUNO') ? val.toUpperCase() : null;
 });
+const observacionLimpia = computed(() => {
+    if (!props.form?.observacion) return '-';
+    let obs = props.form.observacion.replace(/\[LOTE: HC-[^\]]+\]/g, '').trim();
+    return obs;
+});
 </script>
 
 <template>
   <div id="hoja-de-impresion" class="contenedor-principal-pdf">
+
     <div v-for="n in cantidadCopias" :key="n" class="pagina-copia" :class="{ 'modo-mitad': cantidadCopias === 2 }">
         <div v-if="cantidadCopias === 2" class="marca-agua">{{ n === 1 ? 'ORIGINAL' : 'DUPLICADO' }}</div>
 
         <div class="header-pdf">
             <div class="logo-area"><img :src="logoImg" class="logo-central" /></div>
             <div class="datos-orden">
-                <h3>{{ form.esConsolidado ? 'HOJA DE CARGA MÚLTIPLE' : (ocultarFormula ? 'ORDEN DE PRODUCCIÓN' : 'HOJA DE CARGA') }}</h3>
+                <h3>{{ esConsolidadoReal ? 'HOJA DE CARGA MÚLTIPLE' : (ocultarFormula ? 'ORDEN DE PRODUCCIÓN' : 'HOJA DE CARGA') }}</h3>
+                
+                <div v-if="esConsolidadoReal" class="lote-mezcla-resaltado">
+                    LOTE N°: {{ codigoLoteVisible }} 
+                </div>
+
                 <p>FECHA: <strong>{{ fechaHoy }}</strong></p>
                 <p>NOTA PEDIDO: <strong>{{ form?.notaPedido || '-' }}</strong></p>
-                <p v-if="!form.esConsolidado">OC CLIENTE: <strong>{{ form?.numeroPedidoCliente || '-' }}</strong></p>
+                <p v-if="!esConsolidadoReal">OC CLIENTE: <strong>{{ form?.numeroPedidoCliente || '-' }}</strong></p>
             </div>
         </div>
         
-        <div class="fila-pdf" v-if="!form.esConsolidado">
+        <div class="fila-pdf" v-if="!esConsolidadoReal">
             <div><strong>CLIENTE:</strong> <span class="dato-relleno">{{ cliente?.razonSocial || form.clienteNombre || 'STOCK / INTERNO' }}</span></div>
         </div>
 
         <div class="caja-producto-pdf">
             <div class="titulo-seccion-pdf">PRODUCTO A FABRICAR</div>
             <div class="producto-nombre-pdf">{{ tituloLimpioParaPDF }}</div>
-            <div v-if="!ocultarFormula && !form.esConsolidado" class="producto-sku-pdf">CÓDIGO: {{ producto?.codigoSku }}</div>
+            <div v-if="!ocultarFormula && !esConsolidadoReal" class="producto-sku-pdf">CÓDIGO: {{ producto?.codigoSku }}</div>
         </div>
 
         <div class="ficha-tecnica-pdf">
-            <div class="dato-box-pdf" v-if="!form.esConsolidado"><span class="label-tech-pdf">COLOR</span><span class="valor-tech-pdf">{{ colorFinal || form?.color || form?.Color || '-' }}</span></div>
-            <div class="dato-box-pdf" v-if="!form.esConsolidado">
+            <div class="dato-box-pdf" v-if="!esConsolidadoReal"><span class="label-tech-pdf">COLOR</span><span class="valor-tech-pdf">{{ colorFinal || form?.color || form?.Color || '-' }}</span></div>
+            <div class="dato-box-pdf" v-if="!esConsolidadoReal">
                 <span class="label-tech-pdf">{{ form.esBobina ? 'FORMATO' : 'LARGO' }}</span>
                 <span class="valor-tech-pdf">{{ form.esBobina ? 'BOBINA (' + (form.kilosPorBobina || 0) + ' Kg)' : (form.largo || 0) + ' mm' }}</span>
             </div>
-            <div class="dato-box-pdf" v-if="!form.esConsolidado"><span class="label-tech-pdf">ANCHO</span><span class="valor-tech-pdf">{{ form.ancho }} mm</span></div>
-            <div class="dato-box-pdf" v-if="!form.esConsolidado"><span class="label-tech-pdf">ESPESOR</span><span class="valor-tech-pdf">{{ form.espesor }} mm</span></div>
+            <div class="dato-box-pdf" v-if="!esConsolidadoReal"><span class="label-tech-pdf">ANCHO</span><span class="valor-tech-pdf">{{ form.ancho }} mm</span></div>
+            <div class="dato-box-pdf" v-if="!esConsolidadoReal"><span class="label-tech-pdf">ESPESOR</span><span class="valor-tech-pdf">{{ form.espesor }} mm</span></div>
             <div class="dato-box-pdf">
                 <span class="label-tech-pdf">{{ ocultarFormula ? 'TOTAL KILOS (NETO)' : 'TOTAL MEZCLA (BRUTO)' }}</span>
                 <span class="valor-tech-pdf">{{ kilosCabeceraRedondeado }} kg</span>
             </div>
         </div>
 
-        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="!form.esConsolidado && (tieneBrillo || llevaFilm || tipoCorona || esGofrado)">
+        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="!esConsolidadoReal && (tieneBrillo || llevaFilm || tipoCorona || esGofrado)">
             <div class="dato-box-pdf" v-if="tieneBrillo">
                 <span class="label-tech-pdf">BRILLO</span>
                 <span class="valor-tech-pdf">SÍ</span>
@@ -184,16 +232,16 @@ const tipoCorona = computed(() => {
 
         <div v-show="!ocultarFormula" class="seccion-receta-pdf">
             <div class="titulo-receta-pdf">
-                {{ form.esConsolidado ? 'RESUMEN DE MEZCLA CONSOLIDADA' : `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(Number(densidad).toFixed(3))})` }}
-                <span style="float:right; font-size: 0.8em; color: #333" v-if="!form.esConsolidado">Total: {{ totalPorcentaje }}%</span>
+                {{ esConsolidadoReal ? 'RESUMEN DE MEZCLA CONSOLIDADA' : (densidadReal > 0 ? `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(densidadReal.toFixed(3))})` : 'FÓRMULA DE MEZCLA') }}
+                <span style="float:right; font-size: 0.8em; color: #333" v-if="!esConsolidadoReal">Total: {{ totalPorcentaje }}%</span>
             </div>
             <table class="tabla-receta-pdf">
                 <thead>
                     <tr>
                         <th>INSUMO / MATERIA PRIMA</th>
-                        <th style="width:100px" v-if="!form.esConsolidado">% MEZCLA</th>
+                        <th style="width:100px" v-if="!esConsolidadoReal">% MEZCLA</th>
                         <th style="width:120px; text-align:right;">PESO A CARGAR</th>
-                        <th data-html2canvas-ignore="true" style="width:40px" v-if="!form.esConsolidado"></th>
+                        <th data-html2canvas-ignore="true" style="width:40px" v-if="!esConsolidadoReal"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -204,29 +252,26 @@ const tipoCorona = computed(() => {
                     </tr>
                     <template v-for="(r, i) in recetaVisual" :key="i">
                         <tr>
-                            <td style="font-weight: 600;">
+                           <td style="font-weight: 600;">
                                 {{ r.nombreInsumo || r.nombreMateriaPrima }}
-                                <span v-if="r.clienteId > 0" style="font-size: 0.85em; font-style: italic; color: #555;">
-                                    (De {{ cliente?.razonSocial || 'Cliente' }})
-                                </span>
-                                <span v-else-if="r.nombreInsumo?.toUpperCase().includes('MOLIDO') || r.nombreMateriaPrima?.toUpperCase().includes('MOLIDO')" style="font-size: 0.85em; font-style: italic; color: #27ae60;">
-                                    (Stock Estruplast)
+                                <span v-if="!esConsolidadoReal && getOrigenMaterial(r)" style="font-size: 0.85em; font-style: italic; color: #555; margin-left: 5px;">
+                                    {{ getOrigenMaterial(r) }}
                                 </span>
                             </td>
-                            <td style="text-align:center; vertical-align: middle;" v-if="!form.esConsolidado">
+                            <td style="text-align:center; vertical-align: middle;" v-if="!esConsolidadoReal">
                                 <div class="porcentaje-celda">
                                     {{ r.cantidad }} %
                                 </div>
                             </td>
                             <td style="text-align:right; font-size: 1.1em;">
                                 <strong>
-                                    {{ form.esConsolidado 
-                                        ? parseFloat(r.cantidadKilos || r.cantidad).toFixed(3) 
-                                        : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad.toString()) || 0)) / 100).toFixed(3) 
+                                    {{ esConsolidadoReal 
+                                        ? parseFloat(r.cantidadKilos || r.cantidad || 0).toFixed(3) 
+                                        : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(3) 
                                     }} kg
                                 </strong>
                             </td>
-                            <td data-html2canvas-ignore="true" v-if="!form.esConsolidado" style="text-align:center;">
+                            <td data-html2canvas-ignore="true" v-if="!esConsolidadoReal" style="text-align:center;">
                                 <button @click="solicitarQuitar(r)" class="btn-borrar-insumo" title="Quitar insumo">❌</button>
                             </td>
                         </tr>
@@ -234,7 +279,7 @@ const tipoCorona = computed(() => {
                 </tbody>
             </table>
 
-            <div class="agregar-fila-pdf" data-html2canvas-ignore="true" v-if="!form.esConsolidado">
+            <div class="agregar-fila-pdf" data-html2canvas-ignore="true" v-if="!esConsolidadoReal">
                 <div class="buscador-wrapper">
                     <input type="text" v-model="insumoBusquedaTexto" @focus="mostrarLista = true" @blur="cerrarListaConDelay" class="input-buscador" placeholder="Buscar materia prima...">
                     <div class="lista-resultados" v-if="mostrarLista && sugerenciasFiltradas.length > 0">
@@ -249,13 +294,13 @@ const tipoCorona = computed(() => {
         </div>
 
         <div class="fila-lotes-pdf">
-            <div class="mitad-pdf" v-if="!form.esConsolidado">
+            <div class="mitad-pdf" v-if="!esConsolidadoReal">
                 <strong>CANTIDAD (UNIDADES):</strong>
                 <div class="recuadro-gigante-pdf">{{ form.cantidad }}</div>
             </div>
-            <div class="mitad-pdf" :style="form.esConsolidado ? 'width: 100%;' : ''">
+            <div class="mitad-pdf" :style="esConsolidadoReal ? 'width: 100%;' : ''">
                 <strong>OBSERVACIONES / DETALLES DE LOTE:</strong>
-                <div class="recuadro-gigante-pdf texto-lote-pdf">{{ form.observacion }}</div>
+                <div class="recuadro-gigante-pdf texto-lote-pdf">{{ observacionLimpia }}</div>
             </div>
         </div>
         
@@ -281,6 +326,7 @@ const tipoCorona = computed(() => {
 .datos-orden { text-align: right; }
 .datos-orden h3 { margin: 0; text-decoration: underline; font-size: 18px; font-weight: 900; }
 .datos-orden p { margin: 2px 0; font-size: 12px; }
+.lote-mezcla-resaltado { font-size: 16px; font-weight: 900; border: 2px solid black; padding: 3px 6px; margin: 4px 0; display: inline-block; background-color: #f0f0f0; }
 .fila-pdf { margin-bottom: 10px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
 .dato-relleno { font-family: 'Courier New', monospace; font-size: 16px; font-weight: bold; margin-left: 10px; text-transform: uppercase; }
 .caja-producto-pdf { border: 2px solid black; padding: 8px; margin-bottom: 8px; text-align: center; background: #f9f9f9; }

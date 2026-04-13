@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import axios from 'axios'
 
 const props = defineProps<{
@@ -25,6 +25,28 @@ const formCierre = ref({
 const adicionSeleccionada = ref<number | ''>('')
 const cantidadAdicion = ref<number | ''>('')
 const motivoAdicion = ref('')
+
+// --- FILTRO DE INSUMOS POR CLIENTE Y TIPO ---
+const insumosPermitidos = computed(() => {
+    if (!props.materiasPrimas) return [];
+    
+    // Si la orden no tiene cliente asignado, asumimos que es material propio (0)
+    const idClienteOrden = props.orden?.clienteId || 0; 
+
+    return props.materiasPrimas.filter(mp => {
+        const idDueñoInsumo = mp.clienteId || 0;
+        const nombreInsumo = (mp.nombre || '').toUpperCase();
+        const skuInsumo = (mp.codigoSku || '').toUpperCase();
+        
+        // 🚨 REGLA 1: Ocultar si el nombre o el código SKU contienen la palabra "BASE"
+        if (nombreInsumo.includes('BASE') || skuInsumo.includes('BASE')) {
+            return false; // Lo sacamos de la lista
+        }
+
+        // 🚨 REGLA 2: Se muestra SOLO si el insumo es nuestro (0) o del cliente de la orden
+        return idDueñoInsumo === 0 || idDueñoInsumo === idClienteOrden;
+    });
+});
 
 // --- INICIALIZAR DATOS CUANDO SE ABRE EL MODAL ---
 watch(() => props.visible, (isOpen) => {
@@ -214,7 +236,7 @@ const confirmarCierre = async () => {
                 <div class="col-grow">
                     <select v-model="adicionSeleccionada">
                         <option value="">-- Seleccionar Insumo --</option>
-                        <option v-for="mp in materiasPrimas" :key="mp.id" :value="mp.id">
+                        <option v-for="mp in insumosPermitidos" :key="mp.id" :value="mp.id">
                             {{ mp.nombre }} (Stock: {{ mp.stockActual }} Kg)
                         </option>
                     </select>

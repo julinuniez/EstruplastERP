@@ -259,7 +259,7 @@ const volver = () => {
                         <small v-if="faltaPrecioCosto" class="text-error">Ingrese un costo válido > 0</small>
                     </div>
 
-                    <div class="campo mt-2">
+                    <div class="campo mt-2" v-if="producto.esProductoTerminado">
                         <label>🧪 Peso Específico (g/cm³)</label>
                         <div class="input-group">
                             <input type="number" v-model.number="producto.pesoEspecifico" step="0.0001">

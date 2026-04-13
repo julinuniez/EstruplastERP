@@ -26,14 +26,23 @@ namespace EstruplastERP.Api.Controllers
         }
 
         [HttpGet("recientes")]
-        public async Task<ActionResult> GetOrdenesRecientes()
+        public async Task<ActionResult> GetOrdenesRecientes([FromQuery] int? mes, [FromQuery] int? anio)
         {
-            var lista = await _context.Ordenes
+            var query = _context.Ordenes
                 .Include(o => o.Producto)
                 .Include(o => o.Cliente)
                 .Include(o => o.Consumos).ThenInclude(c => c.MateriaPrima)
+                .AsQueryable();
+
+            // Si no mandan filtros, por defecto mostramos el mes actual
+            int targetMes = mes ?? DateTime.Now.Month;
+            int targetAnio = anio ?? DateTime.Now.Year;
+
+            // Filtro ESTRICTO mes a mes
+            query = query.Where(o => o.FechaCreacion.Month == targetMes && o.FechaCreacion.Year == targetAnio);
+
+            var lista = await query
                 .OrderByDescending(o => o.FechaCreacion)
-                .Take(50)
                 .Select(o => new
                 {
                     o.Id,
@@ -225,8 +234,6 @@ namespace EstruplastERP.Api.Controllers
                 if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
                 if (orden.Estado == EstadoOrden.Finalizada) return BadRequest(new { mensaje = "Esta orden ya fue finalizada." });
 
-                // 🚨 1. NUEVO CANDADO ESTRICTO DE STOCK FÍSICO 🚨
-                // Agrupamos los consumos que manda el usuario por si puso el mismo material dos veces (en la receta y como extra)
                 var consumosAgrupados = dto.ConsumosReales
                     .GroupBy(c => c.MateriaPrimaId)
                     .Select(g => new { MateriaPrimaId = g.Key, TotalKilos = g.Sum(c => c.CantidadKilosReales) })
@@ -237,7 +244,7 @@ namespace EstruplastERP.Api.Controllers
                 foreach (var consumo in consumosAgrupados)
                 {
                     var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
-                    if (mp != null && !(mp.Id >= 990 && mp.Id <= 999)) // Ignoramos los genéricos
+                    if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
                     {
                         if (mp.StockActual < consumo.TotalKilos)
                         {
@@ -246,16 +253,29 @@ namespace EstruplastERP.Api.Controllers
                     }
                 }
 
-                // Si hay faltantes, abortamos la operación entera antes de tocar nada
                 if (faltantes.Any())
                 {
                     return BadRequest(new { mensaje = "⛔ STOCK NEGATIVO DETECTADO.\nCargue los ingresos/remitos de estos materiales antes de cerrar la orden:\n\n" + string.Join("\n", faltantes) });
                 }
 
-                // 🚨 2. SI PASA LA VALIDACIÓN, PROCEDEMOS A ACTUALIZAR (Tu código actual sigue igual desde acá)
                 orden.KilosEstimados = dto.KilosProducidosReales;
                 orden.Desperdicio = dto.DesperdicioReal;
-                orden.Observacion = dto.Observacion; // Guardamos la nota
+
+                string etiquetaGrupo = "";
+                if (!string.IsNullOrWhiteSpace(orden.Observacion))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(orden.Observacion, @"\[Grupo: HC-[^\]]+\]");
+                    if (match.Success)
+                    {
+                        etiquetaGrupo = match.Value;
+                    }
+                }
+
+                orden.Observacion = string.IsNullOrWhiteSpace(dto.Observacion)
+                    ? etiquetaGrupo
+                    : dto.Observacion + " " + etiquetaGrupo;
+
+                orden.Observacion = orden.Observacion.Trim();
 
                 _context.RemoveRange(orden.Consumos);
                 var consumosDefinitivos = new List<ConsumoOrden>();
@@ -281,7 +301,7 @@ namespace EstruplastERP.Api.Controllers
                                 ProductoId = mp.Id,
                                 Cantidad = -consumoUsuario.CantidadKilosReales,
                                 TipoMovimiento = "CONSUMO_PRODUCCION",
-                                Observacion = $"Cierre OP #{id}: {dto.Observacion}", // Guardamos la nota en Kardex
+                                Observacion = $"Cierre OP #{id}: {dto.Observacion}",
                                 OrdenProduccionId = id
                             });
                         }
@@ -290,7 +310,6 @@ namespace EstruplastERP.Api.Controllers
 
                 orden.Consumos = consumosDefinitivos;
 
-                // 🚨 4. SUMAR EL PRODUCTO TERMINADO AL INVENTARIO
                 if (orden.Producto != null)
                 {
                     orden.Producto.StockActual += dto.KilosProducidosReales;
@@ -426,6 +445,34 @@ namespace EstruplastERP.Api.Controllers
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { mensaje = $"Error al revertir la orden: {ex.Message}" });
             }
+        }
+
+        [HttpPost("registrar-hoja-carga")]
+        public async Task<IActionResult> RegistrarHojaCarga([FromBody] List<int> ordenesIds)
+        {
+            if (ordenesIds == null || !ordenesIds.Any())
+                return BadRequest(new { mensaje = "No se enviaron órdenes." });
+
+            string sufijo = Guid.NewGuid().ToString().Substring(0, 3).ToUpper();
+            string codigoHC = $"HC-{DateTime.Now:ddMM-HHmm}-{sufijo}";
+            string etiqueta = $"[Grupo: {codigoHC}]";
+
+            var ordenes = await _context.Ordenes
+                .Where(o => ordenesIds.Contains(o.Id))
+                .ToListAsync();
+
+            foreach (var o in ordenes)
+            {
+                if (!string.IsNullOrWhiteSpace(o.Observacion))
+                {
+                    o.Observacion = System.Text.RegularExpressions.Regex.Replace(o.Observacion, @"\[Grupo: HC-[^\]]+\]", "").Trim();
+                }
+
+                o.Observacion = string.IsNullOrWhiteSpace(o.Observacion) ? etiqueta : o.Observacion + " " + etiqueta;
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { codigo = codigoHC, mensaje = "Hoja de carga registrada con éxito." });
         }
 
         [HttpPost("marcar-impresa/{id}")]

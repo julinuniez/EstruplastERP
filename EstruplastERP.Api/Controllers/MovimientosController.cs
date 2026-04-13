@@ -210,6 +210,8 @@ namespace EstruplastERP.Api.Controllers
                 return StatusCode(500, $"Error variante: {ex.Message}");
             }
         }
+        
+
 
         [HttpPost("ingresar-molido")]
         public async Task<IActionResult> IngresarMolido([FromBody] IngresoMolidoRequest request)
