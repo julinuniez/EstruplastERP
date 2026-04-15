@@ -281,6 +281,39 @@ namespace EstruplastERP.Api.Controllers
             return Ok(lista);
         }
 
+        [HttpGet("exportar/{mes}/{anio}")]
+        public async Task<IActionResult> ExportarOrdenesMensuales(int mes, int anio)
+        {
+            try
+            {
+                var ordenes = await _context.Ordenes
+                    .Include(o => o.Cliente)
+                    .Include(o => o.Producto)
+                    .Where(o => o.Estado == EstadoOrden.Finalizada
+                             && o.FechaFin.HasValue
+                             && o.FechaFin.Value.Month == mes
+                             && o.FechaFin.Value.Year == anio)
+                    .Select(o => new
+                    {
+                        FechaInicio = o.FechaCreacion, // 👈 Agregamos el inicio
+                        FechaCierre = o.FechaFin,
+                        ClienteNombre = o.Cliente != null ? o.Cliente.RazonSocial : "Stock / Interno",
+                        ProductoNombre = o.Producto != null ? o.Producto.Nombre : "Sin Producto",
+                        KilosProducidos = o.KilosEstimados,
+                        Observacion = o.Observacion
+                        // Eliminamos Id y Desperdicio
+                    })
+                    .OrderBy(o => o.FechaCierre)
+                    .ToListAsync();
+
+                return Ok(ordenes);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { mensaje = "Error al exportar órdenes.", detalle = ex.Message });
+            }
+        }
+
         [HttpGet("tablero-pedidos")]
         public async Task<ActionResult> GetTableroPedidos([FromQuery] int? clienteId)
         {

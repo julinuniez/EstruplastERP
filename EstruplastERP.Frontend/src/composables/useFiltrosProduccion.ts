@@ -25,7 +25,7 @@ export function useFiltrosProduccion(
             const nombre = (mp.nombre || '').toUpperCase();
             const rubro = (mp.rubro || '').toUpperCase();
             return rubro.includes('MASTERBATCH') || nombre.includes('MASTERBATCH') || nombre.includes('PIGMENTO');
-        });
+        }).sort((a, b) => a.nombre.localeCompare(b.nombre));
     });
 
     const idCristal555 = computed(() => {

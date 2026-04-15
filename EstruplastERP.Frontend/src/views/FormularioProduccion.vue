@@ -24,6 +24,7 @@ interface ItemReceta {
     materiaPrimaId: number; esColor?: boolean; esCarga?: boolean; esBase?: boolean;
     esBrillo?: boolean; esEstearato?: boolean; esUv?: boolean; esCaucho?: boolean;
     esFazonInput?: boolean; materialBase?: string;
+    kilosFijos?: number | string;
 }
 
 const loading = ref(false);
@@ -62,10 +63,12 @@ const form = ref({
     porcBrillo: 2.00, 
     llevaFilm: false, tipoCorona: 'Ninguno',
     esGofrado: false,
-    conEstearato: false, esProductoColor: false, masterbatchId: '' as string | number, colorTexto: '',
+    conEstearato: false, // Oculto de la lógica del 100%
+    esProductoColor: false, masterbatchId: '' as string | number, colorTexto: '',
     aditivoUV: false, porcentajeUv: 1.00, aditivoCaucho: false, porcentajeCaucho: 1.00,
     aditivoCarga: 0,
-    merma: 8, kilosTotales: 0,
+    merma: 8, // Fijo en 8%
+    kilosTotales: 0,
     esConsolidado: false,
     esBobina: false,
     kilosPorBobina: 0,
@@ -94,22 +97,11 @@ const espesorValido = computed(() => {
 const productoSeleccionado = computed(() => productos.value.find(p => p.id === Number(form.value.productoTerminadoId)) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Number(form.value.clienteId)) || null);
 
-// 👇 NUEVA LÓGICA DE DENSIDAD 👇
 const densidadPT = computed(() => {
     return productoSeleccionado.value?.pesoEspecifico || 1.1; 
 });
 
-// Sobrescribimos o re-creamos los cálculos que dependían del viejo hook si es necesario, 
-// o le pasamos la nueva densidad al composable (dependiendo de cómo esté hecho useCalculosProduccion).
-// Como useCalculosProduccion ya existe, te recomiendo modificar el composable directamente, pero 
-// para arreglarlo rápido desde acá, forzamos el recálculo:
-
-const { 
-    totalPorcentajeReceta, 
-    // Densidad Mezcla ya no la usamos de acá, usamos densidadPT
-    // kilosCalculados lo re-escribimos abajo para estar seguros
-    factorMerma 
-} = useCalculosProduccion(form, recetaDinamica, productoSeleccionado);
+const { totalPorcentajeReceta, factorMerma } = useCalculosProduccion(form, recetaDinamica, productoSeleccionado);
 
 const kilosCalculados = computed(() => {
     if (!form.value.largo || !form.value.ancho || !form.value.espesor || !form.value.cantidad) return 0;
@@ -119,11 +111,35 @@ const kilosCalculados = computed(() => {
         k = form.value.kilosPorBobina * form.value.cantidad;
     } else {
         const mm3 = form.value.largo * form.value.ancho * form.value.espesor;
-        // 👇 ACA USA LA NUEVA DENSIDAD 👇
         const pesoUnaPiezaKg = (mm3 * densidadPT.value) / 1000000;
         k = pesoUnaPiezaKg * form.value.cantidad;
     }
     return Math.ceil(k);
+});
+
+const kilosEstearato = computed(() => {
+    const PORCENTAJE_ESTEARATO = 0.0008; 
+    return (kilosCalculados.value * PORCENTAJE_ESTEARATO).toFixed(2);
+});
+
+const recetaConExtrasParaVista = computed(() => {
+    const recetaLimpia = recetaDinamica.value.filter(r => !(r.nombreInsumo || '').toUpperCase().includes('ESTEARATO'));
+    
+    const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
+
+    if (est) {
+        recetaLimpia.push({
+            id: 'estearato-fijo',
+            materiaPrimaId: est.id, 
+            nombreInsumo:est.nombre,
+            cantidad: 0, 
+            densidad: est.pesoEspecifico || 1,
+            esEstearato: true, 
+            kilosFijos: kilosEstearato.value
+        });
+    }
+
+    return recetaLimpia;
 });
 
 const { 
@@ -131,17 +147,9 @@ const {
 } = useBorradorProduccion(form, recetaDinamica, mensaje);
 
 const { 
-    listaMasterbatches,
-    idCristal555,
-    mostrarCajaColor,
-    colorFinalParaPDF,
-    clienteTieneFazonActivo,
-    clientesHabilitados,
-    medidasBloqueadas,
-    listaProductosDisponibles,
-    materiasPrimasLimpias,
-    insumosSinStock,
-    hayBloqueoDeStock
+    listaMasterbatches, idCristal555, mostrarCajaColor, colorFinalParaPDF,
+    clienteTieneFazonActivo, clientesHabilitados, medidasBloqueadas,
+    listaProductosDisponibles, materiasPrimasLimpias, insumosSinStock, hayBloqueoDeStock
 } = useFiltrosProduccion(
     form, recetaDinamica, productos, clientes, listaTodasMateriasPrimas, 
     listaInventarioCompleto, productoSeleccionado, clienteSeleccionado, 
@@ -149,47 +157,27 @@ const {
 );
 
 const { 
-    balancearBase, 
-    recalcularFormulaAutomatica, 
-    quitarInsumoManual, 
-    agregarInsumoDesdeHijo 
+    balancearBase, recalcularFormulaAutomatica, quitarInsumoManual, agregarInsumoDesdeHijo 
 } = useRecetaProduccion(
-    form, 
-    recetaDinamica, 
-    listaTodasMateriasPrimas, 
-    listaInventarioCompleto, 
-    listaMasterbatches, 
-    idCristal555, 
-    mostrarCajaColor
+    form, recetaDinamica, listaTodasMateriasPrimas, listaInventarioCompleto, 
+    listaMasterbatches, idCristal555, mostrarCajaColor
 );
 
 const { 
-    detectarMaterial, 
-    actualizarRecetaFazonConCliente, 
-    alCambiarLoteFazon, 
-    aplicarLoteFazonAReceta 
+    detectarMaterial, actualizarRecetaFazonConCliente, alCambiarLoteFazon, aplicarLoteFazonAReceta 
 } = useFazonProduccion(
-    recetaDinamica, 
-    listaInventarioCompleto, 
-    listaTodasMateriasPrimas,
-    listaLotesCliente, 
-    loteFazonSeleccionadoId, 
-    stockFazonDetectado, 
-    clienteTieneFazonActivo, 
-    balancearBase
+    recetaDinamica, listaInventarioCompleto, listaTodasMateriasPrimas,
+    listaLotesCliente, loteFazonSeleccionadoId, stockFazonDetectado, 
+    clienteTieneFazonActivo, balancearBase
 );
 
 const { 
-    limpiarFormulario, 
-    registrarProduccion, 
-    cargarNotaPedidoSugerida, 
-    aplicarNotaPedidoSugerida 
+    limpiarFormulario, registrarProduccion, cargarNotaPedidoSugerida, aplicarNotaPedidoSugerida 
 } = useGuardadoProduccion(
     form, recetaDinamica, notaPedidoSugerida, mensaje, error, guardando, 
     idProduccionGenerada, totalPorcentajeReceta, espesorValido, limiteMinimo, 
     limiteMaximo, kilosCalculados, colorFinalParaPDF, listaProduccionRef, 
-    limpiarBorrador,
-    emit
+    limpiarBorrador, emit
 );
 
 const { imprimirDesdeHistorial, imprimirLoteOPsDesdeHistorial } = useImpresionProduccion(
@@ -283,6 +271,9 @@ watch(() => form.value.clienteId, async (nuevoCli) => {
 watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
     if (form.value.esConsolidado) return;
     
+    // Forzamos la merma a 8 siempre que cambie de producto
+    form.value.merma = 8;
+    
     if (nuevoProdId && !imprimiendoHistorial.value) {
         await CargarDatosProductos(Number(nuevoProdId)); 
         
@@ -303,7 +294,7 @@ watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
 watch(
     [
         () => form.value.masterbatchId, () => form.value.aditivoCarga, 
-        () => form.value.porcBrillo, () => form.value.conEstearato, 
+        () => form.value.porcBrillo, 
         () => form.value.aditivoUV, () => form.value.porcentajeUv, 
         () => form.value.aditivoCaucho, () => form.value.porcentajeCaucho,
         () => form.value.conBrillo, () => form.value.tipoBrillo
@@ -344,12 +335,17 @@ onMounted(async () => {
             ProduccionAPI.obtenerInventarioCompleto()
         ]);
         
+        // 🚨 ORDENAMIENTO ALFABÉTICO MAESTRO 🚨
         if (Array.isArray(resProd)) {
-            productos.value = resProd;
+            productos.value = resProd.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
             listaTodasMateriasPrimas.value = productos.value.filter(p => p.esMateriaPrima);
         }
-        if (Array.isArray(resCli)) clientes.value = resCli;
-        if (Array.isArray(resInv)) listaInventarioCompleto.value = resInv;
+        if (Array.isArray(resCli)) {
+            clientes.value = resCli.sort((a, b) => (a.razonSocial || '').localeCompare(b.razonSocial || ''));
+        }
+        if (Array.isArray(resInv)) {
+            listaInventarioCompleto.value = resInv;
+        }
 
         revisarBorrador();
     } catch (e) {
@@ -361,10 +357,27 @@ onMounted(async () => {
     await cargarNotaPedidoSugerida();
 });
 
+// 👇 EL TRUCO ESTÁ ACÁ ADENTRO 👇
 const procesarGuardado = async () => {
     if (guardando.value) return; 
     error.value = ''; 
     mostrarOpcionMismoPedido.value = false; 
+
+    const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
+    let agregadoParaGuardar = false;
+
+    // 2. Lo inyectamos en la receta JUSTO antes de mandar a guardar (con su 0.08 real)
+    if (est && !recetaDinamica.value.some(r => r.materiaPrimaId === est.id)) {
+        recetaDinamica.value.push({
+            id: 0,
+            materiaPrimaId: est.id,
+            nombreInsumo: est.nombre,
+            cantidad: 0.08, // El porcentaje REAL que guarda la base de datos
+            densidad: est.pesoEspecifico || 1,
+            esEstearato: true
+        });
+        agregadoParaGuardar = true;
+    }
 
     ultimoPedidoGuardado.value = {
         clienteId: form.value.clienteId,
@@ -372,7 +385,13 @@ const procesarGuardado = async () => {
         notaPedido: form.value.notaPedido
     };
 
+    // 3. Acá es donde se envía la petición al backend con el ID correcto
     await registrarProduccion();
+
+    // 4. Inmediatamente después de guardar, lo quitamos de la receta para que no te rompa el UI
+    if (agregadoParaGuardar) {
+        recetaDinamica.value = recetaDinamica.value.filter(r => r.materiaPrimaId !== est?.id);
+    }
 
     if (!error.value) {
         mostrarOpcionMismoPedido.value = true;
@@ -402,7 +421,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     :form="form" 
                     :producto="productoSeleccionado" 
                     :cliente="clienteSeleccionado" 
-                    :receta="recetaDinamica" 
+                    :receta="recetaConExtrasParaVista" 
                     :colorFinal="colorFinalParaPDF" 
                     :densidad="densidadPT" 
                     :totalPorcentaje="totalPorcentajeReceta" 
@@ -416,7 +435,9 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
         </div>
 
         <div class="panel-derecho">
-            <div class="header-control"><h3>⚙️ Configuración</h3></div>
+            <div class="header-control">
+                <h3>⚙️ Configuración</h3>
+            </div>
             
             <div v-if="borradorDisponible" class="banner-borrador">
                 <div class="banner-texto">
@@ -438,7 +459,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
             </select>
 
             <label style="color:#f39c12;">📂 N° Pedido Cliente (OC):</label>
-            <input type="text" v-model="form.numeroPedidoCliente" placeholder="Ej: OC-4455" style="font-weight:bold; border: 1px solid #f39c12; margin-bottom: 5px;">
+            <input type="text" v-model="form.numeroPedidoCliente" placeholder="Ej: OC-4455" style="font-weight:bold; border: 1px solid #f39c12; margin-bottom: 5px;" />
 
             <label style="color:#1abc9c;">🧾 Nota de Pedido (Flexxus):</label>
             <div class="fila-input" style="margin-bottom: 5px;">
@@ -447,7 +468,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     v-model="form.notaPedido"
                     placeholder="Ej: 12345"
                     style="font-weight:bold; border: 1px solid #1abc9c;"
-                >
+                />
                 <button
                     type="button"
                     class="btn-sugerido"
@@ -494,7 +515,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                             v-model="form.colorTexto" 
                             placeholder="Ej: AZUL PANTONE..."
                             style="font-weight:bold; color:#2980b9;"
-                        >
+                        />
                     </div>
                 </div>
 
@@ -503,7 +524,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                         Medidas: <span v-if="medidasBloqueadas" style="color:#e74c3c">(FIJAS)</span><span v-else style="color:#2ecc71">(EDITABLES)</span>
                     </label>
                     <label class="check-container" style="margin: 0 !important; color: #3498db;">
-                        <input type="checkbox" v-model="form.esBobina"> 🗞️ Formato Bobina
+                        <input type="checkbox" v-model="form.esBobina" /> 🗞️ Formato Bobina
                     </label>
                 </div>
                 
@@ -515,17 +536,17 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 <div class="fila-input">
                     <div v-if="!form.esBobina">
                         <label>Largo (mm)</label>
-                        <input type="number" v-model="form.largo" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}">
+                        <input type="number" v-model="form.largo" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}" />
                     </div>
                     
                     <div v-else>
                         <label style="color:#f39c12">Kilos x Bobina</label>
-                        <input type="number" v-model="form.kilosPorBobina" step="0.1" style="border: 2px solid #f39c12; font-weight: bold; background: #fff3e0; color: #d35400;">
+                        <input type="number" v-model="form.kilosPorBobina" step="0.1" style="border: 2px solid #f39c12; font-weight: bold; background: #fff3e0; color: #d35400;" />
                     </div>
                     
                     <div>
                         <label>Ancho (mm)</label>
-                        <input type="number" v-model="form.ancho" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}">
+                        <input type="number" v-model="form.ancho" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}" />
                     </div>
                 </div>
                 
@@ -535,30 +556,41 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                         <input type="number" v-model="form.espesor" step="0.01" 
                             :disabled="medidasBloqueadas" 
                             :class="{'input-lock': medidasBloqueadas, 'input-error': !espesorValido}" 
-                            style="font-weight:bold;">
+                            style="font-weight:bold;" />
                         
                         <span v-if="!espesorValido" style="color: #e74c3c; font-size: 11px; font-weight: bold; display: block; margin-top: 4px;">
                             <span v-if="limiteMaximo > 0">⚠️ Rango permitido: {{ limiteMinimo }} a {{ limiteMaximo }} mm</span>
                             <span v-else>⚠️ Espesor mínimo permitido: {{ limiteMinimo }} mm</span>
                         </span>
                     </div>
-                    <div><label>Cant.</label><input type="number" v-model="form.cantidad" min="1"></div>
+                    <div>
+                        <label>Cant.</label>
+                        <input type="number" v-model="form.cantidad" min="1" />
+                    </div>
                 </div>
                 
-                <div class="fila-input" style="margin-top:10px; border-top:1px dashed #7f8c8d; padding-top:10px;">
+                <div class="fila-input" style="margin-top:10px; border-top:1px dashed #7f8c8d; padding-top:10px; display: flex; gap: 10px;">
                     <div style="flex:1">
-                        <label style="color:#e67e22;">🔥 Desperdicio (%)</label>
-                        <input type="number" v-model="form.merma" min="0" max="50" style="color:#e67e22; font-weight:bold;">
+                        <label style="color:#e67e22;">🔥 Desperdicio Fijo</label>
+                        <div style="padding: 8px; background: #fdf2e9; border: 1px solid #e67e22; border-radius: 4px; color:#e67e22; font-weight:bold; text-align: center;">
+                            8 %
+                        </div>
+                    </div>
+                    <div style="flex:1">
+                        <label style="color:#2980b9;">🧪 Estearato (Extra)</label>
+                        <div style="padding: 8px; background: #ebf5fb; border: 1px solid #3498db; border-radius: 4px; color:#2980b9; font-weight:bold; text-align: center;">
+                            {{ kilosEstearato }} Kg
+                        </div>
                     </div>
                 </div>
 
-                <div class="resumen-peso">Peso Final PT: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +{{ form.merma }}%)</small></div>
+                <div class="resumen-peso">Peso Final PT: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +8% Merma)</small></div>
                 
                 <label class="lbl-sep">Aditivos:</label>
                 
                 <div class="fila-control-aditivo" style="align-items: flex-start;">
                     <label class="check-container" :class="{ 'disabled': form.espesor < 1 }" style="margin-top: 5px !important;">
-                        <input type="checkbox" v-model="form.conBrillo" :disabled="form.espesor < 1"> ✨ Brillo
+                        <input type="checkbox" v-model="form.conBrillo" :disabled="form.espesor < 1" /> ✨ Brillo
                     </label>
                     <div v-if="form.conBrillo" class="bloque-derecha-brillo">
                         <select v-model="form.tipoBrillo" class="select-brillo">
@@ -566,24 +598,68 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                             <option value="555">Brillo 555 (Cristal)</option>
                         </select>
                         <div class="input-porcentaje">
-                            <input type="number" v-model="form.porcBrillo" step="0.01" min="0"> %
+                            <input type="number" v-model="form.porcBrillo" step="0.01" min="0" /> %
                         </div>
                     </div>
                 </div>
 
-                <div class="fila-control-aditivo"><label class="check-container" :class="{ 'disabled': !form.conBrillo }"><input type="checkbox" v-model="form.llevaFilm" :disabled="!form.conBrillo"> 🛡️ Con Film</label></div>
-                <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.esGofrado"> 🧇 Gofrado</label></div>
-                <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.conEstearato"> 🧪 Estearato</label></div>
-                <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.aditivoUV"> ☀️ UV</label><div v-if="form.aditivoUV" class="bloque-derecha"><div class="input-porcentaje"><input type="number" v-model="form.porcentajeUv" step="0.01" min="0"> %</div></div></div>
-                <div class="fila-control-aditivo"><label class="check-container"><input type="checkbox" v-model="form.aditivoCaucho"> 🚜 Caucho</label><div v-if="form.aditivoCaucho" class="bloque-derecha"><div class="input-porcentaje"><input type="number" v-model="form.porcentajeCaucho" step="0.01" min="0"> %</div></div></div>
+                <div class="fila-control-aditivo">
+                    <label class="check-container" :class="{ 'disabled': !form.conBrillo }">
+                        <input type="checkbox" v-model="form.llevaFilm" :disabled="!form.conBrillo" /> 🛡️ Con Film
+                    </label>
+                </div>
+                
+                <div class="fila-control-aditivo">
+                    <label class="check-container">
+                        <input type="checkbox" v-model="form.esGofrado" /> 🧇 Gofrado
+                    </label>
+                </div>
+
+                <div class="fila-control-aditivo">
+                    <label class="check-container">
+                        <input type="checkbox" v-model="form.aditivoUV" /> ☀️ UV
+                    </label>
+                    <div v-if="form.aditivoUV" class="bloque-derecha">
+                        <div class="input-porcentaje">
+                            <input type="number" v-model="form.porcentajeUv" step="0.01" min="0" /> %
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="fila-control-aditivo">
+                    <label class="check-container">
+                        <input type="checkbox" v-model="form.aditivoCaucho" /> 🚜 Caucho
+                    </label>
+                    <div v-if="form.aditivoCaucho" class="bloque-derecha">
+                        <div class="input-porcentaje">
+                            <input type="number" v-model="form.porcentajeCaucho" step="0.01" min="0" /> %
+                        </div>
+                    </div>
+                </div>
 
                 <label style="margin-top:10px; font-size:13px; color:#bdc3c7">⚡ Tratamiento Corona:</label>
-                <select v-model="form.tipoCorona"><option value="Ninguno">Sin Tratamiento</option><option value="Simple">Simple</option><option value="Doble">Doble</option></select>
+                <select v-model="form.tipoCorona">
+                    <option value="Ninguno">Sin Tratamiento</option>
+                    <option value="Simple">Simple</option>
+                    <option value="Doble">Doble</option>
+                </select>
                 
                 <label class="lbl-sep">Cargas:</label>
-                <div class="fila-input"><div style="flex:1"><label>Carga Mineral (%)</label><input type="number" v-model="form.aditivoCarga"></div></div>
+                <div class="fila-input">
+                    <div style="flex:1">
+                        <label>Carga Mineral (%)</label>
+                        <input type="number" v-model="form.aditivoCarga" />
+                    </div>
+                </div>
                 
-            </div> <div class="fila-input" style="margin-top:10px"><div style="width: 100%"><label>Obs:</label><input type="text" v-model="form.observacion" style="width:100%"></div></div>
+            </div>
+            
+            <div class="fila-input" style="margin-top:10px">
+                <div style="width: 100%">
+                    <label>Obs:</label>
+                    <input type="text" v-model="form.observacion" style="width:100%" />
+                </div>
+            </div>
             
             <div v-if="Math.abs(totalPorcentajeReceta - 100) > 0.5" class="alerta-error">⚠️ Receta suma {{ totalPorcentajeReceta }}%.</div>
             

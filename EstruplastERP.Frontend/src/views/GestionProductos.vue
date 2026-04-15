@@ -205,7 +205,7 @@ onMounted(() => {
                 <div class="filtro-item">
                     <label>🏢 Cliente:</label>
                     <select v-model="clienteFiltro">
-                        <option value="">-- Todos los Clientes (Global) --</option>
+                        <option value="">Todos los Clientes (Global)</option>
                         <option v-for="c in clientesFazon" :key="c.id" :value="c.id">{{ c.razonSocial }}</option>
                     </select>
                 </div>

@@ -252,19 +252,25 @@ const observacionLimpia = computed(() => {
                     </tr>
                     <template v-for="(r, i) in recetaVisual" :key="i">
                         <tr>
-                           <td style="font-weight: 600;">
+                            <td style="font-weight: 600;">
                                 {{ r.nombreInsumo || r.nombreMateriaPrima }}
                                 <span v-if="!esConsolidadoReal && getOrigenMaterial(r)" style="font-size: 0.85em; font-style: italic; color: #555; margin-left: 5px;">
                                     {{ getOrigenMaterial(r) }}
                                 </span>
                             </td>
                             <td style="text-align:center; vertical-align: middle;" v-if="!esConsolidadoReal">
-                                <div class="porcentaje-celda">
+                                <div class="porcentaje-celda" v-if="r.esEstearato" style="font-weight: bold; color: #2980b9;">
+                                    FIJO
+                                </div>
+                                <div class="porcentaje-celda" v-else>
                                     {{ r.cantidad }} %
                                 </div>
                             </td>
                             <td style="text-align:right; font-size: 1.1em;">
-                                <strong>
+                                <strong v-if="r.esEstearato" style="color: #2980b9;">
+                                    {{ r.kilosFijos }} kg
+                                </strong>
+                                <strong v-else>
                                     {{ esConsolidadoReal 
                                         ? parseFloat(r.cantidadKilos || r.cantidad || 0).toFixed(3) 
                                         : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(3) 
@@ -272,7 +278,7 @@ const observacionLimpia = computed(() => {
                                 </strong>
                             </td>
                             <td data-html2canvas-ignore="true" v-if="!esConsolidadoReal" style="text-align:center;">
-                                <button @click="solicitarQuitar(r)" class="btn-borrar-insumo" title="Quitar insumo">❌</button>
+                                <button v-if="!r.esEstearato" @click="solicitarQuitar(r)" class="btn-borrar-insumo" title="Quitar insumo">❌</button>
                             </td>
                         </tr>
                     </template>
@@ -281,14 +287,14 @@ const observacionLimpia = computed(() => {
 
             <div class="agregar-fila-pdf" data-html2canvas-ignore="true" v-if="!esConsolidadoReal">
                 <div class="buscador-wrapper">
-                    <input type="text" v-model="insumoBusquedaTexto" @focus="mostrarLista = true" @blur="cerrarListaConDelay" class="input-buscador" placeholder="Buscar materia prima...">
+                    <input type="text" v-model="insumoBusquedaTexto" @focus="mostrarLista = true" @blur="cerrarListaConDelay" class="input-buscador" placeholder="Buscar materia prima..." />
                     <div class="lista-resultados" v-if="mostrarLista && sugerenciasFiltradas.length > 0">
                         <div v-for="mp in sugerenciasFiltradas" :key="mp.id" class="item-resultado" @click="seleccionarInsumo(mp)">
                             {{ mp.nombre }}
                         </div>
                     </div>
                 </div>
-                <input type="number" v-model="insumoExtraPorc" placeholder="%" style="width: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; margin-left: 5px;">
+                <input type="number" v-model="insumoExtraPorc" placeholder="%" style="width: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; margin-left: 5px;" />
                 <button class="btn-add-insumo" @click="solicitarAgregar" style="margin-left: 5px;">AGREGAR</button>
             </div>
         </div>

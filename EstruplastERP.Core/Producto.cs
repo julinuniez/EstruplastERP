@@ -45,6 +45,7 @@ namespace EstruplastERP.Core
         public bool EsGenerico { get; set; }
         public bool EsMateriaPrima { get; set; }      
         public bool EsProductoTerminado { get; set; }
+        public bool EsCritico { get; set; }
         public bool EsPremezcla { get; set; }
         public bool Activo { get; set; } = true;
 

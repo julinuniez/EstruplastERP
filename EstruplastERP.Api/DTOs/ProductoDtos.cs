@@ -12,13 +12,12 @@ namespace EstruplastERP.Api.Dtos
         public decimal PrecioCosto { get; set; }
         public bool EsProductoTerminado { get; set; }
         public bool EsMateriaPrima { get; set; }
-
         public bool EsGenerico { get; set; }
         public bool EsPremezcla { get; set; }
+        public bool EsCritico { get; set; }
     }
 
     // 2. PARA EDICIÓN O DETALLE (GET /id)
-    // Hereda de ProductoListaDto, así que ya tiene 'EsGenerico'
     public class ProductoDetalleDto : ProductoListaDto
     {
         public decimal Largo { get; set; }
@@ -28,9 +27,7 @@ namespace EstruplastERP.Api.Dtos
         public decimal EspesorMaximo { get; set; }
         public decimal PesoEspecifico { get; set; }
         public decimal StockMinimo { get; set; }
-        public decimal PrecioCosto { get; set; }
         public string? Rubro { get; set; }
-
         public List<IngredienteDto> Receta { get; set; } = new List<IngredienteDto>();
     }
 
@@ -41,19 +38,17 @@ namespace EstruplastERP.Api.Dtos
         public string CodigoSku { get; set; } = string.Empty;
         public decimal PrecioCosto { get; set; }
         public decimal StockMinimo { get; set; }
-
-        // Opcional: Si quieres poder definir si es Genérico desde el Front
-        // public bool EsGenerico { get; set; } 
-
+        public bool EsCritico { get; set; }
         public List<IngredienteDto>? Receta { get; set; }
     }
 
     // 4. PARA EDITAR (PUT)
     public class ProductoEditarDto
     {
-        public string Nombre { get; set; }
-        public string CodigoSku { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string CodigoSku { get; set; } = string.Empty;
         public decimal StockMinimo { get; set; }
+        public bool EsCritico { get; set; }
     }
 
     // 5. INGREDIENTE
@@ -73,6 +68,7 @@ namespace EstruplastERP.Api.Dtos
         public bool EsProductoTerminado { get; set; }
         public bool EsFazon { get; set; }
         public bool EsPremezcla { get; set; }
+        public bool EsCritico { get; set; }
         public decimal PrecioCosto { get; set; }
         public string? Rubro { get; set; }
         public List<IngredienteDto>? Receta { get; set; }

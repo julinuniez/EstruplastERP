@@ -34,6 +34,7 @@ namespace EstruplastERP.Api.Controllers
                         p.StockActual,
                         p.StockMinimo,
                         p.PesoEspecifico,
+                        EsCritico = _context.Database.ExecuteSqlRaw("SELECT 1") == 1 ? p.EsCritico : false,
                         p.EsMateriaPrima,
                         p.EsProductoTerminado,
                         p.EsFazon,
@@ -68,6 +69,33 @@ namespace EstruplastERP.Api.Controllers
                     ClienteId = p.ClienteId
                 })
                 .ToListAsync();
+        }
+
+
+        [HttpGet("insumos-disponibles/{clienteId}")]
+        public async Task<IActionResult> GetInsumosParaOrden(int clienteId)
+        {
+            try
+            {
+                var insumos = await _context.Productos
+                    .Where(p => p.EsMateriaPrima && p.Activo &&
+                               (p.ClienteId == clienteId || p.ClienteId == 0 || p.ClienteId == null))
+                    .OrderBy(p => p.Nombre)
+                    .Select(p => new {
+                        p.Id,
+                        p.Nombre,
+                        p.CodigoSku,
+                        p.StockActual,
+                        EsDeEstruplast = (p.ClienteId == 0 || p.ClienteId == null) 
+                    })
+                    .ToListAsync();
+
+                return Ok(insumos);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error al obtener insumos: {ex.Message}");
+            }
         }
 
         [HttpGet]
@@ -313,6 +341,7 @@ namespace EstruplastERP.Api.Controllers
             producto.Nombre = data.Nombre.Trim();
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
+            producto.EsCritico = data.EsCritico;
 
             try
             {
@@ -366,6 +395,7 @@ namespace EstruplastERP.Api.Controllers
 
             producto.StockMinimo = dto.StockMinimo;
             producto.PesoEspecifico = dto.PesoEspecifico;
+            producto.EsCritico = dto.EsCritico;
             producto.EsMateriaPrima = dto.EsMateriaPrima;
             producto.EsProductoTerminado = dto.EsProductoTerminado;
             producto.EsFazon = dto.EsFazon;
