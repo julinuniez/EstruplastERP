@@ -114,7 +114,7 @@ namespace EstruplastERP.Api.Controllers
                     p.EsProductoTerminado,
                     p.EsFazon,
                     p.EsScrap,
-                    EsGenerico = true,
+                    p.EsGenerico,
                     p.ClienteId,
                     p.PrecioCosto,
                     p.StockMinimo,

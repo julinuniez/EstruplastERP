@@ -216,7 +216,7 @@ const solicitarImpresion = (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
     if (tipo === 'orden' && orden.esImpreso) {
         if (!confirm(`La orden #${orden.id} ya fue impresa. ¿Seguro quieres reimprimirla?`)) return;
     }
-    emit('imprimir-historial', { orden, tipo });
+    emit('imprimir-historial', { orden, tipo, materiasPrimasBase: materiasPrimas.value });
 };
 
 function toggleSeleccionMultiple(id: number) {
@@ -251,7 +251,10 @@ async function ejecutarCargaConsolidada() {
     const payload = await procesarConsolidacion(ordenesAImprimir);
     
     if (payload) {
+        // 👇 Usamos "as any" para que TS no valide las propiedades de este objeto
+        (payload as any).materiasPrimasBase = materiasPrimas.value;
         emit('imprimir-carga-consolidada', payload);
+        
         ordenesSeleccionadas.value = [];
         await cargarHistorial();
     }

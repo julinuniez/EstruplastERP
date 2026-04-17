@@ -26,7 +26,8 @@ interface PedidoAgrupado {
 const listaPedidos = ref<PedidoAgrupado[]>([]);
 const cargando = ref(false);
 const clienteFiltro = ref('');
-const mostrarSoloPendientes = ref(false);
+// 1. Por defecto en true para que arranque mostrando solo pendientes
+const mostrarSoloPendientes = ref(true); 
 
 const cargarTablero = async () => {
     cargando.value = true;
@@ -79,10 +80,14 @@ onMounted(() => {
             <h2>📋 Tablero de Pedidos</h2>
             <div class="filtros">
                 <input v-model="clienteFiltro" placeholder="🔍 Buscar Cliente o N° Nota..." class="input-busqueda">
-                <label class="check-pendientes">
-                    <input type="checkbox" v-model="mostrarSoloPendientes"> Ocultar Terminados
+                
+                <label class="check-pendientes btn-toggle-finalizados">
+                    <input type="checkbox" v-model="mostrarSoloPendientes" style="display:none;">
+                    <span v-if="mostrarSoloPendientes">MOSTRAR ORDENES FINALIZADAS</span>
+                    <span v-else>OCULTAR ORDENES FINALIZADAS</span>
                 </label>
-                <button @click="cargarTablero" class="btn-refresh">🔄</button>
+                
+                <button @click="cargarTablero" class="btn-refresh" title="Actualizar Tablero">🔄</button>
             </div>
         </div>
 
@@ -97,7 +102,7 @@ onMounted(() => {
                         <span class="lbl-cli">{{ p.cliente }}</span>
                     </div>
                     <div class="badge-avance" :class="{'full': p.avance === 100}">
-                        {{ p.avance }}%
+                        {{ Math.round(p.avance) }}%
                     </div>
                 </div>
 
@@ -140,6 +145,21 @@ onMounted(() => {
 .header-tablero { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
 .header-tablero h2 { margin: 0; color: #2c3e50; }
 
+.btn-toggle-finalizados {
+    cursor: pointer;
+    background-color: #f1f5f9;
+    color: #475569;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    border: 1px solid #cbd5e1;
+    transition: all 0.2s;
+    user-select: none;
+}
+.btn-toggle-finalizados:hover {
+    background-color: #e2e8f0;
+}
 .filtros { display: flex; gap: 10px; align-items: center; }
 .input-busqueda { padding: 8px 12px; border-radius: 20px; border: 1px solid #bdc3c7; width: 250px; outline: none; }
 .check-pendientes { font-size: 14px; color: #34495e; cursor: pointer; user-select: none; }

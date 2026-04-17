@@ -48,24 +48,39 @@ namespace EstruplastERP.Api.Controllers
         [HttpPost("ajuste")]
         public async Task<IActionResult> RegistrarAjuste([FromBody] MovimientoStockRequest request)
         {
-            var producto = await _context.Productos.FindAsync(request.ProductoId);
-            if (producto == null) return NotFound("Producto no encontrado");
-
-            producto.StockActual += request.Cantidad;
-
-            var movimiento = new Movimiento
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                Fecha = DateTime.Now,
-                ProductoId = request.ProductoId,
-                Cantidad = request.Cantidad,
-                TipoMovimiento = request.Cantidad > 0 ? "ENTRADA_AJUSTE" : "SALIDA_AJUSTE",
-                Observacion = request.Observacion
-            };
+                var producto = await _context.Productos.FindAsync(request.ProductoId);
+                if (producto == null) return NotFound("Producto no encontrado");
 
-            _context.Movimientos.Add(movimiento);
-            await _context.SaveChangesAsync();
+                // Calculamos la cantidad real a impactar (resta si es egreso, suma si es ingreso)
+                decimal cantidadReal = request.TipoMovimiento == "EGRESO"
+                    ? -Math.Abs(request.Cantidad)
+                    : Math.Abs(request.Cantidad);
 
-            return Ok(new { mensaje = "Stock actualizado", nuevoStock = producto.StockActual });
+                producto.StockActual += cantidadReal;
+
+                var movimiento = new Movimiento
+                {
+                    Fecha = DateTime.Now,
+                    ProductoId = request.ProductoId,
+                    Cantidad = Math.Abs(request.Cantidad), // El historial guarda en positivo
+                    TipoMovimiento = request.TipoMovimiento == "EGRESO" ? "SALIDA_AJUSTE" : "ENTRADA_AJUSTE",
+                    Observacion = $"[AJUSTE MANUAL] {request.Observacion}"
+                };
+
+                _context.Movimientos.Add(movimiento);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { mensaje = "Stock ajustado correctamente", nuevoStock = producto.StockActual });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, $"Error al realizar ajuste: {ex.Message}");
+            }
         }
 
         [HttpDelete("eliminar/{id}")]

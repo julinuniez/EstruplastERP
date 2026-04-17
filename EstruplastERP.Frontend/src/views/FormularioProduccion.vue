@@ -63,11 +63,11 @@ const form = ref({
     porcBrillo: 2.00, 
     llevaFilm: false, tipoCorona: 'Ninguno',
     esGofrado: false,
-    conEstearato: false, // Oculto de la lógica del 100%
+    conEstearato: false, 
     esProductoColor: false, masterbatchId: '' as string | number, colorTexto: '',
     aditivoUV: false, porcentajeUv: 1.00, aditivoCaucho: false, porcentajeCaucho: 1.00,
     aditivoCarga: 0,
-    merma: 8, // Fijo en 8%
+    merma: 8, 
     kilosTotales: 0,
     esConsolidado: false,
     esBobina: false,
@@ -131,7 +131,7 @@ const recetaConExtrasParaVista = computed(() => {
         recetaLimpia.push({
             id: 'estearato-fijo',
             materiaPrimaId: est.id, 
-            nombreInsumo:est.nombre,
+            nombreInsumo: est.nombre,
             cantidad: 0, 
             densidad: est.pesoEspecifico || 1,
             esEstearato: true, 
@@ -181,8 +181,18 @@ const {
 );
 
 const { imprimirDesdeHistorial, imprimirLoteOPsDesdeHistorial } = useImpresionProduccion(
-    form, recetaDinamica, ocultarFormula, imprimiendoHistorial, cantidadPalletsUsuario, mensaje, error, loading, 
-    listaProduccionRef, balancearBase, limpiarFormulario
+    form, 
+    recetaDinamica, 
+    ocultarFormula, 
+    imprimiendoHistorial, 
+    cantidadPalletsUsuario,
+    mensaje, 
+    error, 
+    loading, 
+    listaProduccionRef, 
+    balancearBase, 
+    limpiarFormulario,
+    listaInventarioCompleto 
 );
 
 
@@ -252,16 +262,23 @@ watch(mostrarCajaColor, (v) => {
     if (!v) form.value.masterbatchId = '';
 });
 
+// 👇 CENTRALIZACIÓN SEGURA DE LOTES FAZON
+const cargarLotesFazonSeguro = async () => {
+    if (!form.value.clienteId || !form.value.productoTerminadoId) {
+        listaLotesCliente.value = [];
+        loteFazonSeleccionadoId.value = '';
+        return;
+    }
+    const prodFinal = productos.value.find(p => p.id === Number(form.value.productoTerminadoId));
+    if (prodFinal) {
+        await actualizarRecetaFazonConCliente(form.value.clienteId, prodFinal);
+    }
+};
+
 watch(() => form.value.clienteId, async (nuevoCli) => {
     if (nuevoCli) {
         await CargarProductosFiltrados(nuevoCli);
-        
-        if (form.value.productoTerminadoId) {
-            const prod = productos.value.find(p => p.id === Number(form.value.productoTerminadoId));
-            if (prod) {
-                await actualizarRecetaFazonConCliente(nuevoCli, prod);
-            }
-        }
+        await cargarLotesFazonSeguro();
     } else {
         listaLotesCliente.value = [];
         loteFazonSeleccionadoId.value = '';
@@ -271,19 +288,11 @@ watch(() => form.value.clienteId, async (nuevoCli) => {
 watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
     if (form.value.esConsolidado) return;
     
-    // Forzamos la merma a 8 siempre que cambie de producto
     form.value.merma = 8;
     
     if (nuevoProdId && !imprimiendoHistorial.value) {
         await CargarDatosProductos(Number(nuevoProdId)); 
-        
-        const prodFinal = productos.value.find(p => p.id === Number(nuevoProdId));
-        if (prodFinal && prodFinal.esFazon && form.value.clienteId) {
-            await actualizarRecetaFazonConCliente(form.value.clienteId, prodFinal);
-        } else {
-            listaLotesCliente.value = [];
-            loteFazonSeleccionadoId.value = '';
-        }
+        await cargarLotesFazonSeguro();
     } else if (!nuevoProdId) {
         recetaDinamica.value = [];
         listaLotesCliente.value = [];
@@ -305,11 +314,23 @@ watch(
 watch(() => form.value.espesor, (v) => { if (v < 1) form.value.conBrillo = false; });
 watch(() => form.value.conBrillo, (v) => { if (!v) form.value.llevaFilm = false; });
 
-watch(kilosCalculados, (v) => {
-    if (!form.value.esConsolidado && !imprimiendoHistorial.value) {
-        form.value.kilosTotales = v;
-    }
-}, { immediate: true });
+// 👇 WATCH EXPLÍCITO PARA ARREGLAR EL ERROR DEL TEST DE RE-CÁLCULO
+watch(
+    [
+        () => form.value.largo, 
+        () => form.value.ancho, 
+        () => form.value.espesor, 
+        () => form.value.cantidad, 
+        () => form.value.esBobina, 
+        () => form.value.kilosPorBobina
+    ], 
+    () => {
+        if (!form.value.esConsolidado && !imprimiendoHistorial.value) {
+            form.value.kilosTotales = kilosCalculados.value;
+        }
+    }, 
+    { immediate: true }
+);
 
 watch(() => form.value.kilosTotales, (v) => {
     if (v > 1000) {
@@ -335,7 +356,6 @@ onMounted(async () => {
             ProduccionAPI.obtenerInventarioCompleto()
         ]);
         
-        // 🚨 ORDENAMIENTO ALFABÉTICO MAESTRO 🚨
         if (Array.isArray(resProd)) {
             productos.value = resProd.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
             listaTodasMateriasPrimas.value = productos.value.filter(p => p.esMateriaPrima);
@@ -357,7 +377,6 @@ onMounted(async () => {
     await cargarNotaPedidoSugerida();
 });
 
-// 👇 EL TRUCO ESTÁ ACÁ ADENTRO 👇
 const procesarGuardado = async () => {
     if (guardando.value) return; 
     error.value = ''; 
@@ -366,13 +385,12 @@ const procesarGuardado = async () => {
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
     let agregadoParaGuardar = false;
 
-    // 2. Lo inyectamos en la receta JUSTO antes de mandar a guardar (con su 0.08 real)
     if (est && !recetaDinamica.value.some(r => r.materiaPrimaId === est.id)) {
         recetaDinamica.value.push({
             id: 0,
             materiaPrimaId: est.id,
             nombreInsumo: est.nombre,
-            cantidad: 0.08, // El porcentaje REAL que guarda la base de datos
+            cantidad: 0.08, 
             densidad: est.pesoEspecifico || 1,
             esEstearato: true
         });
@@ -385,10 +403,8 @@ const procesarGuardado = async () => {
         notaPedido: form.value.notaPedido
     };
 
-    // 3. Acá es donde se envía la petición al backend con el ID correcto
     await registrarProduccion();
 
-    // 4. Inmediatamente después de guardar, lo quitamos de la receta para que no te rompa el UI
     if (agregadoParaGuardar) {
         recetaDinamica.value = recetaDinamica.value.filter(r => r.materiaPrimaId !== est?.id);
     }
@@ -415,7 +431,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
     
     <div class="bloque-superior">
         <div class="panel-izquierdo">
-            <div class="hoja-contenedor">
+            <div class="hoja-contenedor" :style="{ opacity: imprimiendoHistorial ? '0.01' : '1', pointerEvents: imprimiendoHistorial ? 'none' : 'auto', transition: 'opacity 0.2s' }">
                 <HojaImpresion 
                     id="hoja-de-impresion"
                     :form="form" 
@@ -425,7 +441,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     :colorFinal="colorFinalParaPDF" 
                     :densidad="densidadPT" 
                     :totalPorcentaje="totalPorcentajeReceta" 
-                    :materiasPrimas="materiasPrimasLimpias" 
+                    :materiasPrimas="listaTodasMateriasPrimas" 
                     :ocultarFormula="ocultarFormula" 
                     @add-insumo="agregarInsumoDesdeHijo" 
                     @remove-insumo="quitarInsumoManual" 
@@ -492,7 +508,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 <div v-if="listaLotesCliente.length > 0" class="box-fazon-selector">
                     <label style="color: #2ecc71;">♻️ Lote Recuperado (Fazón):</label>
                     <select v-model="loteFazonSeleccionadoId" @change="alCambiarLoteFazon" class="select-fazon">
-                        <option disabled value="">-- Seleccionar Lote --</option>
+                        <option disabled value="">Seleccionar Lote</option>
                         <option v-for="lote in listaLotesCliente" :key="lote.id" :value="lote.id">
                             {{ lote.nombre }} (Stock: {{ lote.stockActual }} kg)
                         </option>
@@ -713,6 +729,21 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
     </div>
 
   </div>
+  <div style="position: absolute; left: -9999px; top: -9999px; opacity: 0; pointer-events: none;">
+    <div id="impresion-fantasma">
+        <HojaImpresion 
+            :form="form" 
+            :producto="productoSeleccionado" 
+            :cliente="clienteSeleccionado" 
+            :receta="recetaConExtrasParaVista" 
+            :colorFinal="colorFinalParaPDF" 
+            :densidad="densidadPT" 
+            :totalPorcentaje="totalPorcentajeReceta" 
+            :materiasPrimas="listaTodasMateriasPrimas" 
+            :ocultarFormula="ocultarFormula" 
+        />
+    </div>
+</div>
 </template>
 
 <style scoped>

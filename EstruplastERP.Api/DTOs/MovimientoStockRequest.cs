@@ -4,6 +4,7 @@
     {
         public int ProductoId { get; set; }
         public decimal Cantidad { get; set; } // Positivo (Compra) o Negativo (Ajuste/Pérdida)
+        public string TipoMovimiento { get; set; }
         public string Observacion { get; set; } = string.Empty; // Ej: "Remito Proveedor X"
     }
 }

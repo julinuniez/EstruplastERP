@@ -45,11 +45,11 @@ describe('Pruebas de Impresión y Cálculos de Hoja de Carga', () => {
         // Simulamos el elemento HTML que necesita html2pdf para no dar error
         document.body.innerHTML = '<div id="hoja-de-impresion"><input value="test" /></div>';
     });
-
+    const inventarioMock = ref([]);
     it('Impresión Simple: Debería cargar medidas, notas y color correctamente en el formulario', async () => {
         const { imprimirDesdeHistorial } = useImpresionProduccion(
             form, recetaDinamica, ocultarFormula, imprimiendoHistorial, cantidadPalletsUsuario,
-            mensaje, error, loading, listaProduccionRef, balancearBaseMock, limpiarFormularioMock
+            mensaje, error, loading, listaProduccionRef, balancearBaseMock, limpiarFormularioMock, inventarioMock
         );
 
         // 1. Armamos el MOCK usando exactamente las propiedades que lee tu función
@@ -95,7 +95,7 @@ describe('Pruebas de Impresión y Cálculos de Hoja de Carga', () => {
     it('Impresión Lote Múltiple: Debería procesar varias órdenes sin mezclar los kilos', async () => {
         const { imprimirLoteOPsDesdeHistorial } = useImpresionProduccion(
             form, recetaDinamica, ocultarFormula, imprimiendoHistorial, cantidadPalletsUsuario,
-            mensaje, error, loading, listaProduccionRef, balancearBaseMock, limpiarFormularioMock
+            mensaje, error, loading, listaProduccionRef, balancearBaseMock, limpiarFormularioMock,inventarioMock
         );
 
         const loteOrdenesFalsas = [

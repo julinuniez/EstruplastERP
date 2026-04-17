@@ -77,7 +77,7 @@ async function cargarDatos() {
             axios.get(`${apiUrl}/Estadisticas/top-productos${query}`, getAuthConfig()),
             axios.get(`${apiUrl}/Estadisticas/top-materiales${query}`, getAuthConfig()),
             axios.get(`${apiUrl}/Estadisticas/top-clientes${query}`, getAuthConfig()),
-            axios.get(`${apiUrl}/Productos/inventario-completo`, getAuthConfig()) 
+            axios.get(`${apiUrl}/Productos`, getAuthConfig()) 
         ]);
 
         resumenMensual.value = Array.isArray(resMes.data) ? resMes.data : [];
@@ -109,8 +109,8 @@ async function cargarDatos() {
                        !nombre.includes('GENÉRICO') &&
                        p.id !== 90;
             })
-            .sort((a, b) => ((b.stockDisponible ?? b.stockFisico ?? b.stockActual) || 0) - ((a.stockDisponible ?? a.stockFisico ?? a.stockActual) || 0))
-            .slice(0, 10);
+            .sort((a, b) => (b.stockDisponible || 0) - (a.stockDisponible || 0)) 
+            .slice(0, 7); 
 
         const prodActual = Math.round(resKpis.data?.produccionMes || 0);
         const prodAnterior = Math.round(resKpis.data?.produccionMesAnterior || 0);
@@ -194,6 +194,34 @@ async function exportarProduccionAExcel() {
     }
 }
 
+const obtenerRangoFechasPorSemana = (periodoStr: string) => {
+    if (!periodoStr) return '';
+    // Extrae el número de la semana, sin importar si dice "Semana 12" o "12"
+    const match = periodoStr.match(/\d+/);
+    if (!match) return periodoStr;
+
+    const numeroSemana = parseInt(match[0], 10);
+    // Usamos el año actual para calcular el rango.
+    const anio = new Date().getFullYear(); 
+
+    const fechaBase = new Date(anio, 0, 4);
+    const diaDeLaSemana = fechaBase.getDay() || 7; 
+    
+    fechaBase.setDate(fechaBase.getDate() - diaDeLaSemana + 1);
+    
+    const lunes = new Date(fechaBase);
+    lunes.setDate(lunes.getDate() + (numeroSemana - 1) * 7);
+    
+    const domingo = new Date(lunes);
+    domingo.setDate(domingo.getDate() + 6);
+    
+    const opciones: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short' };
+    const strInicio = lunes.toLocaleDateString('es-AR', opciones).replace('.', '');
+    const strFin = domingo.toLocaleDateString('es-AR', opciones).replace('.', '');
+    
+    return `${strInicio} al ${strFin}`;
+};
+
 const chartDataMensual = computed(() => ({
     labels: resumenMensual.value.map(m => m?.periodo || ''),
     datasets: [{
@@ -206,7 +234,8 @@ const chartDataMensual = computed(() => ({
 }));
 
 const chartDataSemanal = computed(() => ({
-    labels: produccionSemanal.value.map(s => s?.periodo || ''),
+    // 👇 ACÁ APLICAMOS LA FUNCIÓN AL GRÁFICO
+    labels: produccionSemanal.value.map(s => obtenerRangoFechasPorSemana(s?.periodo || '')),
     datasets: [{
         label: 'Kilos (Últimas 8 semanas)',
         backgroundColor: '#3498db',
@@ -231,7 +260,7 @@ const chartDataStock = computed(() => ({
         label: 'Stock Disponible (Kg)',
         backgroundColor: '#1abc9c', 
         borderRadius: 4,
-        data: stockMateriales.value.map(m => Math.round((m?.stockDisponible ?? m?.stockFisico ?? m?.stockActual) || 0))
+        data: stockMateriales.value.map(m => Math.round(m?.stockDisponible || 0))
     }]
 }));
 
@@ -335,7 +364,7 @@ onMounted(() => {
             <div class="grid-principal">
                 
                 <div class="card">
-                    <h3>📦 Stock Disponible (MP Virgen - Top 10)</h3>
+                    <h3>📦 Stock Disponible (MP Virgen - Top 7)</h3>
                     <div class="area-grafico" v-if="stockMateriales.length > 0">
                         <Bar :data="chartDataStock" :options="{ indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }" />
                     </div>

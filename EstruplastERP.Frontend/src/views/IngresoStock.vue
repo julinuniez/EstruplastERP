@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import api from '@/services/axiosInstance'; 
 
 // --- 1. INTERFACES ---
@@ -32,9 +32,12 @@ const listaProveedores = ref<Proveedor[]>([])
 const listaMovimientosBruta = ref<Movimiento[]>([]) 
 const cargando = ref(false);
 
-const filtroFechaDesde = ref('')
-const filtroFechaHasta = ref('')
+const filtroMes = ref('') // Formato: 'YYYY-MM'
 const filtroBusqueda = ref('')
+
+// Variables para Paginación
+const paginaActual = ref(1);
+const registrosPorPagina = 30;
 
 const form = ref({
   productoId: '' as number | '', 
@@ -57,14 +60,38 @@ const formatearFecha = (fechaOriginal: string | null | undefined) => {
     }
 };
 
+// Reiniciar a la página 1 cuando se cambian los filtros
+watch([filtroBusqueda, filtroMes], () => {
+    paginaActual.value = 1;
+});
+
 const movimientosFiltrados = computed(() => {
     let lista = listaMovimientosBruta.value || [];
 
+    // 1. Filtrar solo Entradas/Compras REALES (Excluyendo Ajustes Manuales)
     lista = lista.filter(m => {
         const tipo = (m.tipoMovimiento || '').toUpperCase();
-        return tipo === 'COMPRA' || tipo === 'ENTRADA';
+        
+        // Verifica si es un movimiento de entrada
+        const esIngreso = tipo.includes('COMPRA') || 
+                          tipo.includes('ENTRADA') || 
+                          tipo.includes('INGRESO') || 
+                          tipo.includes('RECEPCIÓN');
+                          
+        // Verifica si es un ajuste manual
+        const esAjuste = tipo.includes('AJUSTE');
+
+        // Solo lo dejamos pasar si es ingreso Y NO es un ajuste
+        return esIngreso && !esAjuste;
     });
 
+    // 2.  TRABA: Ocultar todo lo que sea MOLIDO
+    lista = lista.filter(m => {
+        const nombreProducto = (m.producto || '').toUpperCase();
+        return !nombreProducto.includes('MOLIDO'); 
+    });
+
+    // 3. Filtro de Búsqueda de texto
     if (filtroBusqueda.value) {
         const busq = filtroBusqueda.value.toUpperCase();
         lista = lista.filter(m => 
@@ -74,22 +101,11 @@ const movimientosFiltrados = computed(() => {
         );
     }
 
-    if (filtroFechaDesde.value) {
+    // 4. Filtro Mensual ('YYYY-MM')
+    if (filtroMes.value) {
         lista = lista.filter(m => {
-            const f = m.fecha;
-            if (!f) return false;
-            // Usamos split y aseguramos que si falla devuelva el string original
-            const fechaCorta = (f.includes('T') ? f.split('T')[0] : f) || f;
-            return (fechaCorta as string) >= (filtroFechaDesde.value as string); 
-        });
-    }
-
-    if (filtroFechaHasta.value) {
-        lista = lista.filter(m => {
-            const f = m.fecha;
-            if (!f) return false;
-            const fechaCorta = (f.includes('T') ? f.split('T')[0] : f) || f;
-            return (fechaCorta as string) <= (filtroFechaHasta.value as string);
+            if (!m.fecha) return false;
+            return m.fecha.startsWith(filtroMes.value); 
         });
     }
 
@@ -100,11 +116,30 @@ const movimientosFiltrados = computed(() => {
     });
 });
 
+// Lógica de Paginación
+const totalPaginas = computed(() => Math.ceil(movimientosFiltrados.value.length / registrosPorPagina) || 1);
+
+const movimientosPaginados = computed(() => {
+    const inicio = (paginaActual.value - 1) * registrosPorPagina;
+    const fin = inicio + registrosPorPagina;
+    return movimientosFiltrados.value.slice(inicio, fin);
+});
+
+const irAPagina = (pag: number) => {
+    if (pag >= 1 && pag <= totalPaginas.value) {
+        paginaActual.value = pag;
+    }
+};
+
 const totalKilosPeriodo = computed(() => {
     return movimientosFiltrados.value.reduce((acc, m) => acc + m.cantidad, 0);
 });
 
 onMounted(async () => {
+    // Seteamos el filtro por defecto al mes actual
+    const hoy = new Date();
+    filtroMes.value = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+    
     await cargarTodo();
 })
 
@@ -120,17 +155,34 @@ async function cargarTodo() {
 async function cargarInsumos() {
     try {
         const res = await api.get('/Productos');
+        
         listaInsumos.value = res.data.filter((p: any) => {
             const nombre = p.nombre ? p.nombre.toUpperCase() : '';
-            return (p.esMateriaPrima === true && p.esScrap !== true && !nombre.includes("[SCRAP]") && !nombre.includes("RECUPERADO"));
+            const esProductoGenerico = p.esGenerico === true || p.EsGenerico === true || p.esGenerico === 1 || p.EsGenerico === 1;
+            return (
+                p.esMateriaPrima === true && 
+                p.esScrap !== true && 
+                !p.esGenerico &&
+                !nombre.includes("[SCRAP]") && 
+                !nombre.includes("RECUPERADO") &&
+                !nombre.includes("BASE") &&
+                !nombre.includes("MOLIDO")   
+            );
+        }).sort((a: any, b: any) => {
+            const nombreA = a.nombre || '';
+            const nombreB = b.nombre || '';
+            return nombreA.localeCompare(nombreB);
         });
-    } catch (e) { console.error(e) }
+
+    } catch (e) { 
+        console.error("Error al cargar insumos:", e);
+    }
 }
 
 async function cargarProveedores() {
     try {
         const res = await api.get('/Proveedores');
-        listaProveedores.value = res.data;
+        listaProveedores.value = res.data.sort((a: any, b: any) => (a.razonSocial || '').localeCompare(b.razonSocial || ''));
     } catch (e) { console.error(e) }
 }
 
@@ -176,14 +228,6 @@ async function registrarCompra() {
         error.value = "❌ Error: " + (e.response?.data?.mensaje || "Error al conectar");
     }
 }
-
-async function eliminarMovimiento(id: number) {
-    if(!confirm("⚠️ ¿Anular este ingreso? Se descontará del stock.")) return;
-    try {
-        await api.delete(`/Movimientos/eliminar/${id}`);
-        await cargarTodo();
-    } catch (e: any) { alert("Error: " + (e.response?.data?.mensaje || e.message)); }
-}
 </script>
 
 <template>
@@ -191,8 +235,7 @@ async function eliminarMovimiento(id: number) {
       
       <div class="header-dashboard">
           <div>
-            <h2>Recepcion de Materia Prima</h2>
-            <p class="subtitle">Control de ingresos y stock virgen</p>
+            <h2>Recepción de Materia Prima</h2>
           </div>
           <div class="stats-card">
               <span class="stats-label">Total en Pantalla</span>
@@ -205,7 +248,7 @@ async function eliminarMovimiento(id: number) {
             <div class="campo mitad">
                 <label>Proveedor:</label>
                 <select v-model="form.proveedorId">
-                    <option value="" disabled>-- Seleccionar --</option>
+                    <option value="" disabled>Seleccionar</option>
                     <option v-for="prov in listaProveedores" :key="prov.id" :value="prov.id">{{ prov.razonSocial }}</option>
                 </select>
             </div>
@@ -219,8 +262,8 @@ async function eliminarMovimiento(id: number) {
             <div class="campo mitad">
                 <label>Material:</label>
                 <select v-model="form.productoId">
-                    <option value="" disabled>-- Seleccione --</option>
-                    <option v-for="p in listaInsumos" :key="p.id" :value="p.id">{{ p.nombre }} (Stock: {{ p.stockActual }} kg)</option>
+                    <option value="" disabled>Seleccione</option>
+                    <option v-for="p in listaInsumos" :key="p.id" :value="p.id">{{ p.nombre }}</option>
                 </select>
             </div>
 
@@ -243,17 +286,13 @@ async function eliminarMovimiento(id: number) {
       </div>
 
       <div class="historial-rapido">
-          <div class="header-historial">
-              <input type="text" v-model="filtroBusqueda" placeholder="🔍 Buscar material, proveedor o remito..." class="input-search">
+          <div class="header-historial" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+              <input type="text" v-model="filtroBusqueda" placeholder="🔍 Buscar material, proveedor o remito..." class="input-search" style="flex: 1; min-width: 250px;">
               
-              <div class="filtros-fecha">
-                  <div class="filtro-item">
-                      <input type="date" v-model="filtroFechaDesde">
-                  </div>
-                  <span style="color: #ccc">/</span>
-                  <div class="filtro-item">
-                      <input type="date" v-model="filtroFechaHasta">
-                  </div>
+              <div class="filtros-fecha" style="display: flex; align-items: center; gap: 10px; background: #f1f5f9; padding: 5px 15px; border-radius: 6px;">
+                  <label style="font-weight: bold; color: #475569; font-size: 0.9rem;">Mes:</label>
+                  <input type="month" v-model="filtroMes" style="border: 1px solid #cbd5e1; padding: 6px 10px; border-radius: 4px; font-weight: bold; color: #1e293b;">
+                  <button v-if="filtroMes" @click="filtroMes = ''" title="Limpiar filtro" style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 1.1rem;">✖</button>
               </div>
           </div>
 
@@ -266,26 +305,29 @@ async function eliminarMovimiento(id: number) {
                           <th>Material</th>
                           <th>Remito</th>
                           <th style="text-align:right">Cantidad</th>
-                          <th></th>
                       </tr>
                   </thead>
                   <tbody>
-                      <tr v-for="mov in movimientosFiltrados" :key="mov.id">
+                      <tr v-for="mov in movimientosPaginados" :key="mov.id">
                           <td>{{ formatearFecha(mov.fecha) }}</td> 
                           <td class="txt-prov">{{ mov.proveedor || '-' }}</td>
                           <td><strong>{{ mov.producto }}</strong></td>
                           <td><span class="txt-remito-solo">{{ mov.remito }}</span></td>
                           <td style="text-align:right; font-weight:900; color:#10b981;">+{{ mov.cantidad.toLocaleString() }} kg</td>
-                          <td style="text-align: right; padding-left: 10px;">
-                              <button @click="eliminarMovimiento(mov.id)" class="btn-undo">✖</button>
-                          </td>
                       </tr>
-                      <tr v-if="movimientosFiltrados.length === 0">
-                          <td colspan="6" class="vacio-msg">Sin registros.</td>
+                      <tr v-if="movimientosPaginados.length === 0">
+                          <td colspan="5" class="vacio-msg">Sin registros en este periodo.</td>
                       </tr>
                   </tbody>
               </table>
           </div>
+
+          <div class="paginacion" v-if="totalPaginas > 1">
+              <button @click="irAPagina(paginaActual - 1)" :disabled="paginaActual === 1">Anterior</button>
+              <span>Página {{ paginaActual }} de {{ totalPaginas }}</span>
+              <button @click="irAPagina(paginaActual + 1)" :disabled="paginaActual === totalPaginas">Siguiente</button>
+          </div>
+
       </div>
   </div>
 </template>
@@ -324,7 +366,7 @@ async function eliminarMovimiento(id: number) {
 .filtros-fecha { display: flex; gap: 8px; align-items: center; }
 .filtros-fecha input { border: 1px solid #d1d5db; border-radius: 6px; padding: 4px 8px; font-size: 0.8rem; }
 
-. আধুনিক-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.table-container { width: 100%; overflow-x: auto; }
 .tabla-mini { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tabla-mini th { background: #f9fafb; text-align: left; padding: 12px; font-weight: 700; color: #4b5563; border-bottom: 2px solid #f3f4f6; }
 .tabla-mini td { padding: 12px; border-bottom: 1px solid #f3f4f6; color: #1f2937; }
@@ -333,6 +375,36 @@ async function eliminarMovimiento(id: number) {
 .btn-undo { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; }
 .vacio-msg { text-align: center; padding: 30px !important; color: #9ca3af; }
 
+.paginacion {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    border-radius: 0 0 8px 8px;
+}
+.paginacion button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.paginacion button:disabled {
+    background-color: #cbd5e1;
+    cursor: not-allowed;
+}
+.paginacion button:hover:not(:disabled) {
+    background-color: #2980b9;
+}
+.paginacion span {
+    font-weight: bold;
+    color: #475569;
+}
 @media (max-width: 768px) {
     .fila-doble { flex-direction: column; gap: 0; }
     .header-dashboard { flex-direction: column; align-items: flex-start; gap: 10px; }

@@ -8,6 +8,7 @@ import { useFiltrosInventario, detectarTipo } from '@/composables/useFiltrosInve
 import { useImportacionInventario } from '@/composables/useImportacionInventario';
 import { useModalesInventario } from '@/composables/useModalesInventario';
 import ModalHistorialStock from '@/components/ModalHistorialStock.vue';
+import ModalAjusteStock from '@/components/ModalAjusteStock.vue'; // 👈 NUEVO COMPONENTE
 
 const router = useRouter();
 const maestrosStore = useMaestrosStore();
@@ -29,6 +30,10 @@ const resumenGlobal = ref({ fisico: 0, reservado: 0, libre: 0 });
 const mostrarModalHistorial = ref(false);
 const productoIdSeleccionado = ref<number | null>(null);
 const productoNombreSeleccionado = ref('');
+
+// 👇 NUEVAS VARIABLES PARA EL AJUSTE MANUAL
+const mostrarModalAjuste = ref(false);
+const productoParaAjustar = ref<any>(null);
 
 watch(clienteFiltro, () => { materialFiltro.value = ''; });
 watch(tabActual, () => { subTabMP.value = 'VIRGEN'; });
@@ -60,6 +65,17 @@ const abrirKardex = (producto: any) => {
     productoIdSeleccionado.value = producto.id;
     productoNombreSeleccionado.value = producto.nombre;
     mostrarModalHistorial.value = true;
+};
+
+// 👇 NUEVAS FUNCIONES PARA EL AJUSTE MANUAL
+const abrirModalAjuste = (p: any) => {
+    productoParaAjustar.value = p;
+    mostrarModalAjuste.value = true;
+};
+
+const onAjusteConfirmado = () => {
+    mostrarModalAjuste.value = false;
+    cargarDatos(true); // Recarga los datos actualizados
 };
 
 async function cargarDatos(forzar = false) {
@@ -152,6 +168,7 @@ onMounted(() => {
     cargarDatos(true);
 });
 </script>
+
 <template>
     <div class="contenedor-stock">
         <div class="header-stock">
@@ -276,6 +293,7 @@ onMounted(() => {
                                 <span v-else class="badge-propio" style="margin-left:8px;">Propio</span>
                                 
                                 <button @click="irAEditar(p.id)" class="btn-editar btn-mini" title="Editar Lote" style="margin-left: 10px;">✏️</button>
+                                <button @click="abrirModalAjuste(p)" class="btn-editar btn-mini" style="margin-left: 5px; background: #fdf2e9; color: #e67e22;" title="Ajustar Stock Manual">⚖️</button>
                                 <button @click="abrirKardex(p)" class="btn-editar btn-mini" title="Ver Historial de Movimientos" style="margin-left: 5px;">🕒</button>
                             </td>
                             <td style="text-align:right; color:#7f8c8d;">{{ (p.stockFisico ?? p.stockActual ?? 0).toFixed(2) }}</td>
@@ -339,7 +357,7 @@ onMounted(() => {
                         </td>
 
                         <td style="text-align:right; font-weight: 500;">
-                            {{ p.stockFisico ?? p.stockActual ?? 0 }}
+                            {{ (p.stockFisico ?? p.stockActual ?? 0).toFixed(2) }}
                         </td>
 
                         <td style="text-align:center;">
@@ -351,11 +369,12 @@ onMounted(() => {
 
                         <td style="text-align:right; font-weight: bold; font-size: 1.05rem;" 
                             :class="{'text-danger': ((p.stockFisico ?? p.stockActual ?? 0) - (p.stockReservado ?? 0)) <= 0}">
-                            {{ p.stockDisponible ?? ((p.stockFisico ?? p.stockActual ?? 0) - (p.stockReservado ?? 0)) }}
+                            {{ (p.stockDisponible ?? ((p.stockFisico ?? p.stockActual ?? 0) - (p.stockReservado ?? 0))).toFixed(2) }}
                         </td>
 
                         <td style="text-align:center; display: flex; justify-content: center; gap: 5px;">
                             <button @click="irAEditar(p.id)" class="btn-editar" title="Editar">✏️</button>
+                            <button @click="abrirModalAjuste(p)" class="btn-editar" style="background: #fdf2e9; color: #e67e22;" title="Ajustar Stock Manual">⚖️</button>
                             <button @click="abrirKardex(p)" class="btn-editar" title="Ver Historial de Movimientos">🕒</button>
                         </td>
                     </tr>
@@ -501,6 +520,13 @@ onMounted(() => {
             :productoId="productoIdSeleccionado"
             :productoNombre="productoNombreSeleccionado"
             @close="mostrarModalHistorial = false"
+        />
+
+        <ModalAjusteStock 
+            :visible="mostrarModalAjuste"
+            :producto="productoParaAjustar"
+            @close="mostrarModalAjuste = false"
+            @confirmado="onAjusteConfirmado"
         />
 
     </div>

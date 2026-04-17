@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 const logoImg = new URL('../assets/estruplast-logo.png', import.meta.url).href;
 
@@ -118,26 +118,42 @@ const solicitarQuitar = (item: any) => {
     if (indexReal !== -1) emit('remove-insumo', indexReal); 
 };
 
-const getOrigenMaterial = (item: any) => {
-    const mpId = item.materiaPrimaId || item.id;
-    const mp = props.materiasPrimas?.find(m => m.id === mpId);
-    const idDueño = mp?.clienteId || item.clienteId || 0;
+const obtenerEtiquetaOrigen = (itemReceta: any) => {
+    let idDuenioMaterial = 0;
+    const idMpBuscado = itemReceta.materiaPrimaId || itemReceta.id;
 
-    if (idDueño > 0) {
-        return `(De ${props.cliente?.razonSocial || props.form?.clienteNombre || 'Cliente'})`;
+    if (props.materiasPrimas && props.materiasPrimas.length > 0) {
+        const mpReal = props.materiasPrimas.find((m: any) => m.id === idMpBuscado);
+        if (mpReal) {
+            idDuenioMaterial = Number(mpReal.clienteId || mpReal.ClienteId || 0);
+        } else {
+            idDuenioMaterial = Number(itemReceta.clienteId || itemReceta.ClienteId || 0);
+        }
+    } else {
+        idDuenioMaterial = Number(itemReceta.clienteId || itemReceta.ClienteId || 0);
     }
-
-    const nombre = (item.nombreInsumo || item.nombreMateriaPrima || '').toUpperCase();
-    if (idDueño === 0 && nombre.includes('MOLIDO')) {
-        return "(Stock Estruplast)";
+    if (idDuenioMaterial === 0) {
+        return ''; 
     }
-
-    return ""; 
+    
+    if (props.cliente && idDuenioMaterial === Number(props.cliente.id)) {
+        return `(DE ${props.cliente.razonSocial.toUpperCase()})`;
+    }
+    
+    return '(MATERIAL PRESTADO/TERCERO)';
 };
+
+// Redireccionamos getOrigenMaterial a la función estricta para evitar duplicidad
+const getOrigenMaterial = (r: any) => obtenerEtiquetaOrigen(r);
 
 const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 const tituloLimpioParaPDF = computed(() => {
+    // 👇 Si es un rejunte de órdenes, cambiamos el título.
+    if (esConsolidadoReal.value) {
+        return "MEZCLA MULTIPLE";
+    }
+
     let crudo = props.form?.productoNombre || props.producto?.nombre || '';
     crudo = crudo.trim();
     const upper = crudo.toUpperCase();
@@ -163,6 +179,17 @@ const observacionLimpia = computed(() => {
     if (!props.form?.observacion) return '-';
     let obs = props.form.observacion.replace(/\[LOTE: HC-[^\]]+\]/g, '').trim();
     return obs;
+});
+
+// 🛑 DEBUGGING POR CONSOLA 🛑
+onMounted(() => {
+    console.log("=====================================");
+    console.log("🛠️ INICIANDO DEBUG DE HOJA DE CARGA");
+    console.log("1. Cliente de la Orden:", props.cliente);
+    console.log("2. Catálogo Maestro (Total de items):", props.materiasPrimas?.length);
+    console.log("3. Catálogo Maestro (Datos crudos):", props.materiasPrimas);
+    console.log("4. Receta que le llega a la hoja:", props.receta);
+    console.log("=====================================");
 });
 </script>
 
@@ -254,8 +281,8 @@ const observacionLimpia = computed(() => {
                         <tr>
                             <td style="font-weight: 600;">
                                 {{ r.nombreInsumo || r.nombreMateriaPrima }}
-                                <span v-if="!esConsolidadoReal && getOrigenMaterial(r)" style="font-size: 0.85em; font-style: italic; color: #555; margin-left: 5px;">
-                                    {{ getOrigenMaterial(r) }}
+                                <span v-if="!esConsolidadoReal && obtenerEtiquetaOrigen(r)" style="font-size: 0.85em; font-style: italic; color: #555; margin-left: 5px;">
+                                    {{ obtenerEtiquetaOrigen(r) }}
                                 </span>
                             </td>
                             <td style="text-align:center; vertical-align: middle;" v-if="!esConsolidadoReal">
@@ -267,12 +294,12 @@ const observacionLimpia = computed(() => {
                                 </div>
                             </td>
                             <td style="text-align:right; font-size: 1.1em;">
-                                <strong v-if="r.esEstearato" style="color: #2980b9;">
-                                    {{ r.kilosFijos }} kg
+                                <strong v-if="r.esEstearato || (r.nombreInsumo || '').toUpperCase().includes('ESTEARATO')" style="color: #2980b9;">
+                                    {{ esConsolidadoReal ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(3) : (r.kilosFijos || 0) }} kg
                                 </strong>
                                 <strong v-else>
                                     {{ esConsolidadoReal 
-                                        ? parseFloat(r.cantidadKilos || r.cantidad || 0).toFixed(3) 
+                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.cantidad || 0).toFixed(3) 
                                         : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(3) 
                                     }} kg
                                 </strong>
