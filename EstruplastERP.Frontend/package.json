@@ -1,6 +1,6 @@
 {
   "name": "estruplasterp-frontend",
-  "version": "2.9.6",
+  "version": "2.9.7",
   "private": true,
   "type": "module",
   "engines": {
@@ -22,6 +22,7 @@
     "chart.js": "^4.5.1",
     "dayjs": "^1.11.19",
     "html2pdf.js": "^0.14.0",
+    "jsbarcode": "^3.12.3",
     "pinia": "^3.0.4",
     "vue": "^3.5.25",
     "vue-chartjs": "^5.3.3",

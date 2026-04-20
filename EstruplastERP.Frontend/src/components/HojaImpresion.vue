@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import JsBarcode from 'jsbarcode';
 
 const logoImg = new URL('../assets/estruplast-logo.png', import.meta.url).href;
 
@@ -30,6 +31,36 @@ const codigoLoteVisible = computed(() => {
     const match = props.form.observacion.match(/\[LOTE: (HC-[^\]]+)\]/);
     return match ? match[1] : props.form?.id;
 });
+
+// Solo definimos QUÉ texto va en el código
+const valorCodigoBarra = computed(() => {
+    if (esConsolidadoReal.value) {
+        if (!codigoLoteVisible.value) return '';
+        return `LOTE-${codigoLoteVisible.value}`;
+    }
+    if (!props.form?.id) return ''; 
+    return `OP-${props.form?.id}`;
+});
+
+// 🚀 LA SOLUCIÓN DEFINITIVA: Función sincrónica directa
+const generarCodigoDirecto = (texto: string) => {
+    if (!texto || texto.includes('undefined')) return '';
+    try {
+        const canvas = document.createElement("canvas");
+        JsBarcode(canvas, texto, {
+            format: "CODE128",
+            displayValue: true, 
+            fontSize: 14,
+            height: 40, 
+            width: 1.5, 
+            margin: 0
+        });
+        return canvas.toDataURL("image/png");
+    } catch (error) {
+        console.error("Fallo JsBarcode:", error);
+        return '';
+    }
+};
 
 const cantidadCopias = computed(() => props.ocultarFormula ? 2 : 1);
 
@@ -143,13 +174,11 @@ const obtenerEtiquetaOrigen = (itemReceta: any) => {
     return '(MATERIAL PRESTADO/TERCERO)';
 };
 
-// Redireccionamos getOrigenMaterial a la función estricta para evitar duplicidad
 const getOrigenMaterial = (r: any) => obtenerEtiquetaOrigen(r);
 
 const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 const tituloLimpioParaPDF = computed(() => {
-    // 👇 Si es un rejunte de órdenes, cambiamos el título.
     if (esConsolidadoReal.value) {
         return "MEZCLA MULTIPLE";
     }
@@ -180,17 +209,6 @@ const observacionLimpia = computed(() => {
     let obs = props.form.observacion.replace(/\[LOTE: HC-[^\]]+\]/g, '').trim();
     return obs;
 });
-
-// 🛑 DEBUGGING POR CONSOLA 🛑
-onMounted(() => {
-    console.log("=====================================");
-    console.log("🛠️ INICIANDO DEBUG DE HOJA DE CARGA");
-    console.log("1. Cliente de la Orden:", props.cliente);
-    console.log("2. Catálogo Maestro (Total de items):", props.materiasPrimas?.length);
-    console.log("3. Catálogo Maestro (Datos crudos):", props.materiasPrimas);
-    console.log("4. Receta que le llega a la hoja:", props.receta);
-    console.log("=====================================");
-});
 </script>
 
 <template>
@@ -201,6 +219,7 @@ onMounted(() => {
 
         <div class="header-pdf">
             <div class="logo-area"><img :src="logoImg" class="logo-central" /></div>
+            
             <div class="datos-orden">
                 <h3>{{ esConsolidadoReal ? 'HOJA DE CARGA MÚLTIPLE' : (ocultarFormula ? 'ORDEN DE PRODUCCIÓN' : 'HOJA DE CARGA') }}</h3>
                 
@@ -343,7 +362,18 @@ onMounted(() => {
                 <div class="opcion-firma"><div class="box-firma"></div> Saavedra/Ayala</div>
                 <div class="opcion-firma" v-if="!ocultarFormula"><div class="box-firma"></div> Marcori</div>
             </div>
-            <div class="linea-firma-pdf">Firma Responsable Calidad</div>
+            
+            <div class="caja-firma-responsable">
+                <div class="linea-firma-pdf">Firma Responsable Calidad</div>
+            </div>
+
+            <div class="barcode-impresion">
+                <img 
+                    v-if="valorCodigoBarra && !valorCodigoBarra.includes('undefined')" 
+                    :src="generarCodigoDirecto(valorCodigoBarra)" 
+                    alt="Código de Barras" 
+                />
+            </div>
         </div>
         <div v-if="cantidadCopias === 2 && n === 1" class="linea-corte-pdf"><span>✂️ CORTAR AQUÍ</span></div>
     </div>
@@ -380,11 +410,19 @@ onMounted(() => {
 .mitad-pdf { flex: 1; }
 .recuadro-gigante-pdf { border: 2px solid black; height: 35px; font-size: 20px; display: flex; align-items: center; justify-content: center; margin-top: 2px; font-weight: 900; overflow: hidden; white-space: nowrap; }
 .texto-lote-pdf { font-size: 14px; }
-.pie-firma-pdf { margin-top: auto; padding-top: 30px; display: flex; justify-content: space-around; align-items: flex-end; }
-.caja-firmas-operarios { width: 40%; display: flex; flex-direction: column; gap: 8px; }
+
+/* ESTILOS DEL PIE CON EL CÓDIGO DE BARRAS */
+.pie-firma-pdf { margin-top: auto; padding-top: 15px; display: flex; justify-content: space-between; align-items: flex-end; }
+.caja-firmas-operarios { width: 33%; display: flex; flex-direction: column; gap: 8px; }
 .opcion-firma { display: flex; align-items: center; font-size: 12px; font-weight: bold; }
 .box-firma { width: 16px; height: 16px; border: 2px solid black; margin-right: 8px; display: inline-block; background-color: white; }
-.linea-firma-pdf { border-top: 2px solid black; width: 40%; text-align: center; font-size: 11px; padding-top: 2px; font-weight: bold; margin-bottom: 5px; }
+
+.caja-firma-responsable { width: 33%; display: flex; justify-content: center; padding-bottom: 5px; }
+.linea-firma-pdf { border-top: 2px solid black; width: 100%; text-align: center; font-size: 11px; padding-top: 2px; font-weight: bold; }
+
+.barcode-impresion { width: 33%; display: flex; justify-content: flex-end; align-items: flex-end; }
+.barcode-impresion img { max-height: 55px; max-width: 100%; object-fit: contain; }
+
 .marca-agua { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 50px; color: rgba(0,0,0,0.03); font-weight: 900; border: 5px solid rgba(0,0,0,0.03); padding: 10px 40px; border-radius: 20px; z-index: 0; pointer-events: none; }
 .linea-corte-pdf { position: absolute; bottom: -12px; left: 0; width: 100%; text-align: center; font-size: 10px; color: #999; z-index: 10; }
 .linea-corte-pdf span { background: white; padding: 0 10px; }

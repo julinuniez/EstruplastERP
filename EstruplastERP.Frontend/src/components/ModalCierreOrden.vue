@@ -13,6 +13,9 @@ const emit = defineEmits(['close', 'confirmar'])
 const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
 
 const kilosReales = ref<number>(0)
+// 🚀 NUEVA VARIABLE: Guarda la fecha seleccionada en el frontend
+const fechaCierreManual = ref<string>(new Date().toISOString().slice(0, 10))
+
 const consumosBase = ref<{ materiaPrimaId: number, nombre: string, teorico: number, real: number, stockActual: number, clienteId?: number }[]>([])
 
 const formCierre = ref({
@@ -43,6 +46,9 @@ watch(() => props.visible, (isOpen) => {
     formCierre.value.kilosDesperdicio = props.orden.desperdicio || 0;
     formCierre.value.observacionCierre = '';
     formCierre.value.adiciones = [];
+    
+    // Resetea la fecha a HOY cada vez que se abre el modal
+    fechaCierreManual.value = new Date().toISOString().slice(0, 10);
 
     if (props.orden.consumos) {
       consumosBase.value = props.orden.consumos.map((c: any) => {
@@ -131,7 +137,8 @@ const confirmarCierre = async () => {
       kilosProducidosReales: kilosReales.value,
       desperdicioReal: formCierre.value.kilosDesperdicio,
       observacion: formCierre.value.observacionCierre, 
-      consumosReales: todosLosConsumos
+      consumosReales: todosLosConsumos,
+      fechaCierre: fechaCierreManual.value // 👈 Enviamos la fecha seleccionada
     };
 
     await axios.post(`${apiUrl}/Ordenes/confirmar/${props.orden.id}`, payload, {
@@ -157,15 +164,26 @@ const confirmarCierre = async () => {
         <div class="info-bar">
           <span>📦 <strong>Producto:</strong> {{ orden.nombreProducto || orden.producto }}</span>
           <span>👤 <strong>Cliente:</strong> {{ orden.clienteNombre }}</span>
-          <span>📅 <strong>Fecha:</strong> {{ orden.fecha ? new Date(orden.fecha).toLocaleDateString() : orden.fechaCreacion }}</span>
+          <span>📅 <strong>Creada:</strong> {{ orden.fecha ? new Date(orden.fecha).toLocaleDateString() : orden.fechaCreacion }}</span>
         </div>
-        <div class="seccion box-resultado">
-          <h4>✅ Producción Final (Bobina)</h4>
-          <div class="input-group">
-            <label>Total Kilos Fabricados:</label>
-            <input type="number" v-model="kilosReales" class="input-success" min="0" step="0.1">
+        
+        <div class="seccion box-resultado box-flex-header">
+          <div>
+            <h4>✅ Producción Final (Bobina)</h4>
+            <div class="input-group">
+              <label>Total Kilos Fabricados:</label>
+              <input type="number" v-model="kilosReales" class="input-success" min="0" step="0.1">
+            </div>
+          </div>
+          <div class="box-fecha-cierre">
+            <h4>⏱️ Fecha Real de Producción</h4>
+            <div class="input-group">
+              <label>Finalizó el:</label>
+              <input type="date" v-model="fechaCierreManual" class="input-date">
+            </div>
           </div>
         </div>
+
         <div class="seccion" v-if="consumosBase.length > 0">
           <h4>📋 Materiales de la Receta</h4>
           <div class="tabla-container">
@@ -278,11 +296,14 @@ td { padding: 8px; border-bottom: 1px solid #f1f1f1; }
 .input-warning { border: 1px solid #f57c00; font-weight: bold; color: #e65100; }
 .input-group { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
 .box-resultado { background: #e8f5e9; padding: 15px; border-radius: 6px; border: 1px solid #c8e6c9; margin-bottom: 20px; }
+.box-flex-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; }
+.box-fecha-cierre { background: #fff; padding: 10px 15px; border-radius: 6px; border: 1px dashed #4caf50; }
 .input-success { border: 1px solid #4caf50; font-weight: bold; color: #2e7d32; font-size: 1.1em; }
+.input-date { border: 1px solid #3498db; font-weight: bold; color: #2c3e50; }
 .badge-alerta { background: #e74c3c; color: white; padding: 3px 6px; border-radius: 4px; font-size: 0.8em; }
 .badge-cliente { background-color: #95a5a6; color: white; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; text-transform: uppercase; margin-right: 5px; }
 .modal-footer { padding: 15px 20px; background: #f8f9fa; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 10px; border-radius: 0 0 8px 8px; }
 .btn-cancelar { padding: 10px 20px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer; }
 .btn-confirmar { padding: 10px 25px; border: none; background: #2c3e50; color: white; border-radius: 4px; cursor: pointer; font-weight: bold; }
-@media (max-width: 850px) { .modal-content { width: 98%; } .form-row-add { flex-direction: column; align-items: stretch; } .seccion-flex { flex-direction: column; } }
+@media (max-width: 850px) { .modal-content { width: 98%; } .form-row-add { flex-direction: column; align-items: stretch; } .seccion-flex, .box-flex-header { flex-direction: column; } .box-fecha-cierre { width: 100%; } }
 </style>

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace EstruplastERP.Api.Dtos
 {
@@ -12,7 +13,10 @@ namespace EstruplastERP.Api.Dtos
     {
         public decimal KilosProducidosReales { get; set; }
         public decimal DesperdicioReal { get; set; }
-        public string Observacion { get; set; } // 👈 Agregamos esto
+        public string Observacion { get; set; } 
+
+        [JsonPropertyName("fechaCierre")]
+        public DateTime? FechaCierre { get; set; }
         public List<ConsumoRealDto> ConsumosReales { get; set; } = new List<ConsumoRealDto>();
     }
 }

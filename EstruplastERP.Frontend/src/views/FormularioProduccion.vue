@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import HojaImpresion from '../components/HojaImpresion.vue'
 import ListaProduccion from '../components/ListaProduccion.vue'
 import { ProduccionAPI } from '@/services/produccionService'
@@ -60,7 +60,7 @@ const form = ref({
     largo: 0, ancho: 0, espesor: 0, color: '' as string,
     conBrillo: false, 
     tipoBrillo: '777',
-    porcBrillo: 2.00, 
+    porcBrillo: 20.00, 
     llevaFilm: false, tipoCorona: 'Ninguno',
     esGofrado: false,
     conEstearato: false, 
@@ -271,7 +271,8 @@ const cargarLotesFazonSeguro = async () => {
     }
     const prodFinal = productos.value.find(p => p.id === Number(form.value.productoTerminadoId));
     if (prodFinal) {
-        await actualizarRecetaFazonConCliente(form.value.clienteId, prodFinal);
+        // 🚀 FORZAMOS a que pase como Number
+        await actualizarRecetaFazonConCliente(Number(form.value.clienteId), prodFinal);
     }
 };
 
@@ -292,6 +293,7 @@ watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
     
     if (nuevoProdId && !imprimiendoHistorial.value) {
         await CargarDatosProductos(Number(nuevoProdId)); 
+        await nextTick();
         await cargarLotesFazonSeguro();
     } else if (!nuevoProdId) {
         recetaDinamica.value = [];

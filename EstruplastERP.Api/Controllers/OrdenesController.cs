@@ -234,6 +234,10 @@ namespace EstruplastERP.Api.Controllers
                 if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
                 if (orden.Estado == EstadoOrden.Finalizada) return BadRequest(new { mensaje = "Esta orden ya fue finalizada." });
 
+                // 🚀 NUEVO: Capturamos la fecha que manda Vue. Si por algún motivo llega vacía, usamos Ahora.
+                DateTime fechaCierreReal = dto.FechaCierre ?? DateTime.Now;
+                System.Diagnostics.Debug.WriteLine($"📅 Fecha recibida: {dto.FechaCierre} - Usando: {fechaCierreReal}");
+
                 var consumosAgrupados = dto.ConsumosReales
                     .GroupBy(c => c.MateriaPrimaId)
                     .Select(g => new { MateriaPrimaId = g.Key, TotalKilos = g.Sum(c => c.CantidadKilosReales) })
@@ -297,7 +301,7 @@ namespace EstruplastERP.Api.Controllers
 
                             _context.Movimientos.Add(new Movimiento
                             {
-                                Fecha = DateTime.Now,
+                                Fecha = fechaCierreReal, // 🚀 CAMBIO: Usamos la fecha real en el movimiento de stock
                                 ProductoId = mp.Id,
                                 Cantidad = -consumoUsuario.CantidadKilosReales,
                                 TipoMovimiento = "CONSUMO_PRODUCCION",
@@ -316,7 +320,7 @@ namespace EstruplastERP.Api.Controllers
 
                     _context.Movimientos.Add(new Movimiento
                     {
-                        Fecha = DateTime.Now,
+                        Fecha = fechaCierreReal, // 🚀 CAMBIO: Usamos la fecha real en el ingreso del producto terminado
                         ProductoId = orden.ProductoId,
                         Cantidad = dto.KilosProducidosReales,
                         TipoMovimiento = "PRODUCCION_TERMINADA",
@@ -326,7 +330,7 @@ namespace EstruplastERP.Api.Controllers
                 }
 
                 orden.Estado = EstadoOrden.Finalizada;
-                orden.FechaFin = DateTime.Now;
+                orden.FechaFin = fechaCierreReal; // 🚀 CAMBIO: Guardamos la fecha correcta en la Orden
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
