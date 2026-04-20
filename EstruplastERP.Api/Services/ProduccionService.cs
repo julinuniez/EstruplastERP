@@ -18,6 +18,20 @@ namespace EstruplastERP.Api.Services
             _context = context;
         }
 
+        private decimal AplicarToleranciaStock(decimal cantidadPedida, decimal stockActual)
+        {
+            if (cantidadPedida < 100m) return cantidadPedida;
+
+            decimal diferencia = Math.Abs(cantidadPedida - stockActual);
+
+            if (diferencia <= 0.3m)
+            {
+                return stockActual;
+            }
+
+            return cantidadPedida;
+        }
+
         private async Task<List<DetalleConsumoDto>> ExplosionarRecetasAsync(List<DetalleConsumoDto> consumosOriginales)
         {
             var consumosFinales = new List<DetalleConsumoDto>();
@@ -137,7 +151,10 @@ namespace EstruplastERP.Api.Services
 
                     var stockLibre = mp.StockActual - retenidoPorOtras;
 
-                    if (stockLibre < item.CantidadKilos)
+                    // APLICAMOS TOLERANCIA TAMBIÉN EN LA VERIFICACIÓN
+                    decimal cantidadAjustada = AplicarToleranciaStock(item.CantidadKilos, stockLibre);
+
+                    if (stockLibre < cantidadAjustada)
                     {
                         return new { posible = false, mensaje = $"❌ Falta {mp.Nombre}. Req: {item.CantidadKilos:N2} - Libre: {stockLibre:N2}" };
                     }
@@ -201,10 +218,17 @@ namespace EstruplastERP.Api.Services
                 {
                     foreach (var item in consumosCalculados)
                     {
+                        // BUSCAMOS EL STOCK ACTUAL PARA EL REDONDEO
+                        var mp = await _context.Productos.FindAsync(item.MateriaPrimaId);
+                        decimal stockActualMP = mp?.StockActual ?? 0;
+
+                        // APLICAMOS LA TRABA DE TOLERANCIA
+                        decimal cantidadFinal = AplicarToleranciaStock(item.CantidadKilos, stockActualMP);
+
                         nuevaOrden.Consumos.Add(new ConsumoOrden
                         {
                             MateriaPrimaId = item.MateriaPrimaId,
-                            CantidadKilos = item.CantidadKilos
+                            CantidadKilos = cantidadFinal
                         });
                     }
                 }

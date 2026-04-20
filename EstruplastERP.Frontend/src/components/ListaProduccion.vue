@@ -42,6 +42,18 @@ const error = ref('')
 const filtroEstado = ref('Pendientes'); 
 const filtroLibre = ref(''); 
 
+const categoriaActiva = ref('TODOS');
+const categoriasFiltro = [
+  { id: 'TODOS', label: 'Todas las Órdenes' },
+  { id: 'PAI', label: 'PAI' },
+  { id: 'A.I. BICAPA', label: 'A.I. Bicapa' },
+  { id: 'TRICAPA', label: 'Tricapa' },
+  { id: 'FREON', label: 'Resist. Freón' },
+  { id: 'ABS', label: 'ABS' },
+  { id: 'PEAD', label: 'PEAD' },
+  { id: 'PP', label: 'PP' }
+];
+
 const fechaActual = new Date();
 const mesSeleccionado = ref(fechaActual.getMonth() + 1);
 const anioSeleccionado = ref(fechaActual.getFullYear());
@@ -88,7 +100,6 @@ const abrirModalGrupo = (codigo: string | null | undefined) => {
     mostrarModalGrupo.value = true;
 };
 
-// Limpia los códigos de sistema para mostrar solo la nota humana
 const getObservacionLimpia = (obs: string | undefined) => {
     if (!obs) return '';
     let limpia = obs.replace(/\[Grupo: HC-[^\]]+\]/g, '')
@@ -126,7 +137,35 @@ const produccionesFiltradas = computed(() => {
                               prod.includes(busqueda) || obs.includes(busqueda);
         }
 
-        return pasaEstado && pasaFiltroLibre;
+        let pasaCategoria = true;
+        if (categoriaActiva.value !== 'TODOS') {
+            const nombreProd = (item.producto || '').toUpperCase();
+            switch (categoriaActiva.value) {
+                case 'PAI':
+                    pasaCategoria = nombreProd.includes('A.I.') && (nombreProd.includes('FINO') || nombreProd.includes('GRUESO'));
+                    break;
+                case 'A.I. BICAPA':
+                    pasaCategoria = nombreProd.includes('A.I.') && nombreProd.includes('BICAPA');
+                    break;
+                case 'TRICAPA':
+                    pasaCategoria = nombreProd.includes('TRICAPA');
+                    break;
+                case 'FREON':
+                    pasaCategoria = nombreProd.includes('FREON') || nombreProd.includes('FREÓN');
+                    break;
+                case 'ABS':
+                    pasaCategoria = nombreProd.includes('ABS');
+                    break;
+                case 'PEAD':
+                    pasaCategoria = nombreProd.includes('PEAD');
+                    break;
+                case 'PP':
+                    pasaCategoria = nombreProd.includes('PP') || nombreProd.includes('POLIPROPILENO');
+                    break;
+            }
+        }
+
+        return pasaEstado && pasaFiltroLibre && pasaCategoria;
     });
 });
 
@@ -251,7 +290,6 @@ async function ejecutarCargaConsolidada() {
     const payload = await procesarConsolidacion(ordenesAImprimir);
     
     if (payload) {
-        // 👇 Usamos "as any" para que TS no valide las propiedades de este objeto
         (payload as any).materiasPrimasBase = materiasPrimas.value;
         emit('imprimir-carga-consolidada', payload);
         
@@ -310,6 +348,17 @@ defineExpose({ cargarHistorial })
                 {{ cargando ? '⏳' : '🔄' }}
             </button>
         </div>
+    </div>
+
+    <div class="filtros-produccion">
+        <button 
+            v-for="cat in categoriasFiltro" 
+            :key="cat.id"
+            @click="categoriaActiva = cat.id"
+            :class="['btn-filtro', { 'activo': categoriaActiva === cat.id }]"
+        >
+            {{ cat.label }}
+        </button>
     </div>
 
     <div v-if="error" class="error-msg">{{ error }}</div>
@@ -450,6 +499,11 @@ defineExpose({ cargarHistorial })
 .grupo-filtro-tiempo label { font-weight: bold; color: #475569; font-size: 0.9rem; margin: 0; }
 .select-mes, .select-anio { padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 500; color: #1e293b; outline: none; background: white; cursor: pointer; }
 .select-mes { min-width: 110px; }
+
+.filtros-produccion { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+.btn-filtro { background-color: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease; }
+.btn-filtro:hover { background-color: #e2e8f0; color: #334155; }
+.btn-filtro.activo { background-color: #3b82f6; color: white; border-color: #3b82f6; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3); }
 
 .tabla-scroll { overflow-y: auto; flex: 1; margin-bottom: 55px; border-radius: 6px; border: 1px solid #e2e8f0; }
 .tabla-custom { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; }

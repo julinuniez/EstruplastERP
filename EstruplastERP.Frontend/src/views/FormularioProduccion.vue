@@ -466,13 +466,14 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 </div>
             </div>
             
-            <label>Cliente / Producto:</label>
-            <select v-model="form.clienteId" style="margin-bottom:5px">
-                <option disabled value="">Cliente...</option>
-                <option v-for="c in clientes" :key="c.id" :value="c.id">
-                    {{c.razonSocial}} {{ c.esFazon ? '' : '(Venta)' }}
-                </option>
-            </select>
+            <label>Cliente</label>
+<select v-model="form.clienteId" style="margin-bottom:5px">
+    <option disabled value="">Seleccione un cliente...</option>
+    <option :value="1">ESTRUPLAST</option>
+    <option v-for="c in clientes" :key="c.id" :value="c.id">
+        {{c.razonSocial}} {{ c.esFazon ? '' : '(Venta)' }}
+    </option>
+</select>
 
             <label style="color:#f39c12;">📂 N° Pedido Cliente (OC):</label>
             <input type="text" v-model="form.numeroPedidoCliente" placeholder="Ej: OC-4455" style="font-weight:bold; border: 1px solid #f39c12; margin-bottom: 5px;" />

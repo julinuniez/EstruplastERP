@@ -78,20 +78,15 @@ const movimientosFiltrados = computed(() => {
                           tipo.includes('INGRESO') || 
                           tipo.includes('RECEPCIÓN');
                           
-        // Verifica si es un ajuste manual
         const esAjuste = tipo.includes('AJUSTE');
-
-        // Solo lo dejamos pasar si es ingreso Y NO es un ajuste
         return esIngreso && !esAjuste;
     });
 
-    // 2.  TRABA: Ocultar todo lo que sea MOLIDO
     lista = lista.filter(m => {
         const nombreProducto = (m.producto || '').toUpperCase();
         return !nombreProducto.includes('MOLIDO'); 
     });
 
-    // 3. Filtro de Búsqueda de texto
     if (filtroBusqueda.value) {
         const busq = filtroBusqueda.value.toUpperCase();
         lista = lista.filter(m => 
@@ -101,7 +96,6 @@ const movimientosFiltrados = computed(() => {
         );
     }
 
-    // 4. Filtro Mensual ('YYYY-MM')
     if (filtroMes.value) {
         lista = lista.filter(m => {
             if (!m.fecha) return false;
@@ -116,7 +110,6 @@ const movimientosFiltrados = computed(() => {
     });
 });
 
-// Lógica de Paginación
 const totalPaginas = computed(() => Math.ceil(movimientosFiltrados.value.length / registrosPorPagina) || 1);
 
 const movimientosPaginados = computed(() => {
