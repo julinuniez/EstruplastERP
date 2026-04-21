@@ -4,17 +4,13 @@ import type { Ref } from 'vue';
 export function useFazonProduccion(
     recetaDinamica: Ref<any[]>,
     listaInventarioCompleto: Ref<any[]>,
-    listaTodasMateriasPrimas: Ref<any[]>, // 👈 ACÁ AGREGAMOS LA LISTA FALTANTE
+    listaTodasMateriasPrimas: Ref<any[]>,
     listaLotesCliente: Ref<any[]>,
     loteFazonSeleccionadoId: Ref<string | number>,
     stockFazonDetectado: Ref<number | null>,
     clienteTieneFazonActivo: Ref<boolean>,
     balancearBase: () => void
 ) {
-
-    let ultimoClienteProcesado: string | number = '';
-    let ultimoProductoProcesado: string | number = '';
-
     watch(loteFazonSeleccionadoId, (newId) => {
         if (!newId) return;
         const loteIdStr = String(newId);
@@ -77,13 +73,7 @@ export function useFazonProduccion(
     async function actualizarRecetaFazonConCliente(clienteId: string | number, producto: any) {
         if (!clienteId || !producto) return;
 
-        if (ultimoClienteProcesado === clienteId && ultimoProductoProcesado === producto.id) {
-            return;
-        }
-
-        ultimoClienteProcesado = clienteId;
-        ultimoProductoProcesado = producto.id;
-
+        // 🚀 Limpiamos el caché atascado
         listaLotesCliente.value = [];
 
         const esFazon = producto.esFazon || String(producto.nombre).toUpperCase().includes('FAZON') || String(producto.nombre).toUpperCase().includes('SERVICIO');
@@ -115,7 +105,6 @@ export function useFazonProduccion(
             const tieneIdValido = r.materiaPrimaId > 0;
             const noEsAlerta = !String(r.nombreInsumo).includes('CAJA VERDE') && !String(r.nombreInsumo).includes('ELIJA');
             
-            // 👈 ACÁ ESTÁN LAS CORRECCIONES DE ANY
             const mpMaestro = listaInventarioCompleto.value.find((m: any) => m.id === r.materiaPrimaId) || 
                               listaTodasMateriasPrimas.value.find((m: any) => m.id === r.materiaPrimaId);
             
@@ -130,7 +119,6 @@ export function useFazonProduccion(
             loteFazonSeleccionadoId.value = materialYaCargado.materiaPrimaId;
             materialYaCargado.esFazonInput = true; 
             
-            // 👈 ACÁ TAMBIÉN CORREGIMOS EL ANY
             const existeEnCombo = listaLotesCliente.value.find((l: any) => l.id === materialYaCargado.materiaPrimaId);
             if (!existeEnCombo) {
                 const mpPerdida = listaInventarioCompleto.value.find((m: any) => m.id === materialYaCargado.materiaPrimaId) || 

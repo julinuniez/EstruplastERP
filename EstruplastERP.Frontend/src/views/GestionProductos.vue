@@ -8,7 +8,9 @@ import { useFiltrosInventario, detectarTipo } from '@/composables/useFiltrosInve
 import { useImportacionInventario } from '@/composables/useImportacionInventario';
 import { useModalesInventario } from '@/composables/useModalesInventario';
 import ModalHistorialStock from '@/components/ModalHistorialStock.vue';
-import ModalAjusteStock from '@/components/ModalAjusteStock.vue'; // 👈 NUEVO COMPONENTE
+import ModalAjusteStock from '@/components/ModalAjusteStock.vue'; 
+// 👇 NUEVA IMPORTACIÓN PARA EXPORTAR EXCEL
+import { exportarInventarioExcel } from '@/composables/useExportacionInventario';
 
 const router = useRouter();
 const maestrosStore = useMaestrosStore();
@@ -31,9 +33,11 @@ const mostrarModalHistorial = ref(false);
 const productoIdSeleccionado = ref<number | null>(null);
 const productoNombreSeleccionado = ref('');
 
-// 👇 NUEVAS VARIABLES PARA EL AJUSTE MANUAL
 const mostrarModalAjuste = ref(false);
 const productoParaAjustar = ref<any>(null);
+
+// 👇 NUEVA VARIABLE PARA EL ESTADO DE EXPORTACIÓN
+const exportando = ref(false);
 
 watch(clienteFiltro, () => { materialFiltro.value = ''; });
 watch(tabActual, () => { subTabMP.value = 'VIRGEN'; });
@@ -67,7 +71,6 @@ const abrirKardex = (producto: any) => {
     mostrarModalHistorial.value = true;
 };
 
-// 👇 NUEVAS FUNCIONES PARA EL AJUSTE MANUAL
 const abrirModalAjuste = (p: any) => {
     productoParaAjustar.value = p;
     mostrarModalAjuste.value = true;
@@ -75,7 +78,7 @@ const abrirModalAjuste = (p: any) => {
 
 const onAjusteConfirmado = () => {
     mostrarModalAjuste.value = false;
-    cargarDatos(true); // Recarga los datos actualizados
+    cargarDatos(true); 
 };
 
 async function cargarDatos(forzar = false) {
@@ -97,6 +100,24 @@ const abrirPantallazoGlobal = (palabraClave: string = 'TUTI') => {
     resumenGlobal.value.libre = resumenGlobal.value.fisico - resumenGlobal.value.reservado;
 
     mostrarModalGlobal.value = true;
+};
+
+// 👇 NUEVA FUNCIÓN PARA GENERAR EL EXCEL
+const descargarAuditoria = async () => {
+    if (!listaProductos.value || listaProductos.value.length === 0) {
+        alert("No hay datos de inventario para exportar.");
+        return;
+    }
+    
+    try {
+        exportando.value = true;
+        await exportarInventarioExcel(listaProductos.value, listaClientes.value);
+    } catch (e) {
+        console.error("Error al generar Excel:", e);
+        alert("Hubo un problema al crear el archivo Excel.");
+    } finally {
+        exportando.value = false;
+    }
 };
 
 const verMolidoAgrupado = ref(true);
@@ -178,6 +199,15 @@ onMounted(() => {
             </div>
             
             <div class="acciones-header">
+                <button 
+                    @click="descargarAuditoria" 
+                    :disabled="exportando || cargando"
+                    style="background-color: #27ae60; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-right: 10px;"
+                >
+                    <span v-if="exportando">⏳ Generando...</span>
+                    <span v-else>📊 Planilla Conteo</span>
+                </button>
+
                 <button class="btn-nueva-mp" @click="mostrarModalNuevaMP = true">➕ Crear Insumo</button>
                 <input type="file" ref="fileInput" class="hidden-input" accept=".csv, .xlsx" @change="subirArchivoFlexxus" />
                 <div class="import-group">

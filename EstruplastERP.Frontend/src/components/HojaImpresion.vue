@@ -314,12 +314,15 @@ const observacionLimpia = computed(() => {
                             </td>
                             <td style="text-align:right; font-size: 1.1em;">
                                 <strong v-if="r.esEstearato || (r.nombreInsumo || '').toUpperCase().includes('ESTEARATO')" style="color: #2980b9;">
-                                    {{ esConsolidadoReal ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(3) : (r.kilosFijos || 0) }} kg
+                                    {{ esConsolidadoReal 
+                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.cantidad || 0).toFixed(2) 
+                                        : parseFloat(r.kilosFijos || r.cantidad || 0).toFixed(2) 
+                                    }} kg
                                 </strong>
                                 <strong v-else>
                                     {{ esConsolidadoReal 
-                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.cantidad || 0).toFixed(3) 
-                                        : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(3) 
+                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.cantidad || 0).toFixed(2) 
+                                        : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2) 
                                     }} kg
                                 </strong>
                             </td>
@@ -355,6 +358,24 @@ const observacionLimpia = computed(() => {
                 <div class="recuadro-gigante-pdf texto-lote-pdf">{{ observacionLimpia }}</div>
             </div>
         </div>
+
+        <div v-if="!ocultarFormula" class="seccion-totales-manuales">
+            <div class="titulo-totales-manuales">REGISTRO DE CARGA REAL (KG)</div>
+            <div class="contenedor-columnas-totales">
+                <div class="columna-total">
+                    <span class="etiqueta-manual">TOTAL MOLIDO:</span>
+                    <div class="linea-llenado"></div>
+                </div>
+                <div class="columna-total">
+                    <span class="etiqueta-manual">TOTAL MASTER:</span>
+                    <div class="linea-llenado"></div>
+                </div>
+                <div class="columna-total">
+                    <span class="etiqueta-manual">TOTAL VIRGEN:</span>
+                    <div class="linea-llenado"></div>
+                </div>
+            </div>
+        </div>
         
         <div class="pie-firma-pdf">
             <div class="caja-firmas-operarios">
@@ -369,9 +390,9 @@ const observacionLimpia = computed(() => {
 
             <div class="barcode-impresion">
                 <img 
-                    v-if="valorCodigoBarra && !valorCodigoBarra.includes('undefined')" 
+                    v-if="ocultarFormula && valorCodigoBarra && !valorCodigoBarra.includes('undefined')" 
                     :src="generarCodigoDirecto(valorCodigoBarra)" 
-                    alt="Código de Barras" 
+                    alt="Código de Barras OP" 
                 />
             </div>
         </div>
@@ -422,6 +443,47 @@ const observacionLimpia = computed(() => {
 
 .barcode-impresion { width: 33%; display: flex; justify-content: flex-end; align-items: flex-end; }
 .barcode-impresion img { max-height: 55px; max-width: 100%; object-fit: contain; }
+
+/* ESTILOS NUEVOS PARA TOTALES MANUALES */
+.seccion-totales-manuales {
+    margin-top: 10px;
+    border: 2px solid black;
+    background-color: #fff;
+}
+
+.titulo-totales-manuales {
+    background-color: #e0e0e0;
+    font-size: 9px;
+    font-weight: 900;
+    text-align: center;
+    border-bottom: 2px solid black;
+    padding: 2px;
+}
+
+.contenedor-columnas-totales {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 5px;
+}
+
+.columna-total {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.etiqueta-manual {
+    font-size: 11px;
+    font-weight: 900;
+}
+
+.linea-llenado {
+    width: 80%;
+    border-bottom: 2px solid black;
+    height: 20px;
+}
 
 .marca-agua { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 50px; color: rgba(0,0,0,0.03); font-weight: 900; border: 5px solid rgba(0,0,0,0.03); padding: 10px 40px; border-radius: 20px; z-index: 0; pointer-events: none; }
 .linea-corte-pdf { position: absolute; bottom: -12px; left: 0; width: 100%; text-align: center; font-size: 10px; color: #999; z-index: 10; }

@@ -20,7 +20,7 @@ interface Producto {
 }
 interface Cliente { id: number; razonSocial: string; esFazon?: boolean; }
 interface ItemReceta {
-    id: number | string; cantidad: number; nombreInsumo: string; densidad: number;
+    id: number | string; cantidad: number | string; nombreInsumo: string; densidad: number;
     materiaPrimaId: number; esColor?: boolean; esCarga?: boolean; esBase?: boolean;
     esBrillo?: boolean; esEstearato?: boolean; esUv?: boolean; esCaucho?: boolean;
     esFazonInput?: boolean; materialBase?: string;
@@ -114,32 +114,55 @@ const kilosCalculados = computed(() => {
         const pesoUnaPiezaKg = (mm3 * densidadPT.value) / 1000000;
         k = pesoUnaPiezaKg * form.value.cantidad;
     }
-    return Math.ceil(k);
+    return Number(k.toFixed(2));
 });
 
+// 🚀 1. ESTEARATO PURO Y BRUTO
 const kilosEstearato = computed(() => {
-    const PORCENTAJE_ESTEARATO = 0.0008; 
-    return (kilosCalculados.value * PORCENTAJE_ESTEARATO).toFixed(2);
+    let kilosBase = Number(form.value.kilosTotales);
+    // Si los kilos totales de la hoja dan 0, recae en los calculados
+    if (isNaN(kilosBase) || kilosBase <= 0) {
+        kilosBase = Number(kilosCalculados.value);
+    }
+    return kilosBase * 0.0008; // Matemática exacta
 });
 
+// 🚀 2. VISTA BLINDADA
 const recetaConExtrasParaVista = computed(() => {
+    // A. Filtramos CUALQUIER estearato viejo que haya traído la base de datos (lo ignoramos)
     const recetaLimpia = recetaDinamica.value.filter(r => !(r.nombreInsumo || '').toUpperCase().includes('ESTEARATO'));
-    
+
+    // B. Buscamos el material en el maestro
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
 
-    if (est) {
+    // C. Si la matemática nos dio > 0, inyectamos el nuestro forzado como TEXTO
+    if (est && kilosEstearato.value > 0) {
+        // Obligamos a que el sistema lo vea como String "0.08"
+        const valorClavadoTexto = kilosEstearato.value.toFixed(2);
+        
         recetaLimpia.push({
             id: 'estearato-fijo',
-            materiaPrimaId: est.id, 
+            materiaPrimaId: est.id,
             nombreInsumo: est.nombre,
-            cantidad: 0, 
             densidad: est.pesoEspecifico || 1,
-            esEstearato: true, 
-            kilosFijos: kilosEstearato.value
+            esEstearato: true,
+            cantidad: valorClavadoTexto,     // Mandamos el texto "0.08" a ambas columnas
+            kilosFijos: valorClavadoTexto
         });
     }
 
-    return recetaLimpia;
+    // D. Formateamos TODA LA RECETA convirtiendo las variables a Textos con 2 decimales
+    return recetaLimpia.map(r => {
+        let c = r.cantidad;
+        let k = r.kilosFijos;
+
+        if (c !== undefined && c !== null && c !== "") c = Number(c).toFixed(2);
+        else c = "0.00";
+
+        if (k !== undefined && k !== null && k !== "") k = Number(k).toFixed(2);
+
+        return { ...r, cantidad: c, kilosFijos: k };
+    });
 });
 
 const { 
@@ -262,7 +285,6 @@ watch(mostrarCajaColor, (v) => {
     if (!v) form.value.masterbatchId = '';
 });
 
-// 👇 CENTRALIZACIÓN SEGURA DE LOTES FAZON
 const cargarLotesFazonSeguro = async () => {
     if (!form.value.clienteId || !form.value.productoTerminadoId) {
         listaLotesCliente.value = [];
@@ -271,7 +293,6 @@ const cargarLotesFazonSeguro = async () => {
     }
     const prodFinal = productos.value.find(p => p.id === Number(form.value.productoTerminadoId));
     if (prodFinal) {
-        // 🚀 FORZAMOS a que pase como Number
         await actualizarRecetaFazonConCliente(Number(form.value.clienteId), prodFinal);
     }
 };
@@ -294,11 +315,19 @@ watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
     if (nuevoProdId && !imprimiendoHistorial.value) {
         await CargarDatosProductos(Number(nuevoProdId)); 
         await nextTick();
-        await cargarLotesFazonSeguro();
+        if (listaInventarioCompleto.value && listaInventarioCompleto.value.length > 0) {
+            await cargarLotesFazonSeguro();
+        }
     } else if (!nuevoProdId) {
         recetaDinamica.value = [];
         listaLotesCliente.value = [];
         loteFazonSeleccionadoId.value = '';
+    }
+});
+
+watch(() => listaInventarioCompleto.value?.length, (nuevoLargo) => {
+    if (nuevoLargo && nuevoLargo > 0 && form.value.productoTerminadoId && form.value.clienteId) {
+        cargarLotesFazonSeguro();
     }
 });
 
@@ -316,7 +345,6 @@ watch(
 watch(() => form.value.espesor, (v) => { if (v < 1) form.value.conBrillo = false; });
 watch(() => form.value.conBrillo, (v) => { if (!v) form.value.llevaFilm = false; });
 
-// 👇 WATCH EXPLÍCITO PARA ARREGLAR EL ERROR DEL TEST DE RE-CÁLCULO
 watch(
     [
         () => form.value.largo, 
@@ -328,7 +356,7 @@ watch(
     ], 
     () => {
         if (!form.value.esConsolidado && !imprimiendoHistorial.value) {
-            form.value.kilosTotales = kilosCalculados.value;
+            form.value.kilosTotales = Number(kilosCalculados.value);
         }
     }, 
     { immediate: true }
@@ -392,7 +420,7 @@ const procesarGuardado = async () => {
             id: 0,
             materiaPrimaId: est.id,
             nombreInsumo: est.nombre,
-            cantidad: 0.08, 
+            cantidad: "0.08", 
             densidad: est.pesoEspecifico || 1,
             esEstearato: true
         });

@@ -186,7 +186,7 @@ namespace EstruplastERP.Api.Controllers
                 EsMateriaPrima = producto.EsMateriaPrima,
                 EspesorMinimo = producto.EspesorMinimo ?? 0,
                 EspesorMaximo = producto.EspesorMaximo ?? 0,
-                EsGenerico = true,
+                EsGenerico = producto.EsGenerico,
                 Rubro = producto.Rubro,
                 Receta = formulasFinales.Select(f => new IngredienteDto
                 {
