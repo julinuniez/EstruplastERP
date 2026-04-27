@@ -436,6 +436,64 @@ namespace EstruplastERP.Api.Controllers
             }
         }
 
+        // DTO actualizado con ProveedorId
+        public class CrearMasterbatchDto
+        {
+            public string NombreColor { get; set; }
+            public string CodigoPersonalizado { get; set; }
+            public decimal StockInicial { get; set; }
+            public int? ProveedorId { get; set; } // 🚀 NUEVO
+        }
+
+        [HttpPost("crear-masterbatch")]
+        public async Task<IActionResult> CrearMasterbatchRapido([FromBody] CrearMasterbatchDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.NombreColor))
+                return BadRequest(new { mensaje = "El nombre del color es obligatorio." });
+
+            string sku = string.IsNullOrWhiteSpace(dto.CodigoPersonalizado)
+                ? $"MB-{dto.NombreColor.Substring(0, Math.Min(3, dto.NombreColor.Length)).ToUpper()}-{DateTime.Now.Millisecond}"
+                : dto.CodigoPersonalizado;
+
+            var nuevoMasterbatch = new Producto
+            {
+                Nombre = $"MB {dto.NombreColor}",
+                CodigoSku = sku,
+                EsMateriaPrima = true,
+                EsProductoTerminado = false,
+                EsGenerico = false,
+                EsFazon = false,
+                Rubro = "MASTERBATCH",
+                PesoEspecifico = 1.1m,
+                StockActual = dto.StockInicial,
+                StockMinimo = 0,
+                Activo = true,
+                FechaCreacion = DateTime.Now,
+                ProveedorId = dto.ProveedorId // 🚀 NUEVO: Lo guardamos en la base
+            };
+
+            _context.Productos.Add(nuevoMasterbatch);
+
+            if (dto.StockInicial > 0)
+            {
+                await _context.SaveChangesAsync();
+
+                _context.Movimientos.Add(new Movimiento
+                {
+                    ProductoId = nuevoMasterbatch.Id,
+                    Cantidad = dto.StockInicial,
+                    Fecha = DateTime.Now,
+                    TipoMovimiento = "INGRESO_INICIAL",
+                    Observacion = "Carga rápida de nuevo Masterbatch",
+                   // ProveedorId = dto.ProveedorId // 🚀 Opcional: También atamos el movimiento al proveedor
+                });
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { mensaje = "✅ Color creado exitosamente.", producto = nuevoMasterbatch });
+        }
+
         [HttpPost("reparar-familias-v2")]
         public async Task<IActionResult> RepararFamiliasV2()
         {

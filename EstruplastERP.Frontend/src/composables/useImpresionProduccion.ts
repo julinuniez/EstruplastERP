@@ -145,8 +145,6 @@ export function useImpresionProduccion(
             form.value.llevaFilm = orden.llevaFilm || false;
             form.value.tipoCorona = orden.tipoCorona || 'Ninguno';
             form.value.esGofrado = orden.esGofrado || orden.EsGofrado || false;
-            
-            // 👇 SOLUCIÓN DE COLOR: Inyectamos todas las variables posibles para asegurar que Vue lo pinte
             form.value.color = orden.color || orden.colorTexto || '';
             form.value.colorTexto = orden.colorTexto || orden.color || '';
             form.value.Color = orden.color || '';
@@ -220,7 +218,12 @@ export function useImpresionProduccion(
                 form.value.observacion = orden.observacion || '';
                 form.value.kilosTotales = orden.kilos; 
                 
-                // 👇 REFUERZO DE COLOR PARA LOTES:
+                // 🚀 ESTA ES LA CORRECCIÓN EXACTA
+                form.value.conBrillo = orden.conBrillo || orden.ConBrillo || false;
+                form.value.llevaFilm = orden.llevaFilm || orden.LlevaFilm || false;
+                form.value.tipoCorona = orden.tipoCorona || orden.TipoCorona || 'Ninguno';
+                form.value.esGofrado = orden.esGofrado || orden.EsGofrado || false;
+
                 form.value.color = orden.color || orden.colorTexto || '';
                 form.value.colorTexto = orden.colorTexto || orden.color || '';
                 form.value.Color = orden.color || '';

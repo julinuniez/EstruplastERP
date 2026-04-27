@@ -197,18 +197,52 @@ const tituloLimpioParaPDF = computed(() => {
     return crudo;
 });
 
-const tieneBrillo = computed(() => props.form?.conBrillo === true || props.form?.ConBrillo === true);
-const llevaFilm = computed(() => props.form?.llevaFilm === true || props.form?.LlevaFilm === true);
-const esGofrado = computed(() => props.form?.esGofrado === true || props.form?.EsGofrado === true);
-const tipoCorona = computed(() => {
-    const val = props.form?.tipoCorona || props.form?.TipoCorona;
-    return (val && val.toUpperCase() !== 'NINGUNO') ? val.toUpperCase() : null;
-});
 const observacionLimpia = computed(() => {
     if (!props.form?.observacion) return '-';
     let obs = props.form.observacion.replace(/\[LOTE: HC-[^\]]+\]/g, '').trim();
     return obs;
 });
+
+// 🚀 RADAR A PRUEBA DE BALAS: Detecta booleanos verdaderos, números 1, o textos ("1", "true", "SI")
+const esVerdadero = (valor: any) => {
+    if (valor === true || valor === 1) return true;
+    if (typeof valor === 'string') {
+        const vLimpio = valor.trim().toLowerCase();
+        return vLimpio === 'true' || vLimpio === '1' || vLimpio === 'sí' || vLimpio === 'si';
+    }
+    return false;
+};
+
+const verificarCaracteristica = (propMinuscula: string, propMayuscula: string) => {
+    if (esVerdadero(props.form?.[propMinuscula]) || esVerdadero(props.form?.[propMayuscula])) return true;
+    if (esVerdadero(props.producto?.[propMinuscula]) || esVerdadero(props.producto?.[propMayuscula])) return true;
+    
+    const subOrdenes = props.form?.ordenes || props.form?.pedidos || props.form?.detalles || props.form?.items || [];
+    return subOrdenes.some((o: any) => esVerdadero(o[propMinuscula]) || esVerdadero(o[propMayuscula]));
+};
+
+const tieneBrillo = computed(() => verificarCaracteristica('conBrillo', 'ConBrillo'));
+const llevaFilm = computed(() => verificarCaracteristica('llevaFilm', 'LlevaFilm'));
+const esGofrado = computed(() => verificarCaracteristica('esGofrado', 'EsGofrado'));
+
+const tipoCorona = computed(() => {
+    let val = props.form?.tipoCorona || props.form?.TipoCorona || props.producto?.tipoCorona || props.producto?.TipoCorona;
+    
+    const validarCorona = (v: any) => {
+        if (!v) return false;
+        const texto = String(v).trim().toUpperCase();
+        return texto !== 'NINGUNO' && texto !== 'FALSE' && texto !== '0' && texto !== 'NULL' && texto !== '';
+    };
+
+    if (!validarCorona(val)) {
+        const subOrdenes = props.form?.ordenes || props.form?.pedidos || props.form?.detalles || props.form?.items || [];
+        const ordenConCorona = subOrdenes.find((o: any) => validarCorona(o.tipoCorona) || validarCorona(o.TipoCorona));
+        if (ordenConCorona) val = ordenConCorona.tipoCorona || ordenConCorona.TipoCorona;
+    }
+    
+    return validarCorona(val) ? String(val).toUpperCase() : null;
+});
+
 </script>
 
 <template>
@@ -257,7 +291,7 @@ const observacionLimpia = computed(() => {
             </div>
         </div>
 
-        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="!esConsolidadoReal && (tieneBrillo || llevaFilm || tipoCorona || esGofrado)">
+        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="ocultarFormula && (tieneBrillo || llevaFilm || tipoCorona || esGofrado)">
             <div class="dato-box-pdf" v-if="tieneBrillo">
                 <span class="label-tech-pdf">BRILLO</span>
                 <span class="valor-tech-pdf">SÍ</span>

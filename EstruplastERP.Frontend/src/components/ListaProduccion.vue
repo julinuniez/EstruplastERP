@@ -33,6 +33,7 @@ export interface ProduccionItem {
     productoId?: number;
     clienteId?: number;
     observacion?: string;
+    hojaCargaId?: number | null; // 🚀 NUEVO: Integramos la hoja de carga al modelo
 }
 
 const producciones = ref<ProduccionItem[]>([])
@@ -117,7 +118,8 @@ function extraerCodigoHC(obs: string | undefined) {
 const produccionesFiltradas = computed(() => {
     return producciones.value.filter(item => {
         let pasaEstado = true;
-        if (filtroEstado.value === 'Pendientes') pasaEstado = item.estado === 'Pendiente' || item.estado === 'EnProceso';
+        // 🚀 NUEVO: Modificamos el filtro para incluir el nuevo estado
+        if (filtroEstado.value === 'Pendientes') pasaEstado = item.estado === 'Pendiente' || item.estado === 'EnProceso' || item.estado === 'MaterialPreparado';
         else if (filtroEstado.value === 'Finalizadas') pasaEstado = item.estado === 'Finalizada';
         else if (filtroEstado.value === 'Canceladas') pasaEstado = item.estado === 'Cancelada';
         else if (filtroEstado.value === 'Todos') pasaEstado = true;
@@ -382,7 +384,7 @@ defineExpose({ cargarHistorial })
                 <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-impresa': p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-no-impresa': !p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-ok': p.estado === 'Finalizada', 'fila-cancel': p.estado === 'Cancelada', 'fila-seleccionada': ordenesSeleccionadas.includes(p.id)}">
                     
                     <td style="text-align: center; vertical-align: middle;">
-                        <input type="checkbox" :checked="ordenesSeleccionadas.includes(p.id)" @change="toggleSeleccionMultiple(p.id)" v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso'" class="check-orden">
+                        <input type="checkbox" :checked="ordenesSeleccionadas.includes(p.id)" @change="toggleSeleccionMultiple(p.id)" v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso' || p.estado === 'MaterialPreparado'" class="check-orden">
                     </td>
 
                     <td class="td-fecha">{{ p.fecha }}</td>
@@ -417,14 +419,14 @@ defineExpose({ cargarHistorial })
                     <td style="text-align: right; font-weight: bold; color: #2c3e50;">{{ Math.round(p.kilos) }}</td>
                     
                     <td style="text-align: center;">
-                        <span :class="{'badge-pend': p.estado === 'Pendiente' || p.estado === 'EnProceso', 'badge-ok': p.estado === 'Finalizada', 'badge-cancel': p.estado === 'Cancelada'}">
-                            {{ p.estado === 'Cancelada' ? 'CANCELADA' : (p.estado === 'Finalizada' ? 'FINALIZADA' : 'EN MÁQUINA') }}
+                        <span :class="{'badge-pend': p.estado === 'Pendiente' || p.estado === 'EnProceso', 'badge-prep': p.estado === 'MaterialPreparado', 'badge-ok': p.estado === 'Finalizada', 'badge-cancel': p.estado === 'Cancelada'}">
+                            {{ p.estado === 'Cancelada' ? 'CANCELADA' : (p.estado === 'Finalizada' ? 'FINALIZADA' : (p.estado === 'MaterialPreparado' ? 'MATERIAL LISTO' : 'EN MÁQUINA')) }}
                         </span>
                     </td>
                     
                     <td class="td-acciones">
                         <div class="acciones-wrapper">
-                            <template v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso'">
+                            <template v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso' || p.estado === 'MaterialPreparado'">
                                 <button @click="abrirModalEdicion(p)" class="btn-action" title="Modificar Orden">✏️</button>
                                 <button @click="abrirModalCierre(p)" class="btn-action btn-check" title="Declarar Consumos y Cerrar OP">✅</button>
                                 <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Imprimir OP">📄</button>
@@ -465,6 +467,7 @@ defineExpose({ cargarHistorial })
         :codigo="codigoGrupoSeleccionado"
         :ordenes="ordenesDelGrupo"
         @close="mostrarModalGrupo = false"
+        @actualizar-lista="cargarHistorial"
     />
 
     <ModalEdicionRapida
@@ -536,6 +539,8 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .badge-pend { background: #fff7ed; color: #d97706; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #fcd34d; box-shadow: 0 0 5px rgba(217, 119, 6, 0.2); white-space: nowrap;}
 .badge-ok { background: #ecfdf5; color: #10b981; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #a7f3d0; white-space: nowrap;}
 .badge-cancel { background: #fef2f2; color: #ef4444; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #fecaca; white-space: nowrap;}
+/* 🚀 NUEVO: Estilo para la nueva etiqueta */
+.badge-prep { background: #eff6ff; color: #3b82f6; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #93c5fd; white-space: nowrap;}
 
 .td-acciones { vertical-align: middle; }
 .acciones-wrapper { display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap; }

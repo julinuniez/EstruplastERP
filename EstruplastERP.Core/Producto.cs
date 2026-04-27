@@ -33,6 +33,9 @@ namespace EstruplastERP.Core
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal PrecioCosto { get; set; }
+        public int? ProveedorId { get; set; }
+        [ForeignKey("ProveedorId")]
+        public Proveedor? Proveedor { get; set; }
 
         // Datos Multimedia
         public int? ClienteId { get; set; }

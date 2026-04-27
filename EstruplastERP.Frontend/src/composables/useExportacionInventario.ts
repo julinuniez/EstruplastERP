@@ -16,10 +16,10 @@ export async function exportarInventarioExcel(inventarioOriginal: any[], cliente
     const sheet = workbook.addWorksheet('Auditoria Inventario');
 
     sheet.columns = [
-        { header: 'NOMBRE DEL PRODUCTO / MATERIAL', key: 'nombre', width: 60 },
-        { header: 'STOCK ACTUAL (Kg)', key: 'fisico', width: 20 },
-        { header: 'STOCK DISPONIBLE (Kg)', key: 'disponible', width: 20 },
-        { header: 'CONTEO REAL ✍️', key: 'conteo', width: 25 }
+        { header: 'NOMBRE DEL MATERIAL', key: 'nombre', width: 36 },
+        { header: 'STOCK ACTUAL', key: 'fisico', width: 15 },
+        { header: 'STOCK DISPONIBLE', key: 'disponible', width: 16},
+        { header: 'CONTEO REAL ', key: 'conteo', width: 18 }
     ];
 
     // Estilo del encabezado

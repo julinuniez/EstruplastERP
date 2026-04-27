@@ -9,7 +9,8 @@ import { useImportacionInventario } from '@/composables/useImportacionInventario
 import { useModalesInventario } from '@/composables/useModalesInventario';
 import ModalHistorialStock from '@/components/ModalHistorialStock.vue';
 import ModalAjusteStock from '@/components/ModalAjusteStock.vue'; 
-// 👇 NUEVA IMPORTACIÓN PARA EXPORTAR EXCEL
+// 👇 NUEVO: Importación del modal de colores
+import ModalNuevoMasterbatch from '@/components/ModalNuevoMasterbatch.vue'; 
 import { exportarInventarioExcel } from '@/composables/useExportacionInventario';
 
 const router = useRouter();
@@ -36,7 +37,9 @@ const productoNombreSeleccionado = ref('');
 const mostrarModalAjuste = ref(false);
 const productoParaAjustar = ref<any>(null);
 
-// 👇 NUEVA VARIABLE PARA EL ESTADO DE EXPORTACIÓN
+// 👇 NUEVO: Variable para controlar el modal de masterbatch
+const mostrarModalMasterbatch = ref(false);
+
 const exportando = ref(false);
 
 watch(clienteFiltro, () => { materialFiltro.value = ''; });
@@ -102,7 +105,6 @@ const abrirPantallazoGlobal = (palabraClave: string = 'TUTI') => {
     mostrarModalGlobal.value = true;
 };
 
-// 👇 NUEVA FUNCIÓN PARA GENERAR EL EXCEL
 const descargarAuditoria = async () => {
     if (!listaProductos.value || listaProductos.value.length === 0) {
         alert("No hay datos de inventario para exportar.");
@@ -209,6 +211,9 @@ onMounted(() => {
                 </button>
 
                 <button class="btn-nueva-mp" @click="mostrarModalNuevaMP = true">➕ Crear Insumo</button>
+                
+                <button class="btn-masterbatch" @click="mostrarModalMasterbatch = true">🎨 Alta Color</button>
+
                 <input type="file" ref="fileInput" class="hidden-input" accept=".csv, .xlsx" @change="subirArchivoFlexxus" />
                 <div class="import-group">
                     <select v-model="importClienteFiltro" class="select-import" :disabled="importando || cargando">
@@ -559,6 +564,12 @@ onMounted(() => {
             @confirmado="onAjusteConfirmado"
         />
 
+        <ModalNuevoMasterbatch 
+            :visible="mostrarModalMasterbatch"
+            @close="mostrarModalMasterbatch = false"
+            @creado="cargarDatos(true)"
+        />
+
     </div>
 </template>
 
@@ -580,6 +591,10 @@ onMounted(() => {
 
 .btn-nueva-mp { background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; display: flex; align-items: center; gap: 5px; }
 .btn-nueva-mp:hover { background: #2980b9; }
+
+/* 👇 ESTILO PARA EL NUEVO BOTÓN DE MASTERBATCH */
+.btn-masterbatch { background: #8b5cf6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; display: flex; align-items: center; gap: 5px; }
+.btn-masterbatch:hover { background: #7c3aed; }
 
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; }
 .modal-content { 
@@ -693,7 +708,7 @@ tr.bajo-stock .nombre-prod { color: #c0392b; font-weight: 700; }
 
 @media (max-width: 768px) {
     .header-stock, .fila-filtros { flex-direction: column; align-items: flex-start; }
-    .acciones-header, .filtro-item select, .import-group, .btn-importar, .btn-nueva-mp { width: 100%; justify-content: center; }
+    .acciones-header, .filtro-item select, .import-group, .btn-importar, .btn-nueva-mp, .btn-masterbatch { width: 100%; justify-content: center; }
     .select-import { width: 100%; }
     .tarjetas-resumen { flex-direction: column; }
     .sub-tabs { flex-direction: column; }

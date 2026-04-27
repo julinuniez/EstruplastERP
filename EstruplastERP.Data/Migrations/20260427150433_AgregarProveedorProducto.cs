@@ -6,557 +6,576 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace EstruplastERP.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class AgregarDesperdicioOrdenes : Migration
+    public partial class AgregarProveedorProducto : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<decimal>(
-                name: "Desperdicio",
-                table: "Ordenes",
-                type: "decimal(18,2)",
-                nullable: false,
-                defaultValue: 0m);
+            migrationBuilder.AddColumn<int>(
+                name: "ProveedorId",
+                table: "Productos",
+                type: "int",
+                nullable: true);
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 22,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4103));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2028), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 100,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4112));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2035), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 101,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4125));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2049), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 102,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4116));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2041), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 103,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4130));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2053), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 104,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4134));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2056), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 105,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4141));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2060), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 106,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4121));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2045), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 107,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4157));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2080), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 108,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4175));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2100), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 109,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4311));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2110), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 200,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4316));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2114), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 201,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4320));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2118), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 202,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4326));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2121), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 300,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4330));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2126), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 301,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4341));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2138), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 400,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4345));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2143), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 401,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4349));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2147), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 402,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4354));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2151), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 900,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4360));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2156), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 901,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4373));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2170), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 902,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4365));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2162), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 903,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4378));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2174), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 904,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4382));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2178), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 905,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4388));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2182), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 906,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4369));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2167), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 907,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4392));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2187), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 908,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4396));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2191), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 911,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4400));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2195), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 912,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4404));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2199), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 913,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4409));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2265), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 914,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4415));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2271), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 990,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4083));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(1922), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 991,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4087));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(1926), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 992,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4091));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(1929), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 993,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4095));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(1933), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 994,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4099));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(2025), null });
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 999,
-                column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 12, 21, 17, 531, DateTimeKind.Local).AddTicks(4077));
+                columns: new[] { "FechaCreacion", "ProveedorId" },
+                values: new object[] { new DateTime(2026, 4, 27, 12, 4, 30, 974, DateTimeKind.Local).AddTicks(1916), null });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Productos_ProveedorId",
+                table: "Productos",
+                column: "ProveedorId");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Productos_Proveedores_ProveedorId",
+                table: "Productos",
+                column: "ProveedorId",
+                principalTable: "Proveedores",
+                principalColumn: "Id");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropForeignKey(
+                name: "FK_Productos_Proveedores_ProveedorId",
+                table: "Productos");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Productos_ProveedorId",
+                table: "Productos");
+
             migrationBuilder.DropColumn(
-                name: "Desperdicio",
-                table: "Ordenes");
+                name: "ProveedorId",
+                table: "Productos");
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 22,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3808));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5725));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 100,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3813));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5731));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 101,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3826));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5742));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 102,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3817));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5735));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 103,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3830));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5746));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 104,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3833));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5750));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 105,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3837));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5753));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 106,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3822));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5739));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 107,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3841));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5758));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 108,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3845));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5762));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 109,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3849));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5766));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 200,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3853));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5770));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 201,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3858));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5774));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 202,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3861));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5777));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 300,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3865));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5782));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 301,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3948));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5789));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 400,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3953));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5792));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 401,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3956));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5796));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 402,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3961));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5800));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 900,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3966));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5898));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 901,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3979));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5912));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 902,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3970));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5904));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 903,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3983));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5916));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 904,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3986));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5920));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 905,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3991));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5924));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 906,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3975));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5908));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 907,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3995));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5929));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 908,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(4000));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5934));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 911,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(4003));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5938));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 912,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(4007));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5942));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 913,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(4011));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5947));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 914,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(4016));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5951));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 990,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3789));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5703));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 991,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3794));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5711));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 992,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3797));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5715));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 993,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3801));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5718));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 994,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3805));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5722));
 
             migrationBuilder.UpdateData(
                 table: "Productos",
                 keyColumn: "Id",
                 keyValue: 999,
                 column: "FechaCreacion",
-                value: new DateTime(2026, 3, 16, 11, 45, 54, 600, DateTimeKind.Local).AddTicks(3785));
+                value: new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5699));
         }
     }
 }

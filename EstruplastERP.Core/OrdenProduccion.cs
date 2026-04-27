@@ -8,7 +8,15 @@ namespace EstruplastERP.Core
         Cancelada = -1,
         Pendiente = 0,
         EnProceso = 1,
-        Finalizada = 2
+        Finalizada = 2,
+        MaterialPreparado = 3 
+    }
+
+    public enum EstadoHojaCarga
+    {
+        Cancelada = -1,
+        Pendiente = 0,             
+        ConsumosDeclarados = 1    
     }
 
     public class OrdenProduccion
@@ -52,6 +60,11 @@ namespace EstruplastERP.Core
         public bool EsImpreso { get; set; } = false;
         public DateTime FechaCreacion { get; set; } = DateTime.Now;
         public DateTime? FechaFin { get; set; }
+
+        // 🚀 NUEVA RELACIÓN: Conexión opcional a un pastón/mezcla
+        public int? HojaCargaId { get; set; }
+        [ForeignKey("HojaCargaId")]
+        public HojaCarga? HojaCarga { get; set; }
 
         public List<ConsumoOrden> Consumos { get; set; } = new List<ConsumoOrden>();
     }

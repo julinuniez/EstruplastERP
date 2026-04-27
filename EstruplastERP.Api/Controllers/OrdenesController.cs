@@ -69,6 +69,7 @@ namespace EstruplastERP.Api.Controllers
                     EsImpreso = o.EsImpreso,
                     Estado = o.Estado.ToString(),
                     EsFinalizada = o.Estado == EstadoOrden.Finalizada,
+                    HojaCargaId = o.HojaCargaId, // 🚀 NUEVO: Enviamos si pertenece a un grupo
                     Consumos = o.Consumos.Select(c => new {
                         c.MateriaPrimaId,
                         NombreMateriaPrima = c.MateriaPrima.Nombre,
@@ -92,7 +93,6 @@ namespace EstruplastERP.Api.Controllers
             try
             {
                 var orden = await _produccionService.RegistrarOrden(dto, true);
-
                 return CreatedAtAction("GetOrden", new { id = orden.Id }, new { mensaje = "Orden registrada correctamente en Producción.", id = orden.Id });
             }
             catch (Exception ex)
@@ -115,6 +115,8 @@ namespace EstruplastERP.Api.Controllers
                 if (orden == null) return NotFound("Orden no encontrada.");
                 if (orden.Estado == EstadoOrden.Finalizada || orden.Estado == EstadoOrden.Cancelada)
                     return BadRequest("No se puede modificar una orden Finalizada o Cancelada.");
+                if (orden.Estado == EstadoOrden.MaterialPreparado)
+                    return BadRequest("No se puede modificar la receta de una orden que ya tiene su material descontado en una Hoja de Carga.");
 
                 // VALIDACIÓN DE STOCK DINÁMICA CON LINQ
                 foreach (var nuevoItem in dto.RecetaNueva)
@@ -185,14 +187,12 @@ namespace EstruplastERP.Api.Controllers
                 var orden = await _context.Ordenes.Include(o => o.Consumos).FirstOrDefaultAsync(o => o.Id == id);
                 if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
 
-                // 🚨 1. Solo validamos si hay stock. NO lo descontamos.
                 var faltantes = new List<string>();
                 foreach (var consumo in orden.Consumos)
                 {
                     var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
                     if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
                     {
-                        // Calculamos retenciones de otras órdenes activas
                         var retenidoPorOtras = await _context.Ordenes
                             .Where(o => o.Id != id && o.Estado != EstadoOrden.Finalizada && o.Estado != EstadoOrden.Cancelada)
                             .SelectMany(o => o.Consumos)
@@ -208,7 +208,6 @@ namespace EstruplastERP.Api.Controllers
 
                 if (faltantes.Any()) return BadRequest(new { mensaje = "Faltan materiales libres:\n" + string.Join("\n", faltantes) });
 
-                // 🚨 2. Cambiamos de estado sin tocar el stock.
                 orden.Estado = EstadoOrden.Pendiente;
                 await _context.SaveChangesAsync();
 
@@ -234,10 +233,10 @@ namespace EstruplastERP.Api.Controllers
                 if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
                 if (orden.Estado == EstadoOrden.Finalizada) return BadRequest(new { mensaje = "Esta orden ya fue finalizada." });
 
-                // 🚀 NUEVO: Capturamos la fecha que manda Vue. Si por algún motivo llega vacía, usamos Ahora.
+                bool materialYaDescontado = orden.Estado == EstadoOrden.MaterialPreparado;
                 DateTime fechaCierreReal = dto.FechaCierre ?? DateTime.Now;
-                System.Diagnostics.Debug.WriteLine($"📅 Fecha recibida: {dto.FechaCierre} - Usando: {fechaCierreReal}");
 
+                // 🚀 SIEMPRE validamos el stock de lo que envíe el Front (sea la receta entera, o solo las adiciones extra)
                 var consumosAgrupados = dto.ConsumosReales
                     .GroupBy(c => c.MateriaPrimaId)
                     .Select(g => new { MateriaPrimaId = g.Key, TotalKilos = g.Sum(c => c.CantidadKilosReales) })
@@ -265,22 +264,7 @@ namespace EstruplastERP.Api.Controllers
                 orden.KilosEstimados = dto.KilosProducidosReales;
                 orden.Desperdicio = dto.DesperdicioReal;
 
-                string etiquetaGrupo = "";
-                if (!string.IsNullOrWhiteSpace(orden.Observacion))
-                {
-                    var match = System.Text.RegularExpressions.Regex.Match(orden.Observacion, @"\[Grupo: HC-[^\]]+\]");
-                    if (match.Success)
-                    {
-                        etiquetaGrupo = match.Value;
-                    }
-                }
-
-                orden.Observacion = string.IsNullOrWhiteSpace(dto.Observacion)
-                    ? etiquetaGrupo
-                    : dto.Observacion + " " + etiquetaGrupo;
-
-                orden.Observacion = orden.Observacion.Trim();
-
+                // 🚀 SIEMPRE procesamos los consumos que lleguen en el DTO
                 _context.RemoveRange(orden.Consumos);
                 var consumosDefinitivos = new List<ConsumoOrden>();
 
@@ -295,47 +279,48 @@ namespace EstruplastERP.Api.Controllers
                             CantidadKilos = consumoUsuario.CantidadKilosReales
                         });
 
+                        // Descontamos el stock físico
                         if (!(mp.Id >= 990 && mp.Id <= 999))
                         {
                             mp.StockActual -= consumoUsuario.CantidadKilosReales;
 
                             _context.Movimientos.Add(new Movimiento
                             {
-                                Fecha = fechaCierreReal, // 🚀 CAMBIO: Usamos la fecha real en el movimiento de stock
+                                Fecha = fechaCierreReal,
                                 ProductoId = mp.Id,
                                 Cantidad = -consumoUsuario.CantidadKilosReales,
                                 TipoMovimiento = "CONSUMO_PRODUCCION",
-                                Observacion = $"Cierre OP #{id}: {dto.Observacion}",
+                                Observacion = $"Cierre OP #{id}{(materialYaDescontado ? " (Adición Extra)" : "")}: {dto.Observacion}",
                                 OrdenProduccionId = id
                             });
                         }
                     }
                 }
-
                 orden.Consumos = consumosDefinitivos;
 
+                // SIEMPRE ingresamos el Producto Terminado
                 if (orden.Producto != null)
                 {
                     orden.Producto.StockActual += dto.KilosProducidosReales;
 
                     _context.Movimientos.Add(new Movimiento
                     {
-                        Fecha = fechaCierreReal, // 🚀 CAMBIO: Usamos la fecha real en el ingreso del producto terminado
+                        Fecha = fechaCierreReal,
                         ProductoId = orden.ProductoId,
                         Cantidad = dto.KilosProducidosReales,
                         TipoMovimiento = "PRODUCCION_TERMINADA",
-                        Observacion = $"Cierre OP #{id}",
+                        Observacion = $"Cierre OP #{id} {(materialYaDescontado ? "(Desde Mezcla)" : "")}",
                         OrdenProduccionId = id
                     });
                 }
 
                 orden.Estado = EstadoOrden.Finalizada;
-                orden.FechaFin = fechaCierreReal; // 🚀 CAMBIO: Guardamos la fecha correcta en la Orden
+                orden.FechaFin = fechaCierreReal;
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                return Ok(new { mensaje = "Producción confirmada con valores reales. Inventario actualizado." });
+                return Ok(new { mensaje = "Producción finalizada correctamente. Inventario actualizado." });
             }
             catch (Exception ex)
             {
@@ -352,9 +337,8 @@ namespace EstruplastERP.Api.Controllers
                 var orden = await _context.Ordenes.FindAsync(id);
                 if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
                 if (orden.Estado == EstadoOrden.Finalizada) return BadRequest(new { mensaje = "No se puede cancelar una orden ya terminada." });
+                if (orden.Estado == EstadoOrden.MaterialPreparado) return BadRequest(new { mensaje = "No se puede cancelar una orden cuyo material ya fue mezclado. Comuníquese con la fábrica." });
 
-                // 🚨 1. Como nunca habíamos descontado el stock físico, simplemente la cancelamos. 
-                // Al cambiar el estado, LINQ la va a ignorar al calcular retenciones.
                 orden.Estado = EstadoOrden.Cancelada;
                 orden.FechaFin = DateTime.Now;
 
@@ -392,57 +376,61 @@ namespace EstruplastERP.Api.Controllers
 
                 if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
 
-                // 1. REVERSIÓN DE ORDEN FINALIZADA (Devolver stock físico)
+                // 🚀 NUEVO: Detectar si la orden venía de una Hoja de Carga
+                bool vinoDeHojaCarga = orden.HojaCargaId.HasValue;
+
                 if (orden.Estado == EstadoOrden.Finalizada)
                 {
-                    // Restamos el producto terminado que habíamos sumado al inventario
+                    // 1. Siempre restamos el producto terminado que habíamos sumado
                     if (orden.Producto != null)
                     {
-                        orden.Producto.StockActual -= orden.KilosEstimados; // O los kilos reales que guardes
+                        orden.Producto.StockActual -= orden.KilosEstimados;
 
                         _context.Movimientos.Add(new Movimiento
                         {
                             Fecha = DateTime.Now,
                             ProductoId = orden.ProductoId,
-                            Cantidad = -orden.KilosEstimados, // Movimiento negativo de compensación
+                            Cantidad = -orden.KilosEstimados,
                             TipoMovimiento = "REVERSION_PRODUCCION",
                             Observacion = $"Reversión de cierre por error humano - OP #{id}",
                             OrdenProduccionId = id
                         });
                     }
 
-                    // Devolvemos la materia prima que habíamos descontado
-                    foreach (var consumo in orden.Consumos)
+                    // 2. Solo devolvemos MP al inventario SI NO fue descontada por un pastón global
+                    if (!vinoDeHojaCarga)
                     {
-                        var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
-                        if (mp != null && !(mp.Id >= 990 && mp.Id <= 999)) // Ignorando genéricos
+                        foreach (var consumo in orden.Consumos)
                         {
-                            mp.StockActual += consumo.CantidadKilos; // Devolvemos al físico
-
-                            _context.Movimientos.Add(new Movimiento
+                            var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
+                            if (mp != null && !(mp.Id >= 990 && mp.Id <= 999))
                             {
-                                Fecha = DateTime.Now,
-                                ProductoId = mp.Id,
-                                Cantidad = consumo.CantidadKilos, // Movimiento positivo de compensación
-                                TipoMovimiento = "REVERSION_CONSUMO",
-                                Observacion = $"Reversión de consumo por error humano - OP #{id}",
-                                OrdenProduccionId = id
-                            });
+                                mp.StockActual += consumo.CantidadKilos;
+
+                                _context.Movimientos.Add(new Movimiento
+                                {
+                                    Fecha = DateTime.Now,
+                                    ProductoId = mp.Id,
+                                    Cantidad = consumo.CantidadKilos,
+                                    TipoMovimiento = "REVERSION_CONSUMO",
+                                    Observacion = $"Reversión de consumo por error humano - OP #{id}",
+                                    OrdenProduccionId = id
+                                });
+                            }
                         }
                     }
 
-                    // Reseteamos las fechas y el estado
-                    orden.Estado = EstadoOrden.Pendiente;
+                    // Si venía de una hoja de carga, retrocede solo un paso (A "En Máquina"). Si no, vuelve a Pendiente.
+                    orden.Estado = vinoDeHojaCarga ? EstadoOrden.MaterialPreparado : EstadoOrden.Pendiente;
                     orden.FechaFin = null;
                 }
 
-                // 2. REVERSIÓN DE IMPRESIÓN (Aplica tanto si estaba finalizada como si solo estaba pendiente)
                 orden.EsImpreso = false;
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                return Ok(new { mensaje = "Orden revertida exitosamente. El inventario fue restaurado." });
+                return Ok(new { mensaje = "Orden revertida exitosamente. El inventario fue restaurado según su origen." });
             }
             catch (Exception ex)
             {
@@ -461,12 +449,25 @@ namespace EstruplastERP.Api.Controllers
             string codigoHC = $"HC-{DateTime.Now:ddMM-HHmm}-{sufijo}";
             string etiqueta = $"[Grupo: {codigoHC}]";
 
+            // 🚀 NUEVO: Crear la entidad real Hoja de Carga en la Base de Datos
+            var nuevaHoja = new HojaCarga
+            {
+                CodigoLote = codigoHC,
+                FechaCreacion = DateTime.Now,
+                Estado = EstadoHojaCarga.Pendiente
+            };
+
+            _context.HojasCarga.Add(nuevaHoja);
+            await _context.SaveChangesAsync(); // Guardamos para que genere el ID
+
             var ordenes = await _context.Ordenes
                 .Where(o => ordenesIds.Contains(o.Id))
                 .ToListAsync();
 
             foreach (var o in ordenes)
             {
+                o.HojaCargaId = nuevaHoja.Id; // Vinculación real en SQL
+
                 if (!string.IsNullOrWhiteSpace(o.Observacion))
                 {
                     o.Observacion = System.Text.RegularExpressions.Regex.Replace(o.Observacion, @"\[Grupo: HC-[^\]]+\]", "").Trim();
@@ -476,7 +477,7 @@ namespace EstruplastERP.Api.Controllers
             }
 
             await _context.SaveChangesAsync();
-            return Ok(new { codigo = codigoHC, mensaje = "Hoja de carga registrada con éxito." });
+            return Ok(new { codigo = codigoHC, mensaje = "Hoja de carga registrada y guardada en base de datos." });
         }
 
         [HttpPost("marcar-impresa/{id}")]
