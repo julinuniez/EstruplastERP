@@ -32,7 +32,6 @@ const codigoLoteVisible = computed(() => {
     return match ? match[1] : props.form?.id;
 });
 
-// Solo definimos QUÉ texto va en el código
 const valorCodigoBarra = computed(() => {
     if (esConsolidadoReal.value) {
         if (!codigoLoteVisible.value) return '';
@@ -42,7 +41,6 @@ const valorCodigoBarra = computed(() => {
     return `OP-${props.form?.id}`;
 });
 
-// 🚀 LA SOLUCIÓN DEFINITIVA: Función sincrónica directa
 const generarCodigoDirecto = (texto: string) => {
     if (!texto || texto.includes('undefined')) return '';
     try {
@@ -115,10 +113,32 @@ const obtenerTipoMaterial = (item: any) => {
     return '';
 };
 
+// 🚀 ACÁ ESTÁ EL FILTRO INTELIGENTE
 const sugerenciasFiltradas = computed(() => {
     const texto = insumoBusquedaTexto.value.trim().toUpperCase();
     let lista = props.materiasPrimas || [];
     
+    // Identificamos al cliente actual de la orden
+    const idClienteActual = Number(props.cliente?.id || props.form?.clienteId || 0);
+
+    lista = lista.filter(mp => {
+        // 1. Checkeo de Dueño
+        const idDuenio = Number(mp.clienteId || mp.ClienteId || 0);
+        if (idDuenio !== 0 && idDuenio !== idClienteActual) return false;
+
+        const nombreLimpio = (mp.nombre || '').toUpperCase().trim();
+
+        // 2. Excluir todo lo que CONTENGA la palabra "BASE"
+        if (nombreLimpio.includes('BASE')) return false;
+
+        // 3. Excluir coincidencias EXACTAS (ni una letra más, ni una letra menos)
+        const excluidosExactos = ['ABS','PAI', 'PEAD', 'POLIPROPILENO','POLIETILENO','RESISTENTE AL FREON'];
+        if (excluidosExactos.includes(nombreLimpio)) return false;
+
+        return true;
+    });
+    
+    // Filtramos por el texto que escribe el usuario
     if (texto) {
         lista = lista.filter(mp => {
             const nombre = (mp.nombre || '').toUpperCase();
@@ -203,7 +223,6 @@ const observacionLimpia = computed(() => {
     return obs;
 });
 
-// 🚀 RADAR A PRUEBA DE BALAS: Detecta booleanos verdaderos, números 1, o textos ("1", "true", "SI")
 const esVerdadero = (valor: any) => {
     if (valor === true || valor === 1) return true;
     if (typeof valor === 'string') {
@@ -313,7 +332,7 @@ const tipoCorona = computed(() => {
         <div v-show="!ocultarFormula" class="seccion-receta-pdf">
             <div class="titulo-receta-pdf">
                 {{ esConsolidadoReal ? 'RESUMEN DE MEZCLA CONSOLIDADA' : (densidadReal > 0 ? `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(densidadReal.toFixed(3))})` : 'FÓRMULA DE MEZCLA') }}
-                <span style="float:right; font-size: 0.8em; color: #333" v-if="!esConsolidadoReal">Total: {{ totalPorcentaje }}%</span>
+                <span style="float:right; font-size: 0.8em; color: #333" v-if="!esConsolidadoReal">Total: {{ Number(totalPorcentaje).toFixed(2) }}%</span>
             </div>
             <table class="tabla-receta-pdf">
                 <thead>
@@ -339,15 +358,15 @@ const tipoCorona = computed(() => {
                                 </span>
                             </td>
                             <td style="text-align:center; vertical-align: middle;" v-if="!esConsolidadoReal">
-                                <div class="porcentaje-celda" v-if="r.esEstearato" style="font-weight: bold; color: #2980b9;">
+                                <div class="porcentaje-celda" v-if="r.esEstearato || (r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase().includes('ESTEARATO')" style="font-weight: bold; color: #2980b9;">
                                     FIJO
                                 </div>
                                 <div class="porcentaje-celda" v-else>
-                                    {{ r.cantidad }} %
+                                    {{ Number(r.cantidad).toFixed(2) }} %
                                 </div>
                             </td>
                             <td style="text-align:right; font-size: 1.1em;">
-                                <strong v-if="r.esEstearato || (r.nombreInsumo || '').toUpperCase().includes('ESTEARATO')" style="color: #2980b9;">
+                                <strong v-if="r.esEstearato || (r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase().includes('ESTEARATO')" style="color: #2980b9;">
                                     {{ esConsolidadoReal 
                                         ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.cantidad || 0).toFixed(2) 
                                         : parseFloat(r.kilosFijos || r.cantidad || 0).toFixed(2) 
@@ -373,7 +392,12 @@ const tipoCorona = computed(() => {
                     <input type="text" v-model="insumoBusquedaTexto" @focus="mostrarLista = true" @blur="cerrarListaConDelay" class="input-buscador" placeholder="Buscar materia prima..." />
                     <div class="lista-resultados" v-if="mostrarLista && sugerenciasFiltradas.length > 0">
                         <div v-for="mp in sugerenciasFiltradas" :key="mp.id" class="item-resultado" @click="seleccionarInsumo(mp)">
-                            {{ mp.nombre }}
+                            <span class="nombre-insumo-lista">{{ mp.nombre }}</span>
+                            
+                            <span v-if="(mp.clienteId || mp.ClienteId) > 0" class="badge-mini-cliente">
+                                👤 {{ cliente?.razonSocial || 'CLIENTE' }}
+                            </span>
+                            <span v-else class="badge-mini-propio">🏢 PROPIO</span>
                         </div>
                     </div>
                 </div>
@@ -466,7 +490,6 @@ const tipoCorona = computed(() => {
 .recuadro-gigante-pdf { border: 2px solid black; height: 35px; font-size: 20px; display: flex; align-items: center; justify-content: center; margin-top: 2px; font-weight: 900; overflow: hidden; white-space: nowrap; }
 .texto-lote-pdf { font-size: 14px; }
 
-/* ESTILOS DEL PIE CON EL CÓDIGO DE BARRAS */
 .pie-firma-pdf { margin-top: auto; padding-top: 15px; display: flex; justify-content: space-between; align-items: flex-end; }
 .caja-firmas-operarios { width: 33%; display: flex; flex-direction: column; gap: 8px; }
 .opcion-firma { display: flex; align-items: center; font-size: 12px; font-weight: bold; }
@@ -478,46 +501,12 @@ const tipoCorona = computed(() => {
 .barcode-impresion { width: 33%; display: flex; justify-content: flex-end; align-items: flex-end; }
 .barcode-impresion img { max-height: 55px; max-width: 100%; object-fit: contain; }
 
-/* ESTILOS NUEVOS PARA TOTALES MANUALES */
-.seccion-totales-manuales {
-    margin-top: 10px;
-    border: 2px solid black;
-    background-color: #fff;
-}
-
-.titulo-totales-manuales {
-    background-color: #e0e0e0;
-    font-size: 9px;
-    font-weight: 900;
-    text-align: center;
-    border-bottom: 2px solid black;
-    padding: 2px;
-}
-
-.contenedor-columnas-totales {
-    display: flex;
-    justify-content: space-around;
-    padding: 10px 5px;
-}
-
-.columna-total {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-}
-
-.etiqueta-manual {
-    font-size: 11px;
-    font-weight: 900;
-}
-
-.linea-llenado {
-    width: 80%;
-    border-bottom: 2px solid black;
-    height: 20px;
-}
+.seccion-totales-manuales { margin-top: 10px; border: 2px solid black; background-color: #fff; }
+.titulo-totales-manuales { background-color: #e0e0e0; font-size: 9px; font-weight: 900; text-align: center; border-bottom: 2px solid black; padding: 2px; }
+.contenedor-columnas-totales { display: flex; justify-content: space-around; padding: 10px 5px; }
+.columna-total { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.etiqueta-manual { font-size: 11px; font-weight: 900; }
+.linea-llenado { width: 80%; border-bottom: 2px solid black; height: 20px; }
 
 .marca-agua { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 50px; color: rgba(0,0,0,0.03); font-weight: 900; border: 5px solid rgba(0,0,0,0.03); padding: 10px 40px; border-radius: 20px; z-index: 0; pointer-events: none; }
 .linea-corte-pdf { position: absolute; bottom: -12px; left: 0; width: 100%; text-align: center; font-size: 10px; color: #999; z-index: 10; }
@@ -525,9 +514,13 @@ const tipoCorona = computed(() => {
 .agregar-fila-pdf { padding: 5px; border-top: 1px solid #ccc; display: flex; gap: 5px; align-items: center; justify-content: flex-end; background: #f9f9f9; }
 .btn-add-insumo { background:#2ecc71; color:white; border:none; padding:5px 10px; cursor:pointer; font-weight: bold; border-radius: 4px; }
 .btn-borrar-insumo { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px; }
-.buscador-wrapper { position: relative; width: 250px; }
+.buscador-wrapper { position: relative; width: 400px; }
 .input-buscador { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
 .lista-resultados { position: absolute; bottom: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; max-height: 150px; overflow-y: auto; z-index: 999; box-shadow: 0 -4px 6px rgba(0,0,0,0.1); margin-bottom: 2px; border-radius: 4px; }
-.item-resultado { padding: 8px; border-bottom: 1px solid #eee; cursor: pointer; text-align: left; font-size: 13px; font-weight: 600; }
+
+.item-resultado { padding: 8px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
 .item-resultado:hover { background-color: #f1f2f6; }
+.nombre-insumo-lista { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; text-align: left; }
+.badge-mini-cliente { background: #f39c12; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; letter-spacing: 0.5px; }
+.badge-mini-propio { background: #3498db; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; letter-spacing: 0.5px; }
 </style>

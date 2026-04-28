@@ -24,6 +24,7 @@ namespace EstruplastERP.Api.Controllers
             try
             {
                 var productos = await _context.Productos
+                    .Include(p => p.Proveedor)
                     .Where(p => p.Activo)
                     .OrderBy(p => p.Nombre)
                     .Select(p => new
@@ -40,7 +41,9 @@ namespace EstruplastERP.Api.Controllers
                         p.EsFazon,
                         p.PrecioCosto,
                         ClienteId = p.ClienteId,
-                        EsScrap = p.EsScrap
+                        EsScrap = p.EsScrap,
+                        ProveedorId = p.ProveedorId,
+                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.RazonSocial : null
                     })
                     .ToListAsync();
 
@@ -57,6 +60,7 @@ namespace EstruplastERP.Api.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetMateriasPrimas()
         {
             return await _context.Productos
+                .Include(p => p.Proveedor) // 🚀 Incluimos el Proveedor
                 .Where(p => p.EsMateriaPrima && p.Activo)
                 .OrderBy(p => p.Nombre)
                 .Select(p => new
@@ -66,7 +70,9 @@ namespace EstruplastERP.Api.Controllers
                     p.CodigoSku,
                     p.PesoEspecifico,
                     p.StockActual,
-                    ClienteId = p.ClienteId
+                    ClienteId = p.ClienteId,
+                    ProveedorNombre = p.Proveedor != null ? p.Proveedor.RazonSocial : null, // 🚀 Enviamos el nombre
+                    p.ProveedorId
                 })
                 .ToListAsync();
         }
@@ -119,6 +125,9 @@ namespace EstruplastERP.Api.Controllers
                     p.PrecioCosto,
                     p.StockMinimo,
                     p.PesoEspecifico,
+                    ProveedorId = p.ProveedorId,
+                    ProveedorNombre = p.Proveedor != null ? p.Proveedor.RazonSocial : null,
+
                     StockFisico = p.StockActual,
                     StockReservado = _context.ConsumosOrdenes
                         .Where(c => c.MateriaPrimaId == p.Id &&
@@ -146,6 +155,9 @@ namespace EstruplastERP.Api.Controllers
                 p.StockFisico,
                 p.StockReservado,
                 p.EsGenerico,
+                p.ProveedorId,
+                p.ProveedorNombre,
+
                 StockDisponible = p.StockFisico - p.StockReservado
             });
 
@@ -224,6 +236,7 @@ namespace EstruplastERP.Api.Controllers
                     StockActual = 0,
                     Activo = true,
                     EsGenerico = true,
+                    ProveedorId = data.ProveedorId,
                     FechaCreacion = DateTime.Now
                 };
 

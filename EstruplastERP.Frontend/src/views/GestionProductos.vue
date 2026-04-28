@@ -9,7 +9,6 @@ import { useImportacionInventario } from '@/composables/useImportacionInventario
 import { useModalesInventario } from '@/composables/useModalesInventario';
 import ModalHistorialStock from '@/components/ModalHistorialStock.vue';
 import ModalAjusteStock from '@/components/ModalAjusteStock.vue'; 
-// 👇 NUEVO: Importación del modal de colores
 import ModalNuevoMasterbatch from '@/components/ModalNuevoMasterbatch.vue'; 
 import { exportarInventarioExcel } from '@/composables/useExportacionInventario';
 
@@ -37,7 +36,6 @@ const productoNombreSeleccionado = ref('');
 const mostrarModalAjuste = ref(false);
 const productoParaAjustar = ref<any>(null);
 
-// 👇 NUEVO: Variable para controlar el modal de masterbatch
 const mostrarModalMasterbatch = ref(false);
 
 const exportando = ref(false);
@@ -187,8 +185,21 @@ const molidosAgrupados = computed(() => {
     });
 });
 
+const listaProveedores = ref<any[]>([]);
+
+const cargarProveedores = async () => {
+    try {
+        // Asegurate de que la ruta sea la correcta (suele ser '/Proveedores')
+        const response = await api.get('/Proveedores'); 
+        listaProveedores.value = response.data;
+    } catch (e) {
+        console.error("Error al cargar proveedores", e);
+    }
+};
+
 onMounted(() => {
     cargarDatos(true);
+    cargarProveedores();
 });
 </script>
 
@@ -350,6 +361,9 @@ onMounted(() => {
                         <th>SKU</th>
                         <th>Descripción</th>
                         <th v-if="tabActual === 'PT' || tabActual === 'CLI'">Dueño</th>
+                        
+                        <th v-if="tabActual === 'MP'">Proveedor</th> 
+
                         <th v-if="tabActual === 'CLI'">Material</th> 
                         <th style="text-align:right; width: 90px;" title="Stock Real en Galpón">Físico (Kg)</th>
                         <th style="text-align:center; width: 90px;" title="Retenido en Órdenes de Producción">Reservado</th>
@@ -383,6 +397,13 @@ onMounted(() => {
                                 {{ listaClientes.find(c => Number(c.id) === Number(getClienteId(p)))?.razonSocial || 'Cliente #' + getClienteId(p) }}
                             </span>
                             <span v-else class="badge-propio">Propio</span>
+                        </td>
+
+                        <td v-if="tabActual === 'MP'">
+                            <span v-if="p.proveedorNombre" class="badge-proveedor">
+                                {{ p.proveedorNombre }}
+                            </span>
+                            <span v-else style="color: #bdc3c7; font-size: 0.8rem;">-</span>
                         </td>
 
                         <td v-if="tabActual === 'CLI'">
@@ -541,6 +562,15 @@ onMounted(() => {
                 <label style="display:block; margin-bottom:5px; font-weight:bold; font-size: 0.9rem;">Código SKU (Inventalo si no lo sabés):</label>
                 <input type="text" v-model="nuevaMP.codigoSku" placeholder="Ej: MP-PEAD-001" class="input-modal">
 
+                <label style="display:block; margin-bottom:5px; font-weight:bold; font-size: 0.9rem; color: #8e44ad;">Proveedor (Opcional):</label>
+                <select v-model="nuevaMP.proveedorId" class="input-modal" style="background-color: #f5eef8; border-color: #d2b4de;">
+                    <option :value="null">Sin Proveedor</option>
+                    
+                    <option v-for="prov in listaProveedores" :key="prov.id" :value="prov.id">
+                        {{ prov.razonSocial }}
+                    </option>
+                </select>
+
                 <div class="modal-acciones">
                     <button class="btn-cancelar" @click="mostrarModalNuevaMP = false">Cancelar</button>
                     <button class="btn-guardar-mp" @click="guardarNuevaMateriaPrima" :disabled="guardandoMP">
@@ -592,7 +622,6 @@ onMounted(() => {
 .btn-nueva-mp { background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; display: flex; align-items: center; gap: 5px; }
 .btn-nueva-mp:hover { background: #2980b9; }
 
-/* 👇 ESTILO PARA EL NUEVO BOTÓN DE MASTERBATCH */
 .btn-masterbatch { background: #8b5cf6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; display: flex; align-items: center; gap: 5px; }
 .btn-masterbatch:hover { background: #7c3aed; }
 
@@ -651,6 +680,9 @@ tr:hover { background-color: #f9f9f9; }
 
 .badge-cliente { background: #8e44ad; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
 .badge-propio { background: #2980b9; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; opacity: 0.8; }
+
+/* 🚀 NUEVO ESTILO PROVEEDOR */
+.badge-proveedor { background-color: #f3e5f5; color: #7b1fa2; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; border: 1px solid #e1bee7; }
 
 .badge-material { background: #95a5a6; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; letter-spacing: 0.5px; }
 .badge-material.pai { background: #e67e22; }

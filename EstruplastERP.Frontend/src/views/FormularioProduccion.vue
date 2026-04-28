@@ -60,7 +60,7 @@ const form = ref({
     largo: 0, ancho: 0, espesor: 0, color: '' as string,
     conBrillo: false, 
     tipoBrillo: '777',
-    porcBrillo: 20.00, 
+    porcBrillo: 10.00, 
     llevaFilm: false, tipoCorona: 'Ninguno',
     esGofrado: false,
     conEstearato: false, 
@@ -624,11 +624,11 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                         </div>
                     </div>
                     <div style="flex:1">
-                        <label style="color:#2980b9;">🧪 Estearato (Extra)</label>
-                        <div style="padding: 8px; background: #ebf5fb; border: 1px solid #3498db; border-radius: 4px; color:#2980b9; font-weight:bold; text-align: center;">
-                            {{ kilosEstearato }} Kg
-                        </div>
-                    </div>
+    <label style="color:#2980b9;">🧪 Estearato</label>
+    <div style="padding: 8px; background: #ebf5fb; border: 1px solid #3498db; border-radius: 4px; color:#2980b9; font-weight:bold; text-align: center;">
+        {{ Number(kilosEstearato).toFixed(3) }} Kg
+    </div>
+</div>
                 </div>
 
                 <div class="resumen-peso">Peso Final PT: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +8% Merma)</small></div>

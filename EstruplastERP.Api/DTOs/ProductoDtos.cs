@@ -39,6 +39,7 @@ namespace EstruplastERP.Api.Dtos
         public decimal PrecioCosto { get; set; }
         public decimal StockMinimo { get; set; }
         public bool EsCritico { get; set; }
+        public int? ProveedorId { get; set; }
         public List<IngredienteDto>? Receta { get; set; }
     }
 

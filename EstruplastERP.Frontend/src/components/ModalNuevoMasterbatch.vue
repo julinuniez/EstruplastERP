@@ -86,7 +86,7 @@ const guardarColor = async () => {
                 <div class="input-group">
                     <label>Proveedor (Opcional)</label>
                     <select v-model="form.proveedorId">
-                        <option value="">-- Seleccionar Proveedor --</option>
+                        <option value="">Seleccionar Proveedor</option>
                         <option v-for="prov in proveedores" :key="prov.id" :value="prov.id">
                             {{ prov.razonSocial }}
                         </option>

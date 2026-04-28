@@ -5,7 +5,8 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
     
     // --- LÓGICA: MODAL DE ALTA DE MATERIA PRIMA MANUAL ---
     const mostrarModalNuevaMP = ref(false);
-    const nuevaMP = ref({ nombre: '', codigoSku: '' });
+    // 🚀 AGREGADO: proveedorId inicializado en null
+    const nuevaMP = ref({ nombre: '', codigoSku: '', proveedorId: null as number | null });
     const guardandoMP = ref(false);
 
     const guardarNuevaMateriaPrima = async () => {
@@ -17,12 +18,14 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
             await api.post('/Productos/crear', {
                 nombre: nuevaMP.value.nombre.toUpperCase(),
                 codigoSku: nuevaMP.value.codigoSku.toUpperCase(),
+                proveedorId: nuevaMP.value.proveedorId, // 🚀 AGREGADO: Viaja al backend
                 precioCosto: 0,
                 stockMinimo: 0,
                 receta: []
             });
             alert("✅ Insumo creado correctamente.");
-            nuevaMP.value = { nombre: '', codigoSku: '' };
+            // 🚀 AGREGADO: Limpiamos la variable completa
+            nuevaMP.value = { nombre: '', codigoSku: '', proveedorId: null };
             mostrarModalNuevaMP.value = false;
             
             await cargarDatos(true);
