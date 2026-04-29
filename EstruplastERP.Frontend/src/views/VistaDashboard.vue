@@ -264,13 +264,31 @@ const chartDataStock = computed(() => ({
     }]
 }));
 
-const chartDataProductos = computed(() => ({
-    labels: topProductos.value.map(p => p?.producto || 'Desconocido'),
-    datasets: [{
-        backgroundColor: ['#3498db', '#e74c3c', '#f1c40f', '#2ecc71', '#34495e'],
-        data: topProductos.value.map(p => Math.round(p?.totalKilos || 0))
-    }]
-}));
+const chartDataProductos = computed(() => {
+    const etiquetas = topProductos.value.map(p => p?.producto || 'Desconocido');
+    const datosKilos = topProductos.value.map(p => Math.round(p?.totalKilos || 0));
+
+    const coloresProductos = ['#3498db', '#2ecc71', '#e67e22', '#e74c3c', '#9b59b6'];
+    
+    const colorGrisOtros = '#95a5a6'; 
+
+    const listaColoresFinal = etiquetas.map((label, index) => {
+        if (label === 'OTROS PRODUCTOS') {
+            return colorGrisOtros;
+        }
+        return coloresProductos[index % coloresProductos.length];
+    });
+
+    return {
+        labels: etiquetas,
+        datasets: [{
+            backgroundColor: listaColoresFinal, // 🚀 Usamos la lista inteligente
+            borderWidth: 2, // Le agregamos un bordecito blanco para separarlos mejor
+            borderColor: '#ffffff',
+            data: datosKilos
+        }]
+    };
+});
 
 const chartDataClientes = computed(() => ({
     labels: topClientes.value.map(c => c?.cliente || 'Sin Cliente'),

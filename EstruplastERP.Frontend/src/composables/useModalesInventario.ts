@@ -15,16 +15,14 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
         }
         guardandoMP.value = true;
         try {
-            await api.post('/Productos/crear', {
-                nombre: nuevaMP.value.nombre.toUpperCase(),
-                codigoSku: nuevaMP.value.codigoSku.toUpperCase(),
-                proveedorId: nuevaMP.value.proveedorId, // 🚀 AGREGADO: Viaja al backend
-                precioCosto: 0,
-                stockMinimo: 0,
-                receta: []
+            // 🚀 APUNTAMOS AL ENDPOINT NUEVO
+            await api.post('/Productos/crear-materia-prima', {
+                nombre: nuevaMP.value.nombre,
+                codigoSku: nuevaMP.value.codigoSku,
+                proveedorId: nuevaMP.value.proveedorId
             });
+            
             alert("✅ Insumo creado correctamente.");
-            // 🚀 AGREGADO: Limpiamos la variable completa
             nuevaMP.value = { nombre: '', codigoSku: '', proveedorId: null };
             mostrarModalNuevaMP.value = false;
             
@@ -38,8 +36,6 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
         }
     };
 
-
-    // --- LÓGICA: MODAL DE DETALLE DE RESERVAS ---
     const mostrarModalReservas = ref(false);
     const productoSeleccionado = ref<any>(null);
     const ordenesReserva = ref<any[]>([]);

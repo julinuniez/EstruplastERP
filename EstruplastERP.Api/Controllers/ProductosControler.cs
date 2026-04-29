@@ -235,7 +235,8 @@ namespace EstruplastERP.Api.Controllers
                     PrecioCosto = data.PrecioCosto,
                     StockActual = 0,
                     Activo = true,
-                    EsGenerico = true,
+                    EsGenerico = false,
+                    Rubro = !esProductoTerminado ? "MATERIA PRIMA PLASTICA" : "PRODUCTO TERMINADO",
                     ProveedorId = data.ProveedorId,
                     FechaCreacion = DateTime.Now
                 };
@@ -558,6 +559,52 @@ namespace EstruplastERP.Api.Controllers
                 .ToListAsync();
 
             return Ok(reservas);
+        }
+
+        public class NuevaMateriaPrimaDto
+        {
+            public string Nombre { get; set; }
+            public string CodigoSku { get; set; }
+            public int? ProveedorId { get; set; }
+        }
+
+        [HttpPost("crear-materia-prima")]
+        public async Task<IActionResult> CrearMateriaPrimaManual([FromBody] NuevaMateriaPrimaDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Nombre) || string.IsNullOrWhiteSpace(dto.CodigoSku))
+                return BadRequest(new { mensaje = "Nombre y SKU son obligatorios." });
+
+            if (await _context.Productos.AnyAsync(p => p.CodigoSku == dto.CodigoSku))
+                return BadRequest(new { mensaje = "❌ El Código SKU ya existe en la base de datos." });
+
+            var nuevaMp = new Producto
+            {
+                Nombre = dto.Nombre.Trim().ToUpper(),
+                CodigoSku = dto.CodigoSku.Trim().ToUpper(),
+                EsMateriaPrima = true,
+                EsProductoTerminado = false,
+                EsGenerico = false, // 🚀 Como lo pediste
+                EsFazon = false,
+                Rubro = "MATERIA PRIMA PLASTICA", // 🚀 Como lo pediste
+                Activo = true,
+                StockActual = 0,
+                StockMinimo = 0,
+                PrecioCosto = 0,
+                PesoEspecifico = 1.0m, // Un valor por defecto
+                FechaCreacion = DateTime.Now,
+                ProveedorId = dto.ProveedorId // 🚀 Atamos al proveedor
+            };
+
+            try
+            {
+                _context.Productos.Add(nuevaMp);
+                await _context.SaveChangesAsync();
+                return Ok(new { mensaje = "✅ Materia prima creada correctamente.", producto = nuevaMp });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { mensaje = "Error al guardar en BD: " + ex.Message });
+            }
         }
     }
 }

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { useRouter } from 'vue-router';
 import { useMaestrosStore } from '@/stores/useMaestrosStore';
 import { storeToRefs } from 'pinia';
@@ -91,11 +93,26 @@ async function cargarDatos(forzar = false) {
     }
 }
 
-const abrirPantallazoGlobal = (palabraClave: string = 'TUTI') => {
-    detalleGlobal.value = listaProductos.value.filter(item => 
-        item.nombre.toUpperCase().includes(palabraClave.toUpperCase())
-    );
+const abrirPantallazoGlobal = (producto: any) => {
+    // 1. Detectamos la familia usando tu función exacta (PAI, PEAD, etc.)
+    const familiaOriginal = detectarTipo(producto).toUpperCase();
 
+    // 2. Filtramos buscando la palabra TUTI y que pertenezcan a la misma familia
+    detalleGlobal.value = listaProductos.value.filter(item => {
+        const n = (item.nombre || '').toUpperCase();
+        const sku = (item.codigoSku || '').toUpperCase();
+        const textoCompleto = n + ' ' + sku;
+        
+        // Verificamos que sea un TUTI
+        const esTuti = textoCompleto.includes('TUTI');
+        
+        // Comparamos usando la misma función para asegurar que ambos son PAI (o PEAD, etc.)
+        const esMismaFamilia = detectarTipo(item).toUpperCase() === familiaOriginal;
+
+        return esTuti && esMismaFamilia;
+    });
+
+    // 3. Calculamos los totales sobre ese grupo súper específico
     resumenGlobal.value.fisico = detalleGlobal.value.reduce((acc, item) => acc + (item.stockFisico ?? item.stockActual ?? 0), 0);
     resumenGlobal.value.reservado = detalleGlobal.value.reduce((acc, item) => acc + (item.stockReservado ?? 0), 0);
     resumenGlobal.value.libre = resumenGlobal.value.fisico - resumenGlobal.value.reservado;
@@ -197,6 +214,83 @@ const cargarProveedores = async () => {
     }
 };
 
+const descargandoExcelFazon = ref(false);
+
+const generarExcelFazon = async (clienteId: number) => {
+    if (descargandoExcelFazon.value) return;
+    descargandoExcelFazon.value = true;
+
+    try {
+        // 1. OBTENEMOS DATOS DIRECTO DE LA PANTALLA (Instantáneo, sin llamar a la API)
+        const clienteSeleccionado = listaClientes.value.find(c => Number(c.id) === clienteId);
+        const nombreClienteReal = clienteSeleccionado ? clienteSeleccionado.razonSocial : 'Cliente_Desconocido';
+        const fechaHoy = new Date().toISOString().split('T')[0];
+        
+        // Filtramos el inventario y ORDENAMOS: 1° por SKU, 2° por Nombre
+        const inventarioCliente = listaProductos.value
+            .filter(p => Number(getClienteId(p)) === Number(clienteId))
+            .sort((a, b) => {
+                const comparacionSku = (a.codigoSku || '').localeCompare(b.codigoSku || '');
+                if (comparacionSku !== 0) return comparacionSku;
+                return (a.nombre || '').localeCompare(b.nombre || '');
+            });
+
+        const workbook = new ExcelJS.Workbook();
+        
+        // --- ÚNICA HOJA: INVENTARIO ACTUAL ---
+        const wsInv = workbook.addWorksheet('Inventario Actual');
+        
+        wsInv.mergeCells('A1:C1');
+        wsInv.getCell('A1').value = `REPORTE DE INVENTARIO - ${nombreClienteReal.toUpperCase()}`;
+        wsInv.getCell('A1').font = { size: 14, bold: true, color: { argb: 'FF2980B9' } };
+        wsInv.getCell('A2').value = `Fecha de emisión: ${new Date().toLocaleDateString('es-AR')}`;
+
+        const columnsInv = [
+            { header: 'SKU', key: 'sku', width: 20 },
+            { header: 'Nombre del Producto / Material', key: 'nombre', width: 45 },
+            { header: 'Stock Disponible (kg)', key: 'stock', width: 25 }
+        ];
+        wsInv.columns = columnsInv;
+
+        wsInv.getRow(4).eachCell((cell) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2980B9' } };
+            cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+            cell.alignment = { horizontal: 'center' };
+        });
+
+        if (inventarioCliente.length > 0) {
+            inventarioCliente.forEach((p) => {
+                const fisico = p.stockFisico ?? p.stockActual ?? 0;
+                const reservado = p.stockReservado ?? 0;
+                const disponible = p.stockDisponible ?? (fisico - reservado);
+
+                // Limpieza del nombre comercial
+                const nombreLimpio = (p.nombre || 'Sin Nombre').replace(/\[MOLIDO\]/gi, '').trim();
+
+                const row = wsInv.addRow({ 
+                    sku: p.codigoSku || '-', 
+                    nombre: nombreLimpio, 
+                    stock: disponible 
+                });
+                row.getCell('stock').numFmt = '#,##0.00';
+            });
+        } else {
+            wsInv.addRow({ sku: '', nombre: 'No hay productos en stock para este cliente', stock: 0 });
+        }
+
+        // 2. Descarga automática
+        const nombreArchivoLimpio = nombreClienteReal.replace(/[^a-zA-Z0-9]/g, '_'); 
+        const buffer = await workbook.xlsx.writeBuffer();
+        saveAs(new Blob([buffer]), `Reporte_Inventario_${nombreArchivoLimpio}_${fechaHoy}.xlsx`);
+
+    } catch (e) {
+        console.error("Error excel fazon:", e);
+        alert("Error al generar el Excel. Revisa la consola.");
+    } finally {
+        descargandoExcelFazon.value = false;
+    }
+};
+
 onMounted(() => {
     cargarDatos(true);
     cargarProveedores();
@@ -265,6 +359,7 @@ onMounted(() => {
 
         <div v-if="tabActual === 'CLI'" class="toolbar-clientes">
             <div class="fila-filtros">
+                
                 <div class="filtro-item">
                     <label>🏢 Cliente:</label>
                     <select v-model="clienteFiltro">
@@ -276,22 +371,28 @@ onMounted(() => {
                 <div class="filtro-item" v-if="clienteFiltro">
                     <label>🧱 Material:</label>
                     <select v-model="materialFiltro">
-                        <option value="">-- Todos los Materiales --</option>
+                        <option value="">Todos los Materiales</option>
                         <option v-for="mat in TIPOS_MATERIALES" :key="mat" :value="mat">{{ mat }}</option>
                     </select>
                 </div>
-            </div>
 
-            <div class="sub-tabs" style="display:flex; justify-content:space-between; width:100%;">
-                <div style="display:flex; gap:5px;">
-                    <button :class="{ 'sub-active': subTabCliente === 'MOLIDO_CLI' }" @click="subTabCliente = 'MOLIDO_CLI'">♻️ Molido / Recuperado</button>
-                    <button :class="{ 'sub-active': subTabCliente === 'PT_CLI' }" @click="subTabCliente = 'PT_CLI'">📤 Prod. Terminados</button>
-                    <button :class="{ 'sub-active': subTabCliente === 'MP_CLI' }" @click="subTabCliente = 'MP_CLI'">📥 MP Virgen / Otros</button>
+                <div class="filtro-item" v-if="clienteFiltro" style="align-self: flex-end; margin-bottom: 2px;">
+                    <button 
+                        @click="generarExcelFazon(Number(clienteFiltro))" 
+                        :disabled="descargandoExcelFazon"
+                        style="background-color: #2980b9; color: white; border: none; padding: 0 15px; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; height: 35px;"
+                    >
+                        <span v-if="descargandoExcelFazon">⏳ Generando...</span>
+                        <span v-else>📊 Exportar Reporte Fazón</span>
+                    </button>
                 </div>
-                
-                <label v-if="subTabCliente === 'MOLIDO_CLI'" class="toggle-agrupado">
-                    <input type="checkbox" v-model="verMolidoAgrupado"> 📂 Agrupar por Color
-                </label>
+
+                <div class="filtro-item" style="margin-left: auto; align-self: flex-end; margin-bottom: 2px;">
+                    <label class="toggle-agrupado" style="height: 35px; display: flex; align-items: center; margin: 0; padding: 0 15px; box-sizing: border-box; cursor: pointer;">
+                        <input type="checkbox" v-model="verMolidoAgrupado" style="margin-right: 8px; cursor: pointer;"> 📂 Agrupar por Color
+                    </label>
+                </div>
+
             </div>
         </div>
 
@@ -383,13 +484,13 @@ onMounted(() => {
                             <small v-else-if="checkEsScrap(p)" style="color: #d35400; font-weight:bold; margin-left:5px;">(SCRAP)</small>
                             
                             <button 
-                                v-if="p.nombre.toUpperCase().includes('TUTI') && (!getClienteId(p) || getClienteId(p) === 0)" 
-                                @click="abrirPantallazoGlobal('TUTI')"
-                                class="btn-global"
-                                title="Ver Stock Global de todos los clientes"
-                            >
-                                🌍 Ver Total Global
-                            </button>
+    v-if="p.nombre.toUpperCase().includes('TUTI') && (!getClienteId(p) || getClienteId(p) === 0)" 
+    @click="abrirPantallazoGlobal(p)" 
+    class="btn-global"
+    title="Ver Stock Global de todos los clientes"
+>
+    🌍 Ver Total Global
+</button>
                         </td>
                         
                         <td v-if="tabActual === 'PT' || tabActual === 'CLI'">
