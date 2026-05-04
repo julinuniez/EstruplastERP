@@ -48,6 +48,8 @@ const ocultarFormula = ref(false);
 const cantidadPalletsUsuario = ref(1);
 const notaPedidoSugerida = ref<string>('');
 
+const tipoSalidaVisual = ref<'NORMAL' | 'NATURAL'>('NORMAL');
+
 const emit = defineEmits(['guardado'])
 
 const form = ref({
@@ -103,6 +105,21 @@ const densidadPT = computed(() => {
 
 const { totalPorcentajeReceta, factorMerma } = useCalculosProduccion(form, recetaDinamica, productoSeleccionado);
 
+// 🚀 ORDENAMIENTO DE DROPDOWN: Manda los productos FAZON al final de la lista
+const productosDropdownOrdenados = computed(() => {
+    if (!listaProductosDisponibles.value) return [];
+    return [...listaProductosDisponibles.value].sort((a, b) => {
+        const aFazon = a.esFazon ? 1 : 0;
+        const bFazon = b.esFazon ? 1 : 0;
+        
+        // Si uno es fazon y el otro no, el fazon va abajo
+        if (aFazon !== bFazon) return aFazon - bFazon; 
+        
+        // Si ambos son iguales, ordenamos alfabéticamente
+        return (a.nombre || '').localeCompare(b.nombre || '');
+    });
+});
+
 const kilosCalculados = computed(() => {
     if (!form.value.largo || !form.value.ancho || !form.value.espesor || !form.value.cantidad) return 0;
     
@@ -117,27 +134,20 @@ const kilosCalculados = computed(() => {
     return Number(k.toFixed(2));
 });
 
-// 🚀 1. ESTEARATO PURO Y BRUTO
 const kilosEstearato = computed(() => {
     let kilosBase = Number(form.value.kilosTotales);
-    // Si los kilos totales de la hoja dan 0, recae en los calculados
     if (isNaN(kilosBase) || kilosBase <= 0) {
         kilosBase = Number(kilosCalculados.value);
     }
-    return kilosBase * 0.0008; // Matemática exacta
+    return kilosBase * 0.0008;
 });
 
-// 🚀 2. VISTA BLINDADA
 const recetaConExtrasParaVista = computed(() => {
-    // A. Filtramos CUALQUIER estearato viejo que haya traído la base de datos (lo ignoramos)
     const recetaLimpia = recetaDinamica.value.filter(r => !(r.nombreInsumo || '').toUpperCase().includes('ESTEARATO'));
 
-    // B. Buscamos el material en el maestro
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
 
-    // C. Si la matemática nos dio > 0, inyectamos el nuestro forzado como TEXTO
     if (est && kilosEstearato.value > 0) {
-        // Obligamos a que el sistema lo vea como String "0.08"
         const valorClavadoTexto = kilosEstearato.value.toFixed(2);
         
         recetaLimpia.push({
@@ -146,12 +156,11 @@ const recetaConExtrasParaVista = computed(() => {
             nombreInsumo: est.nombre,
             densidad: est.pesoEspecifico || 1,
             esEstearato: true,
-            cantidad: valorClavadoTexto,     // Mandamos el texto "0.08" a ambas columnas
+            cantidad: valorClavadoTexto,     
             kilosFijos: valorClavadoTexto
         });
     }
 
-    // D. Formateamos TODA LA RECETA convirtiendo las variables a Textos con 2 decimales
     return recetaLimpia.map(r => {
         let c = r.cantidad;
         let k = r.kilosFijos;
@@ -311,6 +320,7 @@ watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
     if (form.value.esConsolidado) return;
     
     form.value.merma = 8;
+    tipoSalidaVisual.value = 'NORMAL';
     
     if (nuevoProdId && !imprimiendoHistorial.value) {
         await CargarDatosProductos(Number(nuevoProdId)); 
@@ -473,6 +483,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     :totalPorcentaje="totalPorcentajeReceta" 
                     :materiasPrimas="listaTodasMateriasPrimas" 
                     :ocultarFormula="ocultarFormula" 
+                    :tipoSalidaVisual="tipoSalidaVisual"
                     @add-insumo="agregarInsumoDesdeHijo" 
                     @remove-insumo="quitarInsumoManual" 
                     @update-receta="balancearBase"  
@@ -527,15 +538,35 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 </button>
             </div>
             
+            <!-- 🚀 SELECTOR ORDENADO CON FAZON AL FINAL -->
             <select v-model="form.productoTerminadoId">
                 <option disabled value="">Seleccionar Producto...</option>
-                <option v-for="p in listaProductosDisponibles" :key="p.id" :value="p.id">
+                <option v-for="p in productosDropdownOrdenados" :key="p.id" :value="p.id">
                     {{ p.esFazon ? '★ ' : '' }}{{ p.nombre }} {{ p.esGenerico ? '(A Medida)' : (p.esFazon ? '(Fazon)' : '(Estándar)') }}
                 </option>
             </select>
 
             <div v-if="form.productoTerminadoId" class="caja-detalles-producto">
                 
+                <!-- 🚀 BOTONES NORMAL/NATURAL MEJORADOS -->
+                <div v-if="productoSeleccionado && !productoSeleccionado.esFazon && !(productoSeleccionado.nombre || '').toUpperCase().includes('COLOR')" class="fila-input" style="margin-bottom: 15px; display: flex; gap: 10px;">
+                    <button 
+                        @click="tipoSalidaVisual = 'NORMAL'" 
+                        type="button"
+                        style="flex: 1; padding: 10px; border-radius: 6px; font-weight: 900; font-size: 14px; cursor: pointer; border: 2px solid #3498db; transition: all 0.2s;"
+                        :style="tipoSalidaVisual === 'NORMAL' ? 'background: #3498db; color: white; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);' : 'background: transparent; color: #3498db;'"
+                    >
+                        ESTÁNDAR
+                    </button>
+                    <button 
+                        @click="tipoSalidaVisual = 'NATURAL'" 
+                        type="button"
+                        style="flex: 1; padding: 10px; border-radius: 6px; font-weight: 900; font-size: 14px; cursor: pointer; border: 2px solid #2ecc71; transition: all 0.2s;"
+                        :style="tipoSalidaVisual === 'NATURAL' ? 'background: #2ecc71; color: white; box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);' : 'background: transparent; color: #2ecc71;'"
+                    >NATURAL
+                    </button>
+                </div>
+
                 <div v-if="listaLotesCliente.length > 0" class="box-fazon-selector">
                     <label style="color: #2ecc71;">♻️ Lote Recuperado (Fazón):</label>
                     <select v-model="loteFazonSeleccionadoId" @change="alCambiarLoteFazon" class="select-fazon">
@@ -624,11 +655,11 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                         </div>
                     </div>
                     <div style="flex:1">
-    <label style="color:#2980b9;">🧪 Estearato</label>
-    <div style="padding: 8px; background: #ebf5fb; border: 1px solid #3498db; border-radius: 4px; color:#2980b9; font-weight:bold; text-align: center;">
-        {{ Number(kilosEstearato).toFixed(3) }} Kg
-    </div>
-</div>
+                        <label style="color:#2980b9;">🧪 Estearato</label>
+                        <div style="padding: 8px; background: #ebf5fb; border: 1px solid #3498db; border-radius: 4px; color:#2980b9; font-weight:bold; text-align: center;">
+                            {{ Number(kilosEstearato).toFixed(3) }} Kg
+                        </div>
+                    </div>
                 </div>
 
                 <div class="resumen-peso">Peso Final PT: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +8% Merma)</small></div>
@@ -772,6 +803,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
             :totalPorcentaje="totalPorcentajeReceta" 
             :materiasPrimas="listaTodasMateriasPrimas" 
             :ocultarFormula="ocultarFormula" 
+            :tipoSalidaVisual="tipoSalidaVisual"
         />
     </div>
 </div>
@@ -805,22 +837,8 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
 label { display: block; margin-top: 8px; font-size: 13px; color: #bdc3c7; font-weight: 600; }
 select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; border: none; font-size: 13px; box-sizing: border-box; background: #ecf0f1; color: #2c3e50; }
 .fila-input { display: flex; gap: 8px; margin-bottom: 5px; }
-.btn-sugerido {
-    width: 130px;
-    margin-top: 2px;
-    border-radius: 4px;
-    border: 1px solid #1abc9c;
-    background: transparent;
-    color: #1abc9c;
-    font-weight: bold;
-    cursor: pointer;
-    font-size: 12px;
-    padding: 8px;
-}
-.btn-sugerido:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+.btn-sugerido { width: 130px; margin-top: 2px; border-radius: 4px; border: 1px solid #1abc9c; background: transparent; color: #1abc9c; font-weight: bold; cursor: pointer; font-size: 12px; padding: 8px; }
+.btn-sugerido:disabled { opacity: 0.5; cursor: not-allowed; }
 .seccion-medidas-editables { background: #34495e; padding: 12px; border-radius: 6px; margin-top: 15px; border: 1px solid #4e6475; }
 .box-color { margin-bottom: 15px; border: 1px dashed #f39c12; padding: 5px; border-radius: 4px; }
 .lbl-sep { color: #f1c40f !important; font-weight: bold; border-bottom: 1px dashed #7f8c8d; padding-bottom: 3px; margin-top: 15px !important; margin-bottom: 5px; }
@@ -830,16 +848,7 @@ select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; 
 .check-container.disabled { opacity: 0.5; cursor: not-allowed; }
 .alerta-error { background: #c0392b; color: white; padding: 10px; border-radius: 5px; margin-top: 15px; font-weight: bold; text-align: center; font-size: 12px; }
 
-.alerta-stock-warning { 
-    background-color: #fff9e6; 
-    border: 1px solid #f1c40f; 
-    color: #d35400; 
-    padding: 10px; 
-    border-radius: 6px; 
-    margin-top: 15px; 
-    font-size: 12px; 
-    text-align: left; 
-}
+.alerta-stock-warning { background-color: #fff9e6; border: 1px solid #f1c40f; color: #d35400; padding: 10px; border-radius: 6px; margin-top: 15px; font-size: 12px; text-align: left; }
 .alerta-stock-warning h4 { margin: 0 0 5px 0; color: #e67e22; font-size: 13px; }
 .alerta-stock-warning ul { margin: 0; padding-left: 20px; }
 
@@ -867,63 +876,20 @@ select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; 
 .btn-orden { background: #34495e; border: 1px solid #7f8c8d; } .btn-orden:hover { background: #2980b9; }
 .btn-carga { background: #8e44ad; border: 1px solid #9b59b6; } .btn-carga:hover { background: #9b59b6; }
 
-.box-fazon-selector {
-    background-color: #27ae60;
-    padding: 10px;
-    border-radius: 6px;
-    margin-top: 10px;
-    border: 1px solid #2ecc71;
-}
-.box-fazon-selector label {
-    color: white !important;
-}
-.select-fazon {
-    background-color: white;
-    font-weight: bold;
-    color: #2c3e50;
-    border: 2px solid #2ecc71;
-}
+.box-fazon-selector { background-color: #27ae60; padding: 10px; border-radius: 6px; margin-top: 10px; border: 1px solid #2ecc71; }
+.box-fazon-selector label { color: white !important; }
+.select-fazon { background-color: white; font-weight: bold; color: #2c3e50; border: 2px solid #2ecc71; }
 
-.caja-detalles-producto {
-    background-color: #34495e; 
-    padding: 15px;
-    border-radius: 8px;
-    margin-top: 15px;
-    border: 1px solid #4a6278;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-}
+.caja-detalles-producto { background-color: #34495e; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #4a6278; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
 
-.alerta-pallets {
-    background-color: #fff3cd;
-    padding: 15px;
-    border-radius: 8px;
-    margin-top: 15px;
-    color: #856404;
-    border: 1px solid #ffeeba;
-}
-.banner-borrador {
-    background-color: #34495e;
-    border-left: 4px solid #f1c40f;
-    padding: 12px;
-    border-radius: 6px;
-    margin-bottom: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
+.alerta-pallets { background-color: #fff3cd; padding: 15px; border-radius: 8px; margin-top: 15px; color: #856404; border: 1px solid #ffeeba; }
+.banner-borrador { background-color: #34495e; border-left: 4px solid #f1c40f; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
 .banner-texto span { color: #f1c40f; font-size: 13px; display: block; }
 .banner-texto small { color: #bdc3c7; font-size: 11px; }
 .banner-acciones { display: flex; gap: 8px; }
-.btn-borrador-ok {
-    flex: 1; background: #27ae60; color: white; border: none; 
-    padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px;
-}
+.btn-borrador-ok { flex: 1; background: #27ae60; color: white; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; }
 .btn-borrador-ok:hover { background: #2ecc71; }
-.btn-borrador-no {
-    flex: 1; background: transparent; color: #bdc3c7; border: 1px solid #7f8c8d; 
-    padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px;
-}
+.btn-borrador-no { flex: 1; background: transparent; color: #bdc3c7; border: 1px solid #7f8c8d; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; }
 .btn-borrador-no:hover { background: #95a5a6; color: white; }
 
 @media (max-width: 1000px) { 

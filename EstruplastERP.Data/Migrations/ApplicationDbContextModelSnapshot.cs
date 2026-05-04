@@ -56,7 +56,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Clientes");
+                    b.ToTable("Clientes", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.ClienteMaterialFazon", b =>
@@ -84,7 +84,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("MaterialRealId");
 
-                    b.ToTable("ClientesMaterialesFazon");
+                    b.ToTable("ClientesMaterialesFazon", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.ConsumoHojaCarga", b =>
@@ -110,7 +110,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("MateriaPrimaId");
 
-                    b.ToTable("ConsumosHojasCarga");
+                    b.ToTable("ConsumosHojasCarga", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.ConsumoOrden", b =>
@@ -136,7 +136,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("OrdenProduccionId");
 
-                    b.ToTable("ConsumosOrdenes");
+                    b.ToTable("ConsumosOrdenes", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.Formula", b =>
@@ -163,7 +163,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("ProductoTerminadoId");
 
-                    b.ToTable("Formulas");
+                    b.ToTable("Formulas", (string)null);
 
                     b.HasData(
                         new
@@ -299,7 +299,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("HojasCarga");
+                    b.ToTable("HojasCarga", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.Movimiento", b =>
@@ -352,7 +352,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("ProveedorId");
 
-                    b.ToTable("Movimientos");
+                    b.ToTable("Movimientos", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.OrdenProduccion", b =>
@@ -439,7 +439,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("ProductoId");
 
-                    b.ToTable("Ordenes");
+                    b.ToTable("Ordenes", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.Produccion", b =>
@@ -482,7 +482,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("ProductoTerminadoId");
 
-                    b.ToTable("Producciones");
+                    b.ToTable("Producciones", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.Producto", b =>
@@ -574,7 +574,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("ProveedorId");
 
-                    b.ToTable("Productos");
+                    b.ToTable("Productos", (string)null);
 
                     b.HasData(
                         new
@@ -1452,7 +1452,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Proveedores");
+                    b.ToTable("Proveedores", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.Remito", b =>
@@ -1483,7 +1483,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("ClienteId");
 
-                    b.ToTable("Remitos");
+                    b.ToTable("Remitos", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.RemitoDetalle", b =>
@@ -1517,7 +1517,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasIndex("RemitoId");
 
-                    b.ToTable("RemitoDetalles");
+                    b.ToTable("RemitoDetalles", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.Usuario", b =>
@@ -1545,7 +1545,7 @@ namespace EstruplastERP.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Usuarios");
+                    b.ToTable("Usuarios", (string)null);
                 });
 
             modelBuilder.Entity("EstruplastERP.Core.ClienteMaterialFazon", b =>

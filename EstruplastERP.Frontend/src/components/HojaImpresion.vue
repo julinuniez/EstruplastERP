@@ -14,6 +14,7 @@ const props = defineProps<{
     totalPorcentaje: number;
     materiasPrimas: any[]; 
     ocultarFormula: boolean; 
+    tipoSalidaVisual?: string;
 }>();
 
 const emit = defineEmits(['add-insumo', 'remove-insumo', 'update-receta']);
@@ -95,8 +96,43 @@ const densidadReal = computed(() => {
 });
 
 const recetaVisual = computed(() => {
-    let lista = [...props.receta];
-    return lista.sort((a, b) => (parseFloat(b.cantidadKilos || b.cantidad) || 0) - (parseFloat(a.cantidadKilos || a.cantidad) || 0));
+    let lista = JSON.parse(JSON.stringify(props.receta || []));
+
+    if (props.tipoSalidaVisual === 'NATURAL') {
+        let porcentajeRemovido = 0;
+        let kilosRemovidos = 0;
+        const listaLimpia: any[] = [];
+
+        lista.forEach((item: any) => {
+            const n = (item.nombreInsumo || item.nombreMateriaPrima || '').toUpperCase();
+            const esColor = item.esColor || n.includes('MB') || n.includes('MASTER') || n.includes('COLOR');
+            
+            if (esColor) {
+                porcentajeRemovido += parseFloat(item.cantidad || 0);
+                kilosRemovidos += parseFloat(item.kilosFijos || item.cantidadKilos || 0);
+            } else {
+                listaLimpia.push(item);
+            }
+        });
+
+        if (listaLimpia.length > 0 && porcentajeRemovido > 0) {
+            listaLimpia.sort((a: any, b: any) => (parseFloat(b.cantidad) || 0) - (parseFloat(a.cantidad) || 0));
+            const materialPrincipal = listaLimpia.find((i: any) => i.esBase) || listaLimpia[0];
+
+            if (materialPrincipal) {
+                materialPrincipal.cantidad = (parseFloat(materialPrincipal.cantidad || 0) + porcentajeRemovido).toFixed(2);
+                
+                if (materialPrincipal.kilosFijos) {
+                    materialPrincipal.kilosFijos = (parseFloat(materialPrincipal.kilosFijos) + kilosRemovidos).toFixed(2);
+                } else if (materialPrincipal.cantidadKilos) {
+                    materialPrincipal.cantidadKilos = (parseFloat(materialPrincipal.cantidadKilos) + kilosRemovidos).toFixed(2);
+                }
+            }
+        }
+        lista = listaLimpia;
+    }
+
+    return lista.sort((a: any, b: any) => (parseFloat(b.cantidadKilos || b.cantidad) || 0) - (parseFloat(a.cantidadKilos || a.cantidad) || 0));
 });
 
 const obtenerTipoMaterial = (item: any) => {
@@ -113,32 +149,26 @@ const obtenerTipoMaterial = (item: any) => {
     return '';
 };
 
-// 🚀 ACÁ ESTÁ EL FILTRO INTELIGENTE
 const sugerenciasFiltradas = computed(() => {
     const texto = insumoBusquedaTexto.value.trim().toUpperCase();
     let lista = props.materiasPrimas || [];
     
-    // Identificamos al cliente actual de la orden
     const idClienteActual = Number(props.cliente?.id || props.form?.clienteId || 0);
 
     lista = lista.filter(mp => {
-        // 1. Checkeo de Dueño
         const idDuenio = Number(mp.clienteId || mp.ClienteId || 0);
         if (idDuenio !== 0 && idDuenio !== idClienteActual) return false;
 
         const nombreLimpio = (mp.nombre || '').toUpperCase().trim();
 
-        // 2. Excluir todo lo que CONTENGA la palabra "BASE"
         if (nombreLimpio.includes('BASE')) return false;
 
-        // 3. Excluir coincidencias EXACTAS (ni una letra más, ni una letra menos)
         const excluidosExactos = ['ABS','PAI', 'PEAD', 'POLIPROPILENO','POLIETILENO','RESISTENTE AL FREON'];
         if (excluidosExactos.includes(nombreLimpio)) return false;
 
         return true;
     });
     
-    // Filtramos por el texto que escribe el usuario
     if (texto) {
         lista = lista.filter(mp => {
             const nombre = (mp.nombre || '').toUpperCase();
@@ -243,6 +273,7 @@ const verificarCaracteristica = (propMinuscula: string, propMayuscula: string) =
 const tieneBrillo = computed(() => verificarCaracteristica('conBrillo', 'ConBrillo'));
 const llevaFilm = computed(() => verificarCaracteristica('llevaFilm', 'LlevaFilm'));
 const esGofrado = computed(() => verificarCaracteristica('esGofrado', 'EsGofrado'));
+const tieneUV = computed(() => verificarCaracteristica('aditivoUV', 'AditivoUV'));
 
 const tipoCorona = computed(() => {
     let val = props.form?.tipoCorona || props.form?.TipoCorona || props.producto?.tipoCorona || props.producto?.TipoCorona;
@@ -310,7 +341,8 @@ const tipoCorona = computed(() => {
             </div>
         </div>
 
-        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="ocultarFormula && (tieneBrillo || llevaFilm || tipoCorona || esGofrado)">
+        <!-- 🚀 ESTE BLOQUE AHORA APARECE SIEMPRE QUE HAYA UN ADITIVO -->
+        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="tieneBrillo || llevaFilm || tipoCorona || esGofrado || tieneUV">
             <div class="dato-box-pdf" v-if="tieneBrillo">
                 <span class="label-tech-pdf">BRILLO</span>
                 <span class="valor-tech-pdf">SÍ</span>
@@ -327,11 +359,16 @@ const tipoCorona = computed(() => {
                 <span class="label-tech-pdf">ACABADO</span>
                 <span class="valor-tech-pdf">GOFRADO</span>
             </div>
+            <div class="dato-box-pdf" v-if="tieneUV">
+                <span class="label-tech-pdf">UV</span>
+                <span class="valor-tech-pdf">SÍ</span>
+            </div>
         </div>
 
         <div v-show="!ocultarFormula" class="seccion-receta-pdf">
             <div class="titulo-receta-pdf">
                 {{ esConsolidadoReal ? 'RESUMEN DE MEZCLA CONSOLIDADA' : (densidadReal > 0 ? `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(densidadReal.toFixed(3))})` : 'FÓRMULA DE MEZCLA') }}
+
                 <span style="float:right; font-size: 0.8em; color: #333" v-if="!esConsolidadoReal">Total: {{ Number(totalPorcentaje).toFixed(2) }}%</span>
             </div>
             <table class="tabla-receta-pdf">

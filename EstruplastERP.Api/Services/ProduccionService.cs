@@ -32,52 +32,6 @@ namespace EstruplastERP.Api.Services
             return cantidadPedida;
         }
 
-        private async Task<List<DetalleConsumoDto>> ExplosionarRecetasAsync(List<DetalleConsumoDto> consumosOriginales)
-        {
-            var consumosFinales = new List<DetalleConsumoDto>();
-
-            foreach (var consumo in consumosOriginales)
-            {
-                var mp = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
-
-                if (mp != null && mp.EsPremezcla)
-                {
-                    var subReceta = await _context.Formulas
-                        .Where(f => f.ProductoTerminadoId == mp.Id)
-                        .ToListAsync();
-
-                    if (!subReceta.Any())
-                    {
-                        consumosFinales.Add(consumo);
-                        continue;
-                    }
-
-                    var subConsumos = subReceta.Select(r => new DetalleConsumoDto
-                    {
-                        MateriaPrimaId = r.MateriaPrimaId,
-                        CantidadKilos = (consumo.CantidadKilos * r.Cantidad) / 100M
-                    }).ToList();
-
-                    var subConsumosExplosionados = await ExplosionarRecetasAsync(subConsumos);
-                    consumosFinales.AddRange(subConsumosExplosionados);
-                }
-                else
-                {
-                    consumosFinales.Add(consumo);
-                }
-            }
-
-            var consumosAgrupados = consumosFinales
-                .GroupBy(c => c.MateriaPrimaId)
-                .Select(g => new DetalleConsumoDto
-                {
-                    MateriaPrimaId = g.Key,
-                    CantidadKilos = g.Sum(c => c.CantidadKilos)
-                }).ToList();
-
-            return consumosAgrupados;
-        }
-
         private async Task<List<DetalleConsumoDto>> AplicarSustitucionFazon(int clienteId, List<DetalleConsumoDto> consumosOriginales)
         {
             var reglas = await _context.ClientesMaterialesFazon
@@ -124,7 +78,7 @@ namespace EstruplastERP.Api.Services
                 }).ToList();
             }
 
-            itemsParaVerificar = await ExplosionarRecetasAsync(itemsParaVerificar);
+            // Ya no explotamos recetas porque se removió la propiedad EsPremezcla de la base de datos
 
             if (request.ClienteId.GetValueOrDefault() > 0)
             {
@@ -191,6 +145,7 @@ namespace EstruplastERP.Api.Services
                     ConBrillo = request.ConBrillo,
                     LlevaFilm = request.LlevaFilm,
                     EsGofrado = request.EsGofrado,
+                    AditivoUV = request.AditivoUV,
                     TipoCorona = request.TipoCorona,
                     Consumos = new List<ConsumoOrden>()
                 };
@@ -207,7 +162,7 @@ namespace EstruplastERP.Api.Services
                     }).ToList();
                 }
 
-                consumosCalculados = await ExplosionarRecetasAsync(consumosCalculados);
+                // Ya no explotamos recetas porque se removió la propiedad EsPremezcla de la base de datos
 
                 if (request.ClienteId.GetValueOrDefault() > 0)
                 {

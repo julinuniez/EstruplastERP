@@ -19,6 +19,7 @@ export interface PayloadOrdenNueva {
     conBrillo: boolean;
     llevaFilm: boolean;
     esGofrado: boolean;
+    aditivoUV: boolean;
     tipoCorona: string;
 }
 

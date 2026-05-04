@@ -38,8 +38,10 @@ namespace EstruplastERP.Api.Controllers
             int targetMes = mes ?? DateTime.Now.Month;
             int targetAnio = anio ?? DateTime.Now.Year;
 
-            // Filtro ESTRICTO mes a mes
-            query = query.Where(o => o.FechaCreacion.Month == targetMes && o.FechaCreacion.Year == targetAnio);
+            query = query.Where(o =>
+                (o.Estado != EstadoOrden.Finalizada && o.Estado != EstadoOrden.Cancelada) ||
+                (o.FechaCreacion.Month == targetMes && o.FechaCreacion.Year == targetAnio)
+            );
 
             var lista = await query
                 .OrderByDescending(o => o.FechaCreacion)
@@ -66,6 +68,7 @@ namespace EstruplastERP.Api.Controllers
                     LlevaFilm = o.LlevaFilm,
                     EsGofrado = o.EsGofrado,
                     TipoCorona = o.TipoCorona,
+                    AditivoUV = o.AditivoUV,
                     EsImpreso = o.EsImpreso,
                     Estado = o.Estado.ToString(),
                     EsFinalizada = o.Estado == EstadoOrden.Finalizada,
@@ -159,6 +162,7 @@ namespace EstruplastERP.Api.Controllers
                 orden.ConBrillo = dto.ConBrillo;
                 orden.LlevaFilm = dto.LlevaFilm;
                 orden.EsGofrado = dto.EsGofrado;
+                orden.AditivoUV = dto.AditivoUV;
                 orden.TipoCorona = dto.TipoCorona;
                 orden.Color = dto.Color;
 

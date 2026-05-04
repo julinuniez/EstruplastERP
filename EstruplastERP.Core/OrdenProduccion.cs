@@ -56,6 +56,7 @@ namespace EstruplastERP.Core
         public bool ConBrillo { get; set; }
         public bool LlevaFilm { get; set; }
         public bool EsGofrado { get; set; }
+        public bool AditivoUV { get; set; }
         public string? TipoCorona { get; set; } = "Ninguno";
         public bool EsImpreso { get; set; } = false;
         public DateTime FechaCreacion { get; set; } = DateTime.Now;

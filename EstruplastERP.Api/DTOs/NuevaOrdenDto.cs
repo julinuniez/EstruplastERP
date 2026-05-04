@@ -18,6 +18,7 @@
         public bool ConBrillo { get; set; }
         public bool LlevaFilm { get; set; }
         public bool EsGofrado { get; set; }
+        public bool AditivoUV { get; set; }
         public string TipoCorona { get; set; } = "Ninguno";
         public List<DetalleConsumoDto> Consumos { get; set; } = new List<DetalleConsumoDto>();
     }

@@ -33,7 +33,7 @@ export interface ProduccionItem {
     productoId?: number;
     clienteId?: number;
     observacion?: string;
-    hojaCargaId?: number | null; // 🚀 NUEVO: Integramos la hoja de carga al modelo
+    hojaCargaId?: number | null;
 }
 
 const producciones = ref<ProduccionItem[]>([])
@@ -65,6 +65,10 @@ const listaMeses = [
     { id: 7, nombre: 'Julio' }, { id: 8, nombre: 'Agosto' }, { id: 9, nombre: 'Septiembre' },
     { id: 10, nombre: 'Octubre' }, { id: 11, nombre: 'Noviembre' }, { id: 12, nombre: 'Diciembre' }
 ];
+
+const nombreMesActual = computed(() => {
+    return listaMeses.find(m => m.id === mesSeleccionado.value)?.nombre || '';
+});
 
 const listaAnios = computed(() => {
     const anios = [];
@@ -118,7 +122,6 @@ function extraerCodigoHC(obs: string | undefined) {
 const produccionesFiltradas = computed(() => {
     return producciones.value.filter(item => {
         let pasaEstado = true;
-        // 🚀 NUEVO: Modificamos el filtro para incluir el nuevo estado
         if (filtroEstado.value === 'Pendientes') pasaEstado = item.estado === 'Pendiente' || item.estado === 'EnProceso' || item.estado === 'MaterialPreparado';
         else if (filtroEstado.value === 'Finalizadas') pasaEstado = item.estado === 'Finalizada';
         else if (filtroEstado.value === 'Canceladas') pasaEstado = item.estado === 'Cancelada';
@@ -322,7 +325,8 @@ defineExpose({ cargarHistorial })
   <div class="historial-wrapper">
     <div class="header-tabla">
         <h3 class="titulo-bandeja">
-            {{ filtroEstado === 'Pendientes' ? '🔥 Bandeja de Producción' : '🗄️ Histórico de Órdenes' }}
+            <!-- 🚀 TÍTULO DINÁMICO: Cambia según si ves pendientes o historial -->
+            {{ filtroEstado === 'Pendientes' ? '🔥 Bandeja de Producción Activa' : `🗄️ Histórico de ${nombreMesActual} ${anioSeleccionado}` }}
         </h3>
         <div class="filtros-container">
             <input 
@@ -337,7 +341,9 @@ defineExpose({ cargarHistorial })
                 <option value="Canceladas">❌ Canceladas</option>
                 <option value="Todos">📁 Todas</option>
             </select>
-            <div class="grupo-filtro-tiempo">
+            
+            <!-- 🚀 MAGIA ACÁ: El selector de mes/año solo aparece si NO estás en "Pendientes" -->
+            <div class="grupo-filtro-tiempo" v-show="filtroEstado !== 'Pendientes'">
                 <label>📅</label>
                 <select v-model="mesSeleccionado" class="select-mes">
                     <option v-for="m in listaMeses" :key="m.id" :value="m.id">{{ m.nombre }}</option>
@@ -346,6 +352,7 @@ defineExpose({ cargarHistorial })
                     <option v-for="a in listaAnios" :key="a" :value="a">{{ a }}</option>
                 </select>
             </div>
+            
             <button @click="cargarHistorial" class="btn-refresh" :disabled="cargando" title="Actualizar datos">
                 {{ cargando ? '⏳' : '🔄' }}
             </button>
@@ -403,10 +410,11 @@ defineExpose({ cargarHistorial })
                     
                     <td class="td-prod">
                         <span class="prod-nombre">{{ p.producto }}</span>
-                        <div v-if="p.color || p.conBrillo || p.llevaFilm || (p.tipoCorona && p.tipoCorona !== 'Ninguno')" class="tags-produccion">
+                        <div v-if="p.color || p.conBrillo || p.llevaFilm || p.aditivoUV || (p.tipoCorona && p.tipoCorona !== 'Ninguno')" class="tags-produccion">
                             <span v-if="p.color" class="tag-color">🎨 {{ p.color.toUpperCase() }}</span>
                             <span v-if="p.conBrillo" class="tag-extra">✨ Brillo</span>
                             <span v-if="p.llevaFilm" class="tag-extra">🛡️ Film</span>
+                            <span v-if="p.aditivoUV" class="tag-extra" style="background:#fef3c7; color:#d97706; border-color:#fde68a;">☀️ UV</span>
                             <span v-if="p.tipoCorona && p.tipoCorona !== 'Ninguno'" class="tag-extra">⚡ Corona {{ p.tipoCorona }}</span>
                         </div>
                         <div v-if="getObservacionLimpia(p.observacion)" class="nota-operario" title="Nota de Producción">
@@ -524,7 +532,7 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 
 .td-prod { font-weight: 700; color: #1e293b; line-height: 1.1; vertical-align: middle; }
 .prod-nombre { display: block; font-size: 0.85rem; margin-bottom: 4px; }
-.tags-produccion { display: flex; gap: 4px; flex-wrap: wrap; }
+.tags-produccion { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .tag-color { background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; font-size: 0.6rem; padding: 1px 4px; border-radius: 3px; font-weight: 800; letter-spacing: 0.5px; }
 .tag-extra { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; font-size: 0.6rem; padding: 1px 4px; border-radius: 3px; font-weight: 700; }
 
@@ -539,7 +547,6 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .badge-pend { background: #fff7ed; color: #d97706; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #fcd34d; box-shadow: 0 0 5px rgba(217, 119, 6, 0.2); white-space: nowrap;}
 .badge-ok { background: #ecfdf5; color: #10b981; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #a7f3d0; white-space: nowrap;}
 .badge-cancel { background: #fef2f2; color: #ef4444; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #fecaca; white-space: nowrap;}
-/* 🚀 NUEVO: Estilo para la nueva etiqueta */
 .badge-prep { background: #eff6ff; color: #3b82f6; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #93c5fd; white-space: nowrap;}
 
 .td-acciones { vertical-align: middle; }

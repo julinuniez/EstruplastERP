@@ -145,6 +145,7 @@ export function useImpresionProduccion(
             form.value.llevaFilm = orden.llevaFilm || false;
             form.value.tipoCorona = orden.tipoCorona || 'Ninguno';
             form.value.esGofrado = orden.esGofrado || orden.EsGofrado || false;
+            form.value.aditivoUV = orden.aditivoUV || orden.AditivoUV || false;
             form.value.color = orden.color || orden.colorTexto || '';
             form.value.colorTexto = orden.colorTexto || orden.color || '';
             form.value.Color = orden.color || '';

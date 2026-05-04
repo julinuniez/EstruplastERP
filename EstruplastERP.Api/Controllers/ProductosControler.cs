@@ -35,7 +35,6 @@ namespace EstruplastERP.Api.Controllers
                         p.StockActual,
                         p.StockMinimo,
                         p.PesoEspecifico,
-                        EsCritico = _context.Database.ExecuteSqlRaw("SELECT 1") == 1 ? p.EsCritico : false,
                         p.EsMateriaPrima,
                         p.EsProductoTerminado,
                         p.EsFazon,
@@ -355,7 +354,6 @@ namespace EstruplastERP.Api.Controllers
             producto.Nombre = data.Nombre.Trim();
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
-            producto.EsCritico = data.EsCritico;
 
             try
             {
@@ -409,7 +407,6 @@ namespace EstruplastERP.Api.Controllers
 
             producto.StockMinimo = dto.StockMinimo;
             producto.PesoEspecifico = dto.PesoEspecifico;
-            producto.EsCritico = dto.EsCritico;
             producto.EsMateriaPrima = dto.EsMateriaPrima;
             producto.EsProductoTerminado = dto.EsProductoTerminado;
             producto.EsFazon = dto.EsFazon;

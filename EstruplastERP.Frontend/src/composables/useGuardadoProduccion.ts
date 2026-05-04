@@ -118,6 +118,7 @@ export function useGuardadoProduccion(
                 conBrillo: form.value.conBrillo,
                 llevaFilm: form.value.llevaFilm,
                 esGofrado: form.value.esGofrado,
+                aditivoUV: form.value.aditivoUV,
                 tipoCorona: form.value.tipoCorona
             });
 
