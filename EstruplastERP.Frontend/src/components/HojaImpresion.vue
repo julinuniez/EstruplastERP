@@ -194,9 +194,20 @@ const solicitarAgregar = () => {
     }
 };
 
+// 🚀 SOLUCIÓN 1: Buscar por ID en vez de por objeto clonado
 const solicitarQuitar = (item: any) => { 
-    const indexReal = props.receta.indexOf(item);
-    if (indexReal !== -1) emit('remove-insumo', indexReal); 
+    const indexReal = props.receta.findIndex((r: any) => r.materiaPrimaId === item.materiaPrimaId || r.id === item.id);
+    if (indexReal !== -1) {
+        emit('remove-insumo', indexReal); 
+    }
+};
+
+// 🚀 SOLUCIÓN 2: Emitir evento para modificar porcentaje en tiempo real
+const solicitarModificarPorcentaje = (item: any, nuevoValor: string | number) => {
+    const val = Number(nuevoValor);
+    if (!isNaN(val) && val >= 0) {
+        emit('add-insumo', { id: item.materiaPrimaId || item.id, porcentaje: val });
+    }
 };
 
 const obtenerEtiquetaOrigen = (itemReceta: any) => {
@@ -341,7 +352,6 @@ const tipoCorona = computed(() => {
             </div>
         </div>
 
-        <!-- 🚀 ESTE BLOQUE AHORA APARECE SIEMPRE QUE HAYA UN ADITIVO -->
         <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="tieneBrillo || llevaFilm || tipoCorona || esGofrado || tieneUV">
             <div class="dato-box-pdf" v-if="tieneBrillo">
                 <span class="label-tech-pdf">BRILLO</span>
@@ -360,7 +370,7 @@ const tipoCorona = computed(() => {
                 <span class="valor-tech-pdf">GOFRADO</span>
             </div>
             <div class="dato-box-pdf" v-if="tieneUV">
-                <span class="label-tech-pdf">UV</span>
+                <span class="label-tech-pdf">TRAT. UV</span>
                 <span class="valor-tech-pdf">SÍ</span>
             </div>
         </div>
@@ -398,8 +408,16 @@ const tipoCorona = computed(() => {
                                 <div class="porcentaje-celda" v-if="r.esEstearato || (r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase().includes('ESTEARATO')" style="font-weight: bold; color: #2980b9;">
                                     FIJO
                                 </div>
-                                <div class="porcentaje-celda" v-else>
-                                    {{ Number(r.cantidad).toFixed(2) }} %
+                                <!-- 🚀 SOLUCIÓN 3: Modificamos el texto estático por un Input editable -->
+                                <div class="porcentaje-celda" v-else style="display:flex; justify-content:center; align-items:center;">
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        :value="Number(r.cantidad).toFixed(2)"
+                                        @change="solicitarModificarPorcentaje(r, ($event.target as HTMLInputElement).value)"
+                                        class="input-porc-edit"
+                                    /> %
                                 </div>
                             </td>
                             <td style="text-align:right; font-size: 1.1em;">
@@ -560,4 +578,38 @@ const tipoCorona = computed(() => {
 .nombre-insumo-lista { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; text-align: left; }
 .badge-mini-cliente { background: #f39c12; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; letter-spacing: 0.5px; }
 .badge-mini-propio { background: #3498db; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; letter-spacing: 0.5px; }
+
+/* 🚀 ESTILOS PARA EL INPUT EDITABLE DE PORCENTAJE */
+.input-porc-edit {
+    width: 60px;
+    text-align: right;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    padding: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #2c3e50;
+    background: #fff;
+    margin-right: 4px;
+    transition: all 0.2s;
+}
+.input-porc-edit:focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 3px rgba(52, 152, 219, 0.5);
+}
+
+/* 🚀 TRUCO: Que al imprimir no se note que es un input */
+@media print {
+    .input-porc-edit {
+        border: none !important;
+        background: transparent !important;
+        -webkit-appearance: none;
+        appearance: none;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin-right: 0 !important;
+        width: auto !important;
+    }
+}
 </style>

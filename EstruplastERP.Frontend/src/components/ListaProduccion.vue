@@ -29,6 +29,7 @@ export interface ProduccionItem {
     conBrillo?: boolean;
     llevaFilm?: boolean;
     tipoCorona?: string;
+    aditivoUV?: boolean;
     consumos?: any[];
     productoId?: number;
     clienteId?: number;
