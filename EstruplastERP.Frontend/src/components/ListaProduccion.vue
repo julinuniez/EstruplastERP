@@ -4,6 +4,7 @@ import api from '@/services/axiosInstance'
 import ModalCierreOrden from './ModalCierreOrden.vue' 
 import ModalEdicionRapida from './ModalEdicionRapida.vue'
 import ModalDetalleGrupo from './ModalDetalleGrupo.vue'
+import ModalDesglosePallets from './ModalDesglosePallets.vue'
 import { useConsolidacion } from '@/composables/useConsolidacion'
 
 const emit = defineEmits(['imprimir-historial', 'imprimir-carga-consolidada', 'imprimir-lote-op']);
@@ -35,6 +36,7 @@ export interface ProduccionItem {
     clienteId?: number;
     observacion?: string;
     hojaCargaId?: number | null;
+    pallets?: any[]; 
 }
 
 const producciones = ref<ProduccionItem[]>([])
@@ -92,6 +94,17 @@ const materiasPrimas = ref<any[]>([]);
 
 const mostrarModalGrupo = ref(false);
 const codigoGrupoSeleccionado = ref('');
+
+const mostrarModalDesglose = ref(false);
+const ordenParaDesglose = ref<ProduccionItem | null>(null);
+
+const filasExpandidas = ref<number[]>([]);
+
+const toggleExpandir = (id: number) => {
+    const index = filasExpandidas.value.indexOf(id);
+    if (index === -1) filasExpandidas.value.push(id);
+    else filasExpandidas.value.splice(index, 1);
+};
 
 const { procesarConsolidacion } = useConsolidacion();
 
@@ -218,6 +231,49 @@ async function revertirOrden(item: ProduccionItem) {
     }
 }
 
+const abrirModalDesglose = (orden: ProduccionItem) => {
+    ordenParaDesglose.value = orden;
+    mostrarModalDesglose.value = true;
+};
+
+const cerrarModalDesglose = () => {
+    mostrarModalDesglose.value = false;
+    ordenParaDesglose.value = null;
+};
+
+const onDesgloseConfirmado = async (palletsCalculados: any[]) => {
+    if (!ordenParaDesglose.value) return;
+    
+    try {
+        const idOrden = ordenParaDesglose.value.id;
+        const payload = palletsCalculados.map(p => ({
+            numero: p.numero,
+            kilos: p.kilos
+        }));
+
+        await api.post(`/Ordenes/${idOrden}/desglose`, payload);
+        
+        alert("✅ ¡Desglose guardado con éxito!");
+        cerrarModalDesglose();
+        await cargarHistorial(); 
+        
+    } catch (e: any) {
+        console.error("Error en desglose:", e);
+        alert("❌ Error al guardar el desglose: " + (e.response?.data?.mensaje || e.message));
+    }
+};
+
+const finalizarPalletAcordeon = async (palletId: number, numero: number) => {
+    if (!confirm(`¿Confirmás el ingreso a stock del Pallet N° ${numero}?\nSe descontará la materia prima proporcional y se sumará el producto terminado.`)) return;
+    
+    try {
+        await api.post(`/Ordenes/finalizar-pallet/${palletId}`);
+        await cargarHistorial(); 
+    } catch (e: any) {
+        alert("❌ Error al confirmar pallet: " + (e.response?.data?.mensaje || e.message));
+    }
+};
+
 const abrirModalCierre = (orden: ProduccionItem) => {
     const ordenCorregida = { ...orden };
     
@@ -247,13 +303,23 @@ const onCierreConfirmado = () => {
 }
 
 async function cancelarOrden(item: ProduccionItem) {
-    if (!confirm(`⚠️ ¿Cancelar la Orden #${item.id}?`)) return;
+    let mensaje = `⚠️ ¿Seguro que quieres cancelar la Orden #${item.id}?`;
+    
+    // Verificamos si tiene producción parcial
+    const tienePalletsFinalizados = item.pallets && item.pallets.some(p => p.estado === 'Finalizada');
+    
+    if (tienePalletsFinalizados) {
+        mensaje = `🚨 ATENCIÓN: Esta orden tiene pallets ya ingresados a stock.\n\nAl cancelar, se RESTARÁ el producto terminado y se DEVOLVERÁ la materia prima al inventario.\n\n¿Confirmas la cancelación total?`;
+    }
+
+    if (!confirm(mensaje)) return;
+
     try {
         await api.post(`/Ordenes/cancelar/${item.id}`);
-        item.estado = "Cancelada";
-        ordenesSeleccionadas.value = ordenesSeleccionadas.value.filter(id => id !== item.id);
+        alert("✅ Orden cancelada y stock restaurado correctamente.");
+        await cargarHistorial(); // Recargamos la lista
     } catch (e: any) {
-        alert("❌ " + (e.response?.data?.mensaje || "Error al cancelar"));
+        alert("❌ Error: " + (e.response?.data?.mensaje || "No se pudo cancelar"));
     }
 }
 
@@ -296,6 +362,18 @@ async function ejecutarCargaConsolidada() {
     const payload = await procesarConsolidacion(ordenesAImprimir);
     
     if (payload) {
+        const nombresUnicos = [...new Set(ordenesAImprimir.map(o => o.producto))];
+        const formObj = (payload as any).form ? (payload as any).form : payload;
+
+        if (nombresUnicos.length === 1) {
+            formObj.productoNombre = nombresUnicos[0];
+        } else {
+            formObj.productoNombre = "MEZCLA CONSOLIDADA";
+        }
+
+        formObj.esConsolidado = true;
+        formObj.observacion = '[MEZCLA CONSOLIDADA] ' + (formObj.observacion || '');
+
         (payload as any).materiasPrimasBase = materiasPrimas.value;
         emit('imprimir-carga-consolidada', payload);
         
@@ -326,7 +404,6 @@ defineExpose({ cargarHistorial })
   <div class="historial-wrapper">
     <div class="header-tabla">
         <h3 class="titulo-bandeja">
-            <!-- 🚀 TÍTULO DINÁMICO: Cambia según si ves pendientes o historial -->
             {{ filtroEstado === 'Pendientes' ? '🔥 Bandeja de Producción Activa' : `🗄️ Histórico de ${nombreMesActual} ${anioSeleccionado}` }}
         </h3>
         <div class="filtros-container">
@@ -343,7 +420,6 @@ defineExpose({ cargarHistorial })
                 <option value="Todos">📁 Todas</option>
             </select>
             
-            <!-- 🚀 MAGIA ACÁ: El selector de mes/año solo aparece si NO estás en "Pendientes" -->
             <div class="grupo-filtro-tiempo" v-show="filtroEstado !== 'Pendientes'">
                 <label>📅</label>
                 <select v-model="mesSeleccionado" class="select-mes">
@@ -378,77 +454,124 @@ defineExpose({ cargarHistorial })
             <thead>
                 <tr>
                     <th style="width: 30px; text-align: center;">✓</th>
-                    <th style="width: 70px;">Fecha</th>
-                    <th style="width: 100px;">Cliente</th>
-                    <th style="width: 80px;">N° Pedido</th>
+                    <th style="width: 65px;">Fecha</th>
+                    <th style="width: 95px;">Cliente</th>
+                    <th style="width: 50px;">N° Pedido</th>
                     <th>Producto</th>
                     <th style="width: 50px; text-align: center;">Cant.</th>
                     <th style="width: 80px; text-align: right;">Kilos</th>
                     <th style="width: 125px; text-align: center;">Estado</th>
-                    <th style="width: 180px; text-align: center;">Acciones</th>
+                    <th style="width: 310px; text-align: center;">Acciones</th>
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-impresa': p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-no-impresa': !p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-ok': p.estado === 'Finalizada', 'fila-cancel': p.estado === 'Cancelada', 'fila-seleccionada': ordenesSeleccionadas.includes(p.id)}">
-                    
-                    <td style="text-align: center; vertical-align: middle;">
-                        <input type="checkbox" :checked="ordenesSeleccionadas.includes(p.id)" @change="toggleSeleccionMultiple(p.id)" v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso' || p.estado === 'MaterialPreparado'" class="check-orden">
-                    </td>
+                <template v-for="p in produccionesFiltradas" :key="p.id">
+                    <tr :class="{'fila-impresa': p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-no-impresa': !p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-ok': p.estado === 'Finalizada', 'fila-cancel': p.estado === 'Cancelada', 'fila-seleccionada': ordenesSeleccionadas.includes(p.id)}">
+                        
+                        <td style="text-align: center; vertical-align: middle;">
+                            <input type="checkbox" :checked="ordenesSeleccionadas.includes(p.id)" @change="toggleSeleccionMultiple(p.id)" v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso' || p.estado === 'MaterialPreparado'" class="check-orden">
+                        </td>
 
-                    <td class="td-fecha">{{ p.fecha }}</td>
-                    
-                    <td>
-                        <span class="badge-cliente">{{ p.clienteNombre && p.clienteNombre !== 'Desconocido' ? p.clienteNombre : 'Interno / Stock' }}</span>
-                    </td>
-                    
-                    <td>
-                        <div class="texto-nota">{{ p.notaPedido || '-' }}</div>
-                        <small v-if="p.numeroPedidoCliente" class="texto-oc">OC: {{ p.numeroPedidoCliente }}</small>
-                        <div v-if="extraerCodigoHC(p.observacion)" class="tag-hc clickeable" title="Ver todas las órdenes de esta hoja" @click.stop="abrirModalGrupo(extraerCodigoHC(p.observacion))">
-                            📦 {{ extraerCodigoHC(p.observacion) }}
-                        </div>
-                    </td>
-                    
-                    <td class="td-prod">
-                        <span class="prod-nombre">{{ p.producto }}</span>
-                        <div v-if="p.color || p.conBrillo || p.llevaFilm || p.aditivoUV || (p.tipoCorona && p.tipoCorona !== 'Ninguno')" class="tags-produccion">
-                            <span v-if="p.color" class="tag-color">🎨 {{ p.color.toUpperCase() }}</span>
-                            <span v-if="p.conBrillo" class="tag-extra">✨ Brillo</span>
-                            <span v-if="p.llevaFilm" class="tag-extra">🛡️ Film</span>
-                            <span v-if="p.aditivoUV" class="tag-extra" style="background:#fef3c7; color:#d97706; border-color:#fde68a;">☀️ UV</span>
-                            <span v-if="p.tipoCorona && p.tipoCorona !== 'Ninguno'" class="tag-extra">⚡ Corona {{ p.tipoCorona }}</span>
-                        </div>
-                        <div v-if="getObservacionLimpia(p.observacion)" class="nota-operario" title="Nota de Producción">
-                            💬 <i>"{{ getObservacionLimpia(p.observacion) }}"</i>
-                        </div>
-                    </td>
+                        <td class="td-fecha">{{ p.fecha }}</td>
+                        
+                        <td>
+                            <span class="badge-cliente">{{ p.clienteNombre && p.clienteNombre !== 'Desconocido' ? p.clienteNombre : 'Interno / Stock' }}</span>
+                        </td>
+                        
+                        <td>
+                            <div class="texto-nota">{{ p.notaPedido || '-' }}</div>
+                            <small v-if="p.numeroPedidoCliente" class="texto-oc">OC: {{ p.numeroPedidoCliente }}</small>
+                            <div v-if="extraerCodigoHC(p.observacion)" class="tag-hc clickeable" title="Ver todas las órdenes de esta hoja" @click.stop="abrirModalGrupo(extraerCodigoHC(p.observacion))">
+                                📦 {{ extraerCodigoHC(p.observacion) }}
+                            </div>
+                        </td>
+                        
+                        <td class="td-prod">
+                            <span class="prod-nombre">{{ p.producto }}</span>
+                            <div v-if="p.color || p.conBrillo || p.llevaFilm || p.aditivoUV || (p.tipoCorona && p.tipoCorona !== 'Ninguno')" class="tags-produccion">
+                                <span v-if="p.color" class="tag-color">🎨 {{ p.color.toUpperCase() }}</span>
+                                <span v-if="p.conBrillo" class="tag-extra">✨ Brillo</span>
+                                <span v-if="p.llevaFilm" class="tag-extra">🛡️ Film</span>
+                                <span v-if="p.aditivoUV" class="tag-extra" style="background:#fef3c7; color:#d97706; border-color:#fde68a;">☀️ UV</span>
+                                <span v-if="p.tipoCorona && p.tipoCorona !== 'Ninguno'" class="tag-extra">⚡ Corona {{ p.tipoCorona }}</span>
+                            </div>
+                            <div v-if="getObservacionLimpia(p.observacion)" class="nota-operario" title="Nota de Producción">
+                                💬 <i>"{{ getObservacionLimpia(p.observacion) }}"</i>
+                            </div>
 
-                    <td style="text-align: center; font-weight: 500;">{{ p.cantidad }}</td>
-                    
-                    <td style="text-align: right; font-weight: bold; color: #2c3e50;">{{ Math.round(p.kilos) }}</td>
-                    
-                    <td style="text-align: center;">
-                        <span :class="{'badge-pend': p.estado === 'Pendiente' || p.estado === 'EnProceso', 'badge-prep': p.estado === 'MaterialPreparado', 'badge-ok': p.estado === 'Finalizada', 'badge-cancel': p.estado === 'Cancelada'}">
-                            {{ p.estado === 'Cancelada' ? 'CANCELADA' : (p.estado === 'Finalizada' ? 'FINALIZADA' : (p.estado === 'MaterialPreparado' ? 'MATERIAL LISTO' : 'EN MÁQUINA')) }}
-                        </span>
-                    </td>
-                    
-                    <td class="td-acciones">
-                        <div class="acciones-wrapper">
-                            <template v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso' || p.estado === 'MaterialPreparado'">
-                                <button @click="abrirModalEdicion(p)" class="btn-action" title="Modificar Orden">✏️</button>
-                                <button @click="abrirModalCierre(p)" class="btn-action btn-check" title="Declarar Consumos y Cerrar OP">✅</button>
-                                <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Imprimir OP">📄</button>
-                                <button @click="solicitarImpresion(p, 'carga')" class="btn-action btn-ciencia" title="Imprimir Hoja de Carga">🧪</button>
-                                <button @click="cancelarOrden(p)" class="btn-action btn-cancel" title="Cancelar y Devolver Material">❌</button>
-                            </template>
-                            <template v-else-if="p.estado === 'Finalizada'">
-                                <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Reimprimir Orden">📄</button>
-                                <button @click="revertirOrden(p)" class="btn-action" style="color: #e67e22; border-color: #e67e22;" title="Revertir Cierre de Producción">⏪</button>
-                            </template>
-                        </div>
-                    </td>
-                </tr>
+                            <div v-if="p.pallets && p.pallets.length > 0" style="margin-top: 8px;">
+                                <button @click="toggleExpandir(p.id)" class="btn-desplegar-pallets">
+                                    {{ filasExpandidas.includes(p.id) ? '🔽 Ocultar Pallets' : '▶️ Mostrar Pallets' }} 
+                                    <span class="badge-mini-pallets">{{ p.pallets.filter(x => x.estado === 'Finalizada').length }} / {{ p.pallets.length }} listos</span>
+                                </button>
+                            </div>
+                        </td>
+
+                        <td style="text-align: center; font-weight: 500;">{{ p.cantidad }}</td>
+                        
+                        <td style="text-align: right; font-weight: bold; color: #2c3e50;">{{ Math.round(p.kilos) }}</td>
+                        
+                        <td style="text-align: center;">
+                            <span :class="{'badge-pend': p.estado === 'Pendiente' || p.estado === 'EnProceso', 'badge-prep': p.estado === 'MaterialPreparado', 'badge-ok': p.estado === 'Finalizada', 'badge-cancel': p.estado === 'Cancelada'}">
+                                {{ p.estado === 'Cancelada' ? 'CANCELADA' : (p.estado === 'Finalizada' ? 'FINALIZADA' : (p.estado === 'MaterialPreparado' ? 'MATERIAL LISTO' : 'EN MÁQUINA')) }}
+                            </span>
+                        </td>
+                        
+                        <td class="td-acciones">
+                            <div class="acciones-wrapper">
+                                <template v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso' || p.estado === 'MaterialPreparado'">
+                                    <button @click="abrirModalEdicion(p)" class="btn-action" title="Modificar Orden">✏️</button>
+                                    
+                                    <button v-if="!p.pallets || p.pallets.length === 0" @click="abrirModalDesglose(p)" class="btn-action btn-desglose" title="Desglosar en Pallets">📦</button>
+                                    
+                                    <button v-if="!p.pallets || p.pallets.length === 0" @click="abrirModalCierre(p)" class="btn-action btn-check" title="Declarar Consumos y Cerrar OP">✅</button>
+                                    
+                                    <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Imprimir OP">📄</button>
+                                    <button @click="solicitarImpresion(p, 'carga')" class="btn-action btn-ciencia" title="Imprimir Hoja de Carga">🧪</button>
+                                    <button @click="cancelarOrden(p)" class="btn-action btn-cancel" title="Cancelar y Devolver Material">❌</button>
+                                </template>
+                                <template v-else-if="p.estado === 'Finalizada'">
+                                    <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Reimprimir Orden">📄</button>
+                                    <button @click="revertirOrden(p)" class="btn-action" style="color: #e67e22; border-color: #e67e22;" title="Revertir Cierre de Producción">⏪</button>
+                                </template>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <tr v-if="filasExpandidas.includes(p.id) && p.pallets && p.pallets.length > 0" class="fila-acordeon">
+                        <td colspan="9" style="padding: 0; background: transparent;">
+                            <div class="acordeon-caja">
+                                <table class="tabla-pallets-interna">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 100px;">N° Pallet</th>
+                                            <th style="width: 120px;">Kilos Físicos</th>
+                                            <th style="width: 120px;">Estado</th>
+                                            <th>Acción de Fábrica</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="pallet in p.pallets" :key="pallet.id" :class="{'pallet-ok': pallet.estado === 'Finalizada'}">
+                                            <td><strong>Pallet {{ pallet.numeroPallet }}</strong></td>
+                                            <td>{{ pallet.kilos }} kg</td>
+                                            <td>
+                                                <span v-if="pallet.estado === 'Finalizada'" style="color: #10b981; font-weight: bold;">✔️ Descontado</span>
+                                                <span v-else style="color: #d97706; font-weight: bold;">⏳ Pendiente</span>
+                                            </td>
+                                            <td>
+                                                <button v-if="pallet.estado !== 'Finalizada'" @click="finalizarPalletAcordeon(pallet.id, pallet.numeroPallet)" class="btn-baja-pallet">
+                                                    ✅ Ingresar y dar de baja
+                                                </button>
+                                                <span v-else class="texto-pallet-cerrado">Stock actualizado automáticamente</span>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
+                
                 <tr v-if="produccionesFiltradas.length === 0 && !cargando">
                     <td colspan="9" class="vacio">No hay órdenes en esta bandeja para los filtros seleccionados.</td>
                 </tr>
@@ -470,6 +593,13 @@ defineExpose({ cargarHistorial })
             </button>
         </div>
     </div>
+
+    <ModalDesglosePallets 
+        :visible="mostrarModalDesglose"
+        :orden="ordenParaDesglose"
+        @close="cerrarModalDesglose"
+        @guardar="onDesgloseConfirmado"
+    />
 
     <ModalDetalleGrupo
         :visible="mostrarModalGrupo"
@@ -551,12 +681,13 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .badge-prep { background: #eff6ff; color: #3b82f6; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #93c5fd; white-space: nowrap;}
 
 .td-acciones { vertical-align: middle; }
-.acciones-wrapper { display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.acciones-wrapper { display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: nowrap; white-space: nowrap; }
 .btn-action { border: 1px solid #e2e8f0; background: white; border-radius: 6px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); width: 28px; height: 28px; padding: 2px; }
 .btn-action:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
 
 .btn-check:hover { background: #f0fdf4; border-color: #6ee7b7; }
 .btn-ciencia:hover { background: #eff6ff; border-color: #93c5fd; }
+.btn-desglose:hover { background: #f8fafc; border-color: #94a3b8; }
 .btn-cancel { color: #ef4444; }
 .btn-cancel:hover { background: #fef2f2; border-color: #fca5a5; }
 .vacio { text-align: center; padding: 40px; color: #94a3b8; font-style: italic; font-size: 0.9rem; }
@@ -587,4 +718,19 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
     max-width: 100%;
     word-wrap: break-word;
 }
+
+/* 🚀 ESTILOS DEL ACORDEÓN DE PALLETS NUEVOS */
+.btn-desplegar-pallets { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-desplegar-pallets:hover { background: #bae6fd; }
+.badge-mini-pallets { background: #0284c7; color: white; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; }
+
+.fila-acordeon { background: #f8fafc !important; }
+.acordeon-caja { padding: 10px 20px 20px 40px; border-left: 4px solid #3b82f6; background: #f1f5f9; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+.tabla-pallets-interna { width: 100%; border-collapse: collapse; font-size: 0.8rem; background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.tabla-pallets-interna th { background: #e2e8f0; padding: 8px 12px; text-align: left; color: #475569; border-bottom: 1px solid #cbd5e1; }
+.tabla-pallets-interna td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+.pallet-ok td { background: #f0fdf4; color: #64748b; }
+.btn-baja-pallet { background: #10b981; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+.btn-baja-pallet:hover { background: #059669; }
+.texto-pallet-cerrado { color: #94a3b8; font-style: italic; font-size: 0.75rem; }
 </style>

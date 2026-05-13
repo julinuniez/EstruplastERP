@@ -105,17 +105,14 @@ const densidadPT = computed(() => {
 
 const { totalPorcentajeReceta, factorMerma } = useCalculosProduccion(form, recetaDinamica, productoSeleccionado);
 
-// 🚀 ORDENAMIENTO DE DROPDOWN: Manda los productos FAZON al final de la lista
 const productosDropdownOrdenados = computed(() => {
     if (!listaProductosDisponibles.value) return [];
     return [...listaProductosDisponibles.value].sort((a, b) => {
         const aFazon = a.esFazon ? 1 : 0;
         const bFazon = b.esFazon ? 1 : 0;
         
-        // Si uno es fazon y el otro no, el fazon va abajo
         if (aFazon !== bFazon) return aFazon - bFazon; 
         
-        // Si ambos son iguales, ordenamos alfabéticamente
         return (a.nombre || '').localeCompare(b.nombre || '');
     });
 });
@@ -226,7 +223,6 @@ const { imprimirDesdeHistorial, imprimirLoteOPsDesdeHistorial } = useImpresionPr
     limpiarFormulario,
     listaInventarioCompleto 
 );
-
 
 async function CargarProductosFiltrados(clienteId: number | string = '') {
     try {
@@ -422,6 +418,34 @@ const procesarGuardado = async () => {
     error.value = ''; 
     mostrarOpcionMismoPedido.value = false; 
 
+    if (tipoSalidaVisual.value === 'NATURAL') {
+        let porcentajeRemovido = 0;
+        const listaLimpia: any[] = [];
+
+        recetaDinamica.value.forEach((item: any) => {
+            const n = (item.nombreInsumo || item.nombreMateriaPrima || '').toUpperCase();
+            const esColor = item.esColor || n.includes('MB') || n.includes('MASTER') || n.includes('COLOR');
+
+            if (esColor) {
+                porcentajeRemovido += parseFloat(item.cantidad || 0);
+            } else {
+                listaLimpia.push(item);
+            }
+        });
+
+        if (listaLimpia.length > 0 && porcentajeRemovido > 0) {
+            listaLimpia.sort((a: any, b: any) => (parseFloat(b.cantidad) || 0) - (parseFloat(a.cantidad) || 0));
+            const materialPrincipal = listaLimpia.find((i: any) => i.esBase) || listaLimpia[0];
+
+            if (materialPrincipal) {
+                materialPrincipal.cantidad = (parseFloat(materialPrincipal.cantidad || 0) + porcentajeRemovido).toFixed(2);
+            }
+        }
+        recetaDinamica.value = listaLimpia;
+        form.value.masterbatchId = '';
+        form.value.colorTexto = '';
+    }
+
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
     let agregadoParaGuardar = false;
 
@@ -538,7 +562,6 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 </button>
             </div>
             
-            <!-- 🚀 SELECTOR ORDENADO CON FAZON AL FINAL -->
             <select v-model="form.productoTerminadoId">
                 <option disabled value="">Seleccionar Producto...</option>
                 <option v-for="p in productosDropdownOrdenados" :key="p.id" :value="p.id">
@@ -548,7 +571,6 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
 
             <div v-if="form.productoTerminadoId" class="caja-detalles-producto">
                 
-                <!-- 🚀 BOTONES NORMAL/NATURAL MEJORADOS -->
                 <div v-if="productoSeleccionado && !productoSeleccionado.esFazon && !(productoSeleccionado.nombre || '').toUpperCase().includes('COLOR')" class="fila-input" style="margin-bottom: 15px; display: flex; gap: 10px;">
                     <button 
                         @click="tipoSalidaVisual = 'NORMAL'" 
@@ -642,7 +664,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                         </span>
                     </div>
                     <div>
-                        <label>Cant.</label>
+                        <label>Cantidad</label>
                         <input type="number" v-model="form.cantidad" min="1" />
                     </div>
                 </div>
@@ -662,7 +684,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     </div>
                 </div>
 
-                <div class="resumen-peso">Peso Final PT: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +8% Merma)</small></div>
+                <div class="resumen-peso">Peso Final: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +8%)</small></div>
                 
                 <label class="lbl-sep">Aditivos:</label>
                 
@@ -810,7 +832,6 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
 </template>
 
 <style scoped>
-/* Sin cambios en los estilos */
 .contenedor-principal-produccion {
     display: flex; flex-direction: column; width: 100%; min-height: 100vh;
     font-family: 'Segoe UI', sans-serif; background-color: #ecf0f1;
@@ -836,6 +857,17 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
 .header-control h3 { margin-top: 0; border-bottom: 2px solid #3498db; padding-bottom: 10px; color: #ecf0f1; font-size: 1.1rem; }
 label { display: block; margin-top: 8px; font-size: 13px; color: #bdc3c7; font-weight: 600; }
 select, input { width: 100%; padding: 8px; margin-top: 2px; border-radius: 4px; border: none; font-size: 13px; box-sizing: border-box; background: #ecf0f1; color: #2c3e50; }
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
 .fila-input { display: flex; gap: 8px; margin-bottom: 5px; }
 .btn-sugerido { width: 130px; margin-top: 2px; border-radius: 4px; border: 1px solid #1abc9c; background: transparent; color: #1abc9c; font-weight: bold; cursor: pointer; font-size: 12px; padding: 8px; }
 .btn-sugerido:disabled { opacity: 0.5; cursor: not-allowed; }

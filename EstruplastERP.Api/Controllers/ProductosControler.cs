@@ -59,7 +59,8 @@ namespace EstruplastERP.Api.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetMateriasPrimas()
         {
             return await _context.Productos
-                .Include(p => p.Proveedor) // 🚀 Incluimos el Proveedor
+                .Include(p => p.Proveedor)
+                .Include(p => p.Cliente) // 🚀 ¡FALTABA ESTA LÍNEA!
                 .Where(p => p.EsMateriaPrima && p.Activo)
                 .OrderBy(p => p.Nombre)
                 .Select(p => new
@@ -70,7 +71,8 @@ namespace EstruplastERP.Api.Controllers
                     p.PesoEspecifico,
                     p.StockActual,
                     ClienteId = p.ClienteId,
-                    ProveedorNombre = p.Proveedor != null ? p.Proveedor.RazonSocial : null, // 🚀 Enviamos el nombre
+                    ClienteNombre = p.Cliente != null ? p.Cliente.RazonSocial : "",
+                    ProveedorNombre = p.Proveedor != null ? p.Proveedor.RazonSocial : null,
                     p.ProveedorId
                 })
                 .ToListAsync();
@@ -107,6 +109,8 @@ namespace EstruplastERP.Api.Controllers
         public async Task<IActionResult> GetProductos()
         {
             var productos = await _context.Productos
+                .Include(p => p.Proveedor)
+                .Include(p => p.Cliente)
                 .Where(p => p.Activo)
                 .Select(p => new
                 {

@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace EstruplastERP.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class ProduccionDosFasesInit : Migration
+    public partial class InicialLimpia : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -86,45 +86,6 @@ namespace EstruplastERP.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Productos",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Nombre = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    CodigoSku = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    Rubro = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    TipoMaterial = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    EsFazon = table.Column<bool>(type: "bit", nullable: false),
-                    EsScrap = table.Column<bool>(type: "bit", nullable: false),
-                    EspesorMinimo = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: true),
-                    EspesorMaximo = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: true),
-                    PesoEspecifico = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    StockActual = table.Column<decimal>(type: "decimal(18,3)", precision: 18, scale: 3, nullable: false),
-                    StockMinimo = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 3, nullable: false),
-                    PrecioCosto = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    ClienteId = table.Column<int>(type: "int", nullable: true),
-                    FamiliaId = table.Column<int>(type: "int", nullable: true),
-                    EsGenerico = table.Column<bool>(type: "bit", nullable: false),
-                    EsMateriaPrima = table.Column<bool>(type: "bit", nullable: false),
-                    EsProductoTerminado = table.Column<bool>(type: "bit", nullable: false),
-                    EsCritico = table.Column<bool>(type: "bit", nullable: false),
-                    EsPremezcla = table.Column<bool>(type: "bit", nullable: false),
-                    Activo = table.Column<bool>(type: "bit", nullable: false),
-                    FechaCreacion = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Productos", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Productos_Clientes_ClienteId",
-                        column: x => x.ClienteId,
-                        principalTable: "Clientes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Remitos",
                 columns: table => new
                 {
@@ -145,6 +106,49 @@ namespace EstruplastERP.Data.Migrations
                         principalTable: "Clientes",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Productos",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Nombre = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    CodigoSku = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
+                    Rubro = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    TipoMaterial = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    EsFazon = table.Column<bool>(type: "bit", nullable: false),
+                    EsScrap = table.Column<bool>(type: "bit", nullable: false),
+                    EspesorMinimo = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: true),
+                    EspesorMaximo = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: true),
+                    PesoEspecifico = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
+                    StockActual = table.Column<decimal>(type: "decimal(18,3)", precision: 18, scale: 3, nullable: false),
+                    StockMinimo = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 3, nullable: false),
+                    PrecioCosto = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
+                    ProveedorId = table.Column<int>(type: "int", nullable: true),
+                    ClienteId = table.Column<int>(type: "int", nullable: true),
+                    FamiliaId = table.Column<int>(type: "int", nullable: true),
+                    EsGenerico = table.Column<bool>(type: "bit", nullable: false),
+                    EsMateriaPrima = table.Column<bool>(type: "bit", nullable: false),
+                    EsProductoTerminado = table.Column<bool>(type: "bit", nullable: false),
+                    Activo = table.Column<bool>(type: "bit", nullable: false),
+                    FechaCreacion = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Productos", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Productos_Clientes_ClienteId",
+                        column: x => x.ClienteId,
+                        principalTable: "Clientes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Productos_Proveedores_ProveedorId",
+                        column: x => x.ProveedorId,
+                        principalTable: "Proveedores",
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -257,6 +261,7 @@ namespace EstruplastERP.Data.Migrations
                     ConBrillo = table.Column<bool>(type: "bit", nullable: false),
                     LlevaFilm = table.Column<bool>(type: "bit", nullable: false),
                     EsGofrado = table.Column<bool>(type: "bit", nullable: false),
+                    AditivoUV = table.Column<bool>(type: "bit", nullable: false),
                     TipoCorona = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     EsImpreso = table.Column<bool>(type: "bit", nullable: false),
                     FechaCreacion = table.Column<DateTime>(type: "datetime2", nullable: false),
@@ -412,49 +417,72 @@ namespace EstruplastERP.Data.Migrations
                         principalColumn: "Id");
                 });
 
+            migrationBuilder.CreateTable(
+                name: "PalletsProduccion",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    OrdenProduccionId = table.Column<int>(type: "int", nullable: false),
+                    NumeroPallet = table.Column<int>(type: "int", nullable: false),
+                    Kilos = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    Estado = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    FechaCierre = table.Column<DateTime>(type: "datetime2", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PalletsProduccion", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PalletsProduccion_Ordenes_OrdenProduccionId",
+                        column: x => x.OrdenProduccionId,
+                        principalTable: "Ordenes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.InsertData(
                 table: "Productos",
-                columns: new[] { "Id", "Activo", "ClienteId", "CodigoSku", "EsCritico", "EsFazon", "EsGenerico", "EsMateriaPrima", "EsPremezcla", "EsProductoTerminado", "EsScrap", "EspesorMaximo", "EspesorMinimo", "FamiliaId", "FechaCreacion", "Nombre", "PesoEspecifico", "PrecioCosto", "Rubro", "StockActual", "StockMinimo", "TipoMaterial" },
+                columns: new[] { "Id", "Activo", "ClienteId", "CodigoSku", "EsFazon", "EsGenerico", "EsMateriaPrima", "EsProductoTerminado", "EsScrap", "EspesorMaximo", "EspesorMinimo", "FamiliaId", "FechaCreacion", "Nombre", "PesoEspecifico", "PrecioCosto", "ProveedorId", "Rubro", "StockActual", "StockMinimo", "TipoMaterial" },
                 values: new object[,]
                 {
-                    { 22, true, null, "MP-MB-COL", false, false, false, true, false, false, false, null, null, 50, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5725), "Masterbatch Color (Varios)", 1.1m, 0m, "MATERIA PRIMA", 0m, 0m, null },
-                    { 100, true, null, "AI-FINO", false, false, true, false, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5731), "A.I. FINO (0.40 - 0.90 mm)", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 101, true, null, "AI-GRUESO", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5742), "A.I. GRUESO", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 102, true, null, "AI-FINO-COL", false, false, true, false, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5735), "A.I. FINO COLOR", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 103, true, null, "AI-GRUESO-COL", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5746), "A.I. GRUESO COLOR", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 104, true, null, "AI-BICAPA", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5750), "A.I. BICAPA", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 105, true, null, "AI-TRICAPA", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5753), "A.I. TRICAPA", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 106, true, null, "AI-TUTTI-FINO", false, false, true, false, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5739), "A.I. TUTTI FINO", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 107, true, null, "AI-TUTTI-GRUESO", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5758), "A.I. TUTTI GRUESO", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 108, true, null, "AI-FREON", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5762), "A.I. RESISTENTE AL FREON", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 109, true, null, "AI-FREON-COL", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5766), "A.I. RESISTENTE AL FREON COLOR", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 200, true, null, "ABS-BLA", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5770), "ABS BLANCO", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 201, true, null, "ABS-COL", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5774), "ABS COLOR", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 202, true, null, "ABS-GRUESO", false, false, true, false, false, true, false, 0m, 1.00m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5777), "ABS GRUESO (Min 1mm)", 1.05m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 300, true, null, "PP-STD", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5782), "PP (POLIPROPILENO)", 0.91m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 301, true, null, "PP-COL", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5789), "PP COLOR", 0.91m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 400, true, null, "PE-MIX", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5792), "PEAD / PEBD", 0.94m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 401, true, null, "PEBD-GOF", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5796), "PEBD GOFRADO", 0.92m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 402, true, null, "PEAD-BIC", false, false, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5800), "PEAD BICAPA", 0.96m, 0m, "PRODUCTO TERMINADO", 0m, 0m, null },
-                    { 900, true, null, "FAZ-AI-FIN", false, true, true, false, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5898), "FAZON - A.I. FINO", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 901, true, null, "FAZ-AI-GRU", false, true, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5912), "FAZON - A.I. GRUESO", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 902, true, null, "FAZ-AI-FIN-COL", false, true, true, false, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5904), "FAZON - A.I. FINO COLOR", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 903, true, null, "FAZ-AI-GRU-COL", false, true, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5916), "FAZON - A.I. GRUESO COLOR", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 904, true, null, "FAZ-AI-BIC", false, true, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5920), "FAZON - A.I. BICAPA", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 905, true, null, "FAZ-AI-TRI", false, true, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5924), "FAZON - A.I. TRICAPA", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 906, true, null, "FAZ-AI-TUT-FIN", false, true, true, false, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5908), "FAZON - A.I. TUTTI FINO", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 907, true, null, "FAZ-AI-TUT-GRU", false, true, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5929), "FAZON - A.I. TUTTI GRUESO", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 908, true, null, "FAZ-ABS-GRU", false, true, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5934), "FAZON - ABS GRUESO", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 911, true, null, "FAZ-PEAD-BIC", false, true, true, false, false, true, false, 0m, 0.90m, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5938), "FAZON - PEAD BICAPA", 0.96m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 912, true, null, "FAZ-FREON-FIN", false, true, true, false, false, true, false, 0.90m, 0.40m, 60, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5942), "FAZON - RESISTENTE FREON FINO", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 913, true, null, "FAZ-FREON-GRU", false, true, true, false, false, true, false, 0m, 0.90m, 60, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5947), "FAZON - RESISTENTE FREON GRUESO", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 914, true, null, "FAZ-FREON-COL", false, true, true, false, false, true, false, 0m, 0.90m, 60, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5951), "FAZON - RESISTENTE FREON COLOR", 1.05m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 990, true, null, "MP-FAZ-AI", false, false, false, true, false, false, false, null, null, 10, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5703), "MP FAZÓN ALTO IMPACTO (BASE)", 1.1m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 991, true, null, "MP-FAZ-ABS", false, false, false, true, false, false, false, null, null, 20, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5711), "MP FAZÓN ABS (BASE)", 1.1m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 992, true, null, "MP-FAZ-PP", false, false, false, true, false, false, false, null, null, 30, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5715), "MP FAZÓN POLIPROPILENO (BASE)", 0.91m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 993, true, null, "MP-FAZ-PE", false, false, false, true, false, false, false, null, null, 40, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5718), "MP FAZÓN PEAD/PEBD (BASE)", 0.96m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 994, true, null, "MP-FAZ-FREON", false, false, false, true, false, false, false, null, null, 60, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5722), "MP FAZÓN FREON (BASE)", 1.1m, 0m, "SERVICIO FAZON", 0m, 0m, null },
-                    { 999, true, null, "MP-FAZON-GEN", false, false, false, true, false, false, false, null, null, null, new DateTime(2026, 4, 27, 10, 21, 3, 531, DateTimeKind.Local).AddTicks(5699), "MATERIAL DE CLIENTE (GENÉRICO)", 1.00m, 0m, "SERVICIO FAZON", 0m, 0m, null }
+                    { 22, true, null, "MP-MB-COL", false, false, true, false, false, null, null, 50, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8089), "Masterbatch Color (Varios)", 1.1m, 0m, null, "MATERIA PRIMA", 0m, 0m, null },
+                    { 100, true, null, "AI-FINO", false, true, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8095), "A.I. FINO (0.40 - 0.90 mm)", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 101, true, null, "AI-GRUESO", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8110), "A.I. GRUESO", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 102, true, null, "AI-FINO-COL", false, true, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8102), "A.I. FINO COLOR", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 103, true, null, "AI-GRUESO-COL", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8114), "A.I. GRUESO COLOR", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 104, true, null, "AI-BICAPA", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8119), "A.I. BICAPA", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 105, true, null, "AI-TRICAPA", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8123), "A.I. TRICAPA", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 106, true, null, "AI-TUTTI-FINO", false, true, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8106), "A.I. TUTTI FINO", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 107, true, null, "AI-TUTTI-GRUESO", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8143), "A.I. TUTTI GRUESO", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 108, true, null, "AI-FREON", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8163), "A.I. RESISTENTE AL FREON", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 109, true, null, "AI-FREON-COL", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8174), "A.I. RESISTENTE AL FREON COLOR", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 200, true, null, "ABS-BLA", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8178), "ABS BLANCO", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 201, true, null, "ABS-COL", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8183), "ABS COLOR", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 202, true, null, "ABS-GRUESO", false, true, false, true, false, 0m, 1.00m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8187), "ABS GRUESO (Min 1mm)", 1.05m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 300, true, null, "PP-STD", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8192), "PP (POLIPROPILENO)", 0.91m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 301, true, null, "PP-COL", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8205), "PP COLOR", 0.91m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 400, true, null, "PE-MIX", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8293), "PEAD / PEBD", 0.94m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 401, true, null, "PEBD-GOF", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8298), "PEBD GOFRADO", 0.92m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 402, true, null, "PEAD-BIC", false, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8302), "PEAD BICAPA", 0.96m, 0m, null, "PRODUCTO TERMINADO", 0m, 0m, null },
+                    { 900, true, null, "FAZ-AI-FIN", true, true, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8307), "FAZON - A.I. FINO", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 901, true, null, "FAZ-AI-GRU", true, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8321), "FAZON - A.I. GRUESO", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 902, true, null, "FAZ-AI-FIN-COL", true, true, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8312), "FAZON - A.I. FINO COLOR", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 903, true, null, "FAZ-AI-GRU-COL", true, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8325), "FAZON - A.I. GRUESO COLOR", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 904, true, null, "FAZ-AI-BIC", true, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8329), "FAZON - A.I. BICAPA", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 905, true, null, "FAZ-AI-TRI", true, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8333), "FAZON - A.I. TRICAPA", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 906, true, null, "FAZ-AI-TUT-FIN", true, true, false, true, false, 0.90m, 0.40m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8317), "FAZON - A.I. TUTTI FINO", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 907, true, null, "FAZ-AI-TUT-GRU", true, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8339), "FAZON - A.I. TUTTI GRUESO", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 908, true, null, "FAZ-ABS-GRU", true, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8344), "FAZON - ABS GRUESO", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 911, true, null, "FAZ-PEAD-BIC", true, true, false, true, false, 0m, 0.90m, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8348), "FAZON - PEAD BICAPA", 0.96m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 912, true, null, "FAZ-FREON-FIN", true, true, false, true, false, 0.90m, 0.40m, 60, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8352), "FAZON - RESISTENTE FREON FINO", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 913, true, null, "FAZ-FREON-GRU", true, true, false, true, false, 0m, 0.90m, 60, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8358), "FAZON - RESISTENTE FREON GRUESO", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 914, true, null, "FAZ-FREON-COL", true, true, false, true, false, 0m, 0.90m, 60, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8362), "FAZON - RESISTENTE FREON COLOR", 1.05m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 990, true, null, "MP-FAZ-AI", false, false, true, false, false, null, null, 10, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8068), "MP FAZÓN ALTO IMPACTO (BASE)", 1.1m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 991, true, null, "MP-FAZ-ABS", false, false, true, false, false, null, null, 20, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8073), "MP FAZÓN ABS (BASE)", 1.1m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 992, true, null, "MP-FAZ-PP", false, false, true, false, false, null, null, 30, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8077), "MP FAZÓN POLIPROPILENO (BASE)", 0.91m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 993, true, null, "MP-FAZ-PE", false, false, true, false, false, null, null, 40, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8081), "MP FAZÓN PEAD/PEBD (BASE)", 0.96m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 994, true, null, "MP-FAZ-FREON", false, false, true, false, false, null, null, 60, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8085), "MP FAZÓN FREON (BASE)", 1.1m, 0m, null, "SERVICIO FAZON", 0m, 0m, null },
+                    { 999, true, null, "MP-FAZON-GEN", false, false, true, false, false, null, null, null, new DateTime(2026, 5, 12, 8, 45, 30, 912, DateTimeKind.Local).AddTicks(8062), "MATERIAL DE CLIENTE (GENÉRICO)", 1.00m, 0m, null, "SERVICIO FAZON", 0m, 0m, null }
                 });
 
             migrationBuilder.InsertData(
@@ -560,6 +588,11 @@ namespace EstruplastERP.Data.Migrations
                 column: "ProductoId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PalletsProduccion_OrdenProduccionId",
+                table: "PalletsProduccion",
+                column: "OrdenProduccionId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Producciones_ClienteId",
                 table: "Producciones",
                 column: "ClienteId");
@@ -573,6 +606,11 @@ namespace EstruplastERP.Data.Migrations
                 name: "IX_Productos_ClienteId",
                 table: "Productos",
                 column: "ClienteId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Productos_ProveedorId",
+                table: "Productos",
+                column: "ProveedorId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RemitoDetalles_ProductoId",
@@ -609,6 +647,9 @@ namespace EstruplastERP.Data.Migrations
                 name: "Movimientos");
 
             migrationBuilder.DropTable(
+                name: "PalletsProduccion");
+
+            migrationBuilder.DropTable(
                 name: "Producciones");
 
             migrationBuilder.DropTable(
@@ -621,9 +662,6 @@ namespace EstruplastERP.Data.Migrations
                 name: "Ordenes");
 
             migrationBuilder.DropTable(
-                name: "Proveedores");
-
-            migrationBuilder.DropTable(
                 name: "Remitos");
 
             migrationBuilder.DropTable(
@@ -634,6 +672,9 @@ namespace EstruplastERP.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "Clientes");
+
+            migrationBuilder.DropTable(
+                name: "Proveedores");
         }
     }
 }

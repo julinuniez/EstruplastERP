@@ -14,10 +14,9 @@ const guardandoEdicion = ref(false);
 
 const formEdicion = ref({
     largo: 0, ancho: 0, espesor: 0, cantidad: 0, kilosTotales: 0, desperdicio: 8,
-    conBrillo: false, llevaFilm: false, tipoCorona: 'Ninguno', color: '', recetaNueva: [] as any[]
+    conBrillo: false, llevaFilm: false, tipoCorona: 'Ninguno', color: '', ignorarStock: true, recetaNueva: [] as any[]
 });
 
-// Cuando el modal se abre y recibe la orden, cargamos los datos en el formulario
 watch(() => props.visible, (newVal) => {
     if (newVal && props.ordenEditando) {
         const o = props.ordenEditando;
@@ -25,7 +24,7 @@ watch(() => props.visible, (newVal) => {
             largo: o.largo || 0, ancho: o.ancho || 0, espesor: o.espesor || 0,
             cantidad: o.cantidad || 0, kilosTotales: o.kilos || 0, desperdicio: o.desperdicio || 8,
             conBrillo: o.conBrillo || false, llevaFilm: o.llevaFilm || false, tipoCorona: o.tipoCorona || 'Ninguno',
-            color: o.color || '', recetaNueva: JSON.parse(JSON.stringify(o.consumos || []))
+            color: o.color || '', ignorarStock: true, recetaNueva: JSON.parse(JSON.stringify(o.consumos || []))
         };
     }
 });
@@ -52,7 +51,7 @@ async function guardarEdicionRapida() {
     guardandoEdicion.value = true;
     try {
         await api.put(`/Ordenes/modificar/${props.ordenEditando.id}`, formEdicion.value);
-        emit('guardado'); // Le avisa al padre que terminó con éxito
+        emit('guardado');
     } catch (e: any) {
         alert(e.response?.data?.mensaje || e.response?.data || "Error al modificar la orden.");
     } finally {
@@ -99,6 +98,12 @@ async function guardarEdicionRapida() {
                 <label class="switch-label"><input type="checkbox" v-model="formEdicion.conBrillo" @change="recalcularModal"> ✨ Brillo</label>
                 <label class="switch-label"><input type="checkbox" v-model="formEdicion.llevaFilm" @change="recalcularModal"> 🛡️ Lleva Film</label>
             </div>
+            
+            <div class="grid-aditivos" style="margin-top: 10px;">
+                <label class="switch-label" style="color: #b45309; font-weight: bold;">
+                    <input type="checkbox" v-model="formEdicion.ignorarStock"> ⚠️ Forzar guardado sin stock
+                </label>
+            </div>
 
             <div class="grid-medidas" style="margin-top: 15px;">
                 <div class="campo-rapido">
@@ -118,7 +123,7 @@ async function guardarEdicionRapida() {
             <div class="modal-footer">
                 <button class="btn-cancelar" @click="emit('close')">Cancelar</button>
                 <button class="btn-guardar" @click="guardarEdicionRapida" :disabled="guardandoEdicion">
-                    {{ guardandoEdicion ? 'Validando Stock...' : '💾 Confirmar Cambios' }}
+                    {{ guardandoEdicion ? 'Guardando...' : '💾 Confirmar Cambios' }}
                 </button>
             </div>
         </div>
@@ -139,6 +144,16 @@ async function guardarEdicionRapida() {
 .campo-rapido label { display: block; font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 5px; }
 .campo-rapido input, .campo-rapido select { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
 .campo-rapido input:focus, .campo-rapido select:focus { outline: none; border-color: #3b82f6; }
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 
 .kilos-recalculados { text-align: center; background: #eff6ff; color: #1d4ed8; padding: 10px; border-radius: 6px; font-size: 1.1rem; margin-bottom: 20px; border: 1px dashed #93c5fd; }
 

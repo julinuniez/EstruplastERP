@@ -1,7 +1,6 @@
 import { ref } from 'vue'
 import api from '@/services/axiosInstance'
 
-// Helpers privados (no se exportan, solo los usa el composable)
 function normalizarNombreFamilia(nombre: any) {
     if (!nombre || typeof nombre !== 'string') return '';
     let n = nombre.toUpperCase().trim();
@@ -16,14 +15,6 @@ function normalizarNombreFamilia(nombre: any) {
     return n.replace(/\s+/g, ' '); 
 }
 
-function obtenerNombreClienteReal(orden: any) {
-    if (typeof orden.cliente === 'string' && orden.cliente.trim() !== '') return orden.cliente;
-    if (orden.clienteNombre && typeof orden.clienteNombre === 'string' && orden.clienteNombre.trim() !== '') return orden.clienteNombre;
-    if (orden.cliente && typeof orden.cliente === 'object' && orden.cliente.razonSocial) return orden.cliente.razonSocial;
-    return 'Desconocido';
-}
-
-// Exportamos la función principal
 export function useConsolidacion() {
     const procesandoCarga = ref(false);
 
@@ -34,7 +25,6 @@ export function useConsolidacion() {
         try {
             const familiaBase = normalizarNombreFamilia(ordenesAImprimir[0]?.producto || '');
             
-            // 1. Llamada a la API para registrar el lote
             let codigoHojaCarga = "MIX";
             try {
                 const ids = ordenesAImprimir.map(o => o.id);
@@ -44,64 +34,55 @@ export function useConsolidacion() {
                 console.error("No se pudo registrar la hoja de carga en la API", e);
             }
 
-            // 2. Lógica matemática de agrupación
             let totalKilosMezcla = 0;
             const recetaConsolidadaMap: Record<string, any> = {};
             const notasSet = new Set<string>();
 
             ordenesAImprimir.forEach(orden => {
                 const refPedido = orden.notaPedido ? String(orden.notaPedido) : String(orden.id);
-                const nombreCliente = obtenerNombreClienteReal(orden);
-                
                 notasSet.add(refPedido);
 
                 if (orden.consumos && Array.isArray(orden.consumos)) {
                     orden.consumos.forEach((consumo: any) => {
                         const mpId = consumo.materiaPrimaId;
-                        const nombreMP = (consumo.nombreMateriaPrima || 'Insumo').toUpperCase();
-                        const esFazon = nombreMP.includes('MOLIDO') || nombreMP.includes('RECUPERADO') || nombreMP.includes('FAZON');
-                        const mapKey = esFazon ? `${mpId}-${refPedido}` : `${mpId}`;
+                        const mapKey = `${mpId}`;
 
                         if (!recetaConsolidadaMap[mapKey]) {
-                            let tituloInsumo = consumo.nombreMateriaPrima || 'Insumo';
-                            
-                            if (esFazon) {
-                                const clId = orden.clienteId || 0;
-                                if (clId > 0 && nombreCliente && !nombreCliente.toUpperCase().includes('STOCK')) {
-                                    tituloInsumo = `${tituloInsumo} (De ${nombreCliente})`;
-                                } else {
-                                    tituloInsumo = `${tituloInsumo} (Stock Estruplast)`;
-                                }
-                            }
-
                             recetaConsolidadaMap[mapKey] = { 
                                 id: mpId, 
-                                nombre: tituloInsumo, 
+                                nombre: consumo.nombreMateriaPrima || 'Insumo', 
                                 kilos: 0,
-                                clienteId: esFazon ? (orden.clienteId || 0) : 0,
-                                clienteNombreFazon: esFazon ? nombreCliente : null
+                                clienteId: Number(consumo.clienteId || consumo.ClienteId || 0),
+                                clienteNombre: consumo.clienteNombre || consumo.ClienteNombre || '' 
                             };
+                        } else {
+                            // 🚀 LA MAGIA: Si el material ya estaba en 0, pero esta nueva orden SÍ tiene el cliente, lo rescatamos!
+                            const idActual = Number(consumo.clienteId || consumo.ClienteId || 0);
+                            if (idActual > 1 && Number(recetaConsolidadaMap[mapKey].clienteId) <= 1) {
+                                recetaConsolidadaMap[mapKey].clienteId = idActual;
+                                recetaConsolidadaMap[mapKey].clienteNombre = consumo.clienteNombre || consumo.ClienteNombre || '';
+                            }
                         }
                         
-                        const kilosItem = (consumo.cantidadKilos || 0);
+                        const kilosItem = Number(consumo.cantidadKilos || consumo.CantidadKilos || 0);
                         recetaConsolidadaMap[mapKey].kilos += kilosItem;
                         totalKilosMezcla += kilosItem;
                     });
                 }
             });
 
-            // 3. Mapeo final ("El Caballo de Troya")
             const consumosArray = Object.values(recetaConsolidadaMap).sort((a, b) => b.kilos - a.kilos);
             const notasUnicas = Array.from(notasSet);
 
+            // 🚀 Ahora el mapeo se transfiere intacto al PDF
             const consumosMapeados = consumosArray.map(c => ({
                 materiaPrimaId: c.id,
                 nombreMateriaPrima: c.nombre, 
                 nombreInsumo: c.nombre,
                 cantidadKilos: c.kilos,
                 cantidad: c.kilos,
-                clienteId: c.clienteId || 0,                 
-                clienteNombreFazon: c.clienteNombreFazon     
+                clienteId: c.clienteId,
+                clienteNombre: c.clienteNombre
             }));
 
             const ordenConsolidadaFalsa = {
@@ -117,7 +98,6 @@ export function useConsolidacion() {
                 consumos: consumosMapeados
             };
 
-            // Retornamos el paquete listo para emitirse
             return { 
                 orden: ordenConsolidadaFalsa, 
                 receta: consumosMapeados, 

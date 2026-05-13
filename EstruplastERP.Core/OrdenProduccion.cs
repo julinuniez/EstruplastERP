@@ -66,6 +66,7 @@ namespace EstruplastERP.Core
         public int? HojaCargaId { get; set; }
         [ForeignKey("HojaCargaId")]
         public HojaCarga? HojaCarga { get; set; }
+        public ICollection<PalletProduccion> Pallets { get; set; } = new List<PalletProduccion>();
 
         public List<ConsumoOrden> Consumos { get; set; } = new List<ConsumoOrden>();
     }

@@ -24,6 +24,7 @@ namespace EstruplastERP.Data
         public DbSet<ClienteMaterialFazon> ClientesMaterialesFazon { get; set; }
         public DbSet<HojaCarga> HojasCarga { get; set; }
         public DbSet<ConsumoHojaCarga> ConsumosHojasCarga { get; set; }
+        public DbSet<PalletProduccion> PalletsProduccion { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

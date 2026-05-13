@@ -24,7 +24,12 @@ const insumoExtraPorc = ref<number | ''>('');
 const mostrarLista = ref(false); 
 
 const esConsolidadoReal = computed(() => {
-    return props.form?.observacion?.includes('MEZCLA CONSOLIDADA') || props.form?.esConsolidado;
+    const obs = String(props.form?.observacion || '').toUpperCase();
+    return props.form?.esConsolidado === true || 
+           props.form?.esConsolidado === 'true' || 
+           obs.includes('MEZCLA CONSOLIDADA') || 
+           obs.includes('MEZCLA MÚLTIPLE') ||
+           props.form?.productoNombre === 'MEZCLA CONSOLIDADA';
 });
 
 const codigoLoteVisible = computed(() => {
@@ -56,7 +61,6 @@ const generarCodigoDirecto = (texto: string) => {
         });
         return canvas.toDataURL("image/png");
     } catch (error) {
-        console.error("Fallo JsBarcode:", error);
         return '';
     }
 };
@@ -72,8 +76,6 @@ const pesoBrutoExacto = computed(() => {
     const resultado = kilosNetosExactos.value * (1 + (porcentajeDesperdicio / 100));
     return isNaN(resultado) ? 0 : resultado;
 });
-
-const pesoVisualRedondeado = computed(() => Math.ceil(pesoBrutoExacto.value));
 
 const kilosCabeceraRedondeado = computed(() => {
     if (esConsolidadoReal.value) {
@@ -95,8 +97,61 @@ const densidadReal = computed(() => {
     return Number(props.densidad) || 0;
 });
 
+const obtenerEtiquetaOrigen = (itemReceta: any) => {
+    // 1. Tomamos los datos EXACTOS que nos transfirió ListaProduccion / Consolidación
+    const idDuenio = Number(itemReceta.clienteId || itemReceta.ClienteId || 0);
+    const nombreDuenio = itemReceta.clienteNombre || itemReceta.ClienteNombre || '';
+
+    // 2. Si es 0 o 1 (Estruplast), no mostramos nada.
+    if (idDuenio <= 1) return '';
+
+    // 3. Si nos llegó el nombre del cliente, lo imprimimos con orgullo
+    if (nombreDuenio && nombreDuenio.trim() !== '') {
+        return `(DE ${nombreDuenio.toUpperCase()})`;
+    }
+
+    // 4. Rescate de último recurso cruzando con la orden actual
+    if (props.cliente && Number(props.cliente.id) === idDuenio) {
+        return `(DE ${String(props.cliente.razonSocial || '').toUpperCase()})`;
+    }
+
+    return '';
+};
+
 const recetaVisual = computed(() => {
     let lista = JSON.parse(JSON.stringify(props.receta || []));
+
+    if (esConsolidadoReal.value) {
+        const map = new Map<number, any>();
+
+        lista.forEach((item: any) => {
+            const idMp = Number(item.materiaPrimaId || item.MateriaPrimaId || item.id);
+            if (!idMp) return; 
+
+            const nombre = item.nombreInsumo || item.nombreMateriaPrima || item.NombreMateriaPrima || item.nombre || 'Insumo';
+            const kilos = Number(item.cantidadKilos || item.CantidadKilos || item.kilos || item.cantidad || 0);
+            const fijos = Number(item.kilosFijos || 0);
+
+            if (!map.has(idMp)) {
+                map.set(idMp, {
+                    ...item, 
+                    materiaPrimaId: idMp,
+                    nombreInsumo: nombre,
+                    cantidadKilos: kilos,
+                    kilosFijos: fijos,
+                    esEstearato: item.esEstearato || nombre.toUpperCase().includes('ESTEARATO'),
+                    esColor: item.esColor || nombre.toUpperCase().includes('MB') || nombre.toUpperCase().includes('MASTER') || nombre.toUpperCase().includes('COLOR'),
+                    esBase: item.esBase || false
+                });
+            } else {
+                const agrupado = map.get(idMp);
+                agrupado.cantidadKilos += kilos;
+                agrupado.kilosFijos += fijos;
+            }
+        });
+
+        lista = Array.from(map.values());
+    }
 
     if (props.tipoSalidaVisual === 'NATURAL') {
         let porcentajeRemovido = 0;
@@ -104,50 +159,36 @@ const recetaVisual = computed(() => {
         const listaLimpia: any[] = [];
 
         lista.forEach((item: any) => {
-            const n = (item.nombreInsumo || item.nombreMateriaPrima || '').toUpperCase();
+            const n = (item.nombreInsumo || item.nombreMateriaPrima || item.NombreMateriaPrima || '').toUpperCase();
             const esColor = item.esColor || n.includes('MB') || n.includes('MASTER') || n.includes('COLOR');
             
             if (esColor) {
-                porcentajeRemovido += parseFloat(item.cantidad || 0);
-                kilosRemovidos += parseFloat(item.kilosFijos || item.cantidadKilos || 0);
+                porcentajeRemovido += Number(item.cantidad || 0);
+                kilosRemovidos += Number(item.kilosFijos || item.cantidadKilos || item.CantidadKilos || item.kilos || item.cantidad || 0);
             } else {
                 listaLimpia.push(item);
             }
         });
 
-        if (listaLimpia.length > 0 && porcentajeRemovido > 0) {
-            listaLimpia.sort((a: any, b: any) => (parseFloat(b.cantidad) || 0) - (parseFloat(a.cantidad) || 0));
+        if (listaLimpia.length > 0 && kilosRemovidos > 0) {
+            listaLimpia.sort((a: any, b: any) => Number(b.cantidadKilos || b.CantidadKilos || 0) - Number(a.cantidadKilos || a.CantidadKilos || 0));
             const materialPrincipal = listaLimpia.find((i: any) => i.esBase) || listaLimpia[0];
 
             if (materialPrincipal) {
-                materialPrincipal.cantidad = (parseFloat(materialPrincipal.cantidad || 0) + porcentajeRemovido).toFixed(2);
+                materialPrincipal.cantidad = (Number(materialPrincipal.cantidad || 0) + porcentajeRemovido).toFixed(2);
                 
-                if (materialPrincipal.kilosFijos) {
-                    materialPrincipal.kilosFijos = (parseFloat(materialPrincipal.kilosFijos) + kilosRemovidos).toFixed(2);
-                } else if (materialPrincipal.cantidadKilos) {
-                    materialPrincipal.cantidadKilos = (parseFloat(materialPrincipal.cantidadKilos) + kilosRemovidos).toFixed(2);
+                if (Number(materialPrincipal.kilosFijos) > 0) {
+                    materialPrincipal.kilosFijos = Number(materialPrincipal.kilosFijos) + kilosRemovidos;
+                } else {
+                    materialPrincipal.cantidadKilos = Number(materialPrincipal.cantidadKilos || materialPrincipal.CantidadKilos || materialPrincipal.cantidad || 0) + kilosRemovidos;
                 }
             }
         }
         lista = listaLimpia;
     }
 
-    return lista.sort((a: any, b: any) => (parseFloat(b.cantidadKilos || b.cantidad) || 0) - (parseFloat(a.cantidadKilos || a.cantidad) || 0));
+    return lista.sort((a: any, b: any) => Number(b.cantidadKilos || b.CantidadKilos || b.cantidad || 0) - Number(a.cantidadKilos || a.CantidadKilos || a.cantidad || 0));
 });
-
-const obtenerTipoMaterial = (item: any) => {
-    if (!item) return '';
-    if (item.tipoMaterial && item.tipoMaterial !== 'OTROS') return item.tipoMaterial.toUpperCase();
-    const n = (item.nombre || '').toUpperCase();
-    if (n.includes('PAI') || n.includes('IMPACTO') || n.includes('A.I.') || n.includes('AI ')) return 'PAI';
-    if (n.includes('PEAD') || n.includes('ALTA') || n.includes('HDPE')) return 'PEAD';
-    if (n.includes('PEBD') || n.includes('BAJA') || n.includes('LDPE') || n.includes('POLIETILENO')) return 'POLIETILENO';
-    if (n.includes('PP') || n.includes('POLIPROPILENO')) return 'PP';
-    if (n.includes('ABS')) return 'ABS';
-    if (n.includes('FREON') || n.includes('RESISTENTE')) return 'RESISTENTE FREON';
-    if (n.includes('BIO')) return 'BIO';
-    return '';
-};
 
 const sugerenciasFiltradas = computed(() => {
     const texto = insumoBusquedaTexto.value.trim().toUpperCase();
@@ -157,10 +198,10 @@ const sugerenciasFiltradas = computed(() => {
 
     lista = lista.filter(mp => {
         const idDuenio = Number(mp.clienteId || mp.ClienteId || 0);
-        if (idDuenio !== 0 && idDuenio !== idClienteActual) return false;
+        
+        if (idDuenio > 1 && idDuenio !== idClienteActual) return false;
 
         const nombreLimpio = (mp.nombre || '').toUpperCase().trim();
-
         if (nombreLimpio.includes('BASE')) return false;
 
         const excluidosExactos = ['ABS','PAI', 'PEAD', 'POLIPROPILENO','POLIETILENO','RESISTENTE AL FREON'];
@@ -189,12 +230,9 @@ const solicitarAgregar = () => {
     if (mpEncontrada) {
         emit('add-insumo', { id: mpEncontrada.id, porcentaje: Number(insumoExtraPorc.value) });
         insumoBusquedaTexto.value = ''; insumoExtraPorc.value = ''; mostrarLista.value = false;
-    } else {
-        alert("⚠️ Seleccione un insumo válido de la lista.");
     }
 };
 
-// 🚀 SOLUCIÓN 1: Buscar por ID en vez de por objeto clonado
 const solicitarQuitar = (item: any) => { 
     const indexReal = props.receta.findIndex((r: any) => r.materiaPrimaId === item.materiaPrimaId || r.id === item.id);
     if (indexReal !== -1) {
@@ -202,49 +240,28 @@ const solicitarQuitar = (item: any) => {
     }
 };
 
-// 🚀 SOLUCIÓN 2: Emitir evento para modificar porcentaje en tiempo real
-const solicitarModificarPorcentaje = (item: any, nuevoValor: string | number) => {
-    const val = Number(nuevoValor);
-    if (!isNaN(val) && val >= 0) {
-        emit('add-insumo', { id: item.materiaPrimaId || item.id, porcentaje: val });
-    }
-};
-
-const obtenerEtiquetaOrigen = (itemReceta: any) => {
-    let idDuenioMaterial = 0;
-    const idMpBuscado = itemReceta.materiaPrimaId || itemReceta.id;
-
-    if (props.materiasPrimas && props.materiasPrimas.length > 0) {
-        const mpReal = props.materiasPrimas.find((m: any) => m.id === idMpBuscado);
-        if (mpReal) {
-            idDuenioMaterial = Number(mpReal.clienteId || mpReal.ClienteId || 0);
-        } else {
-            idDuenioMaterial = Number(itemReceta.clienteId || itemReceta.ClienteId || 0);
+const solicitarModificarPorcentaje = (item: any, event: Event) => {
+    const target = event.target as HTMLInputElement | null;
+    if (target) {
+        const val = Number(target.value);
+        if (!isNaN(val) && val >= 0) {
+            emit('add-insumo', { id: item.materiaPrimaId || item.id, porcentaje: val });
         }
-    } else {
-        idDuenioMaterial = Number(itemReceta.clienteId || itemReceta.ClienteId || 0);
     }
-    if (idDuenioMaterial === 0) {
-        return ''; 
-    }
-    
-    if (props.cliente && idDuenioMaterial === Number(props.cliente.id)) {
-        return `(DE ${props.cliente.razonSocial.toUpperCase()})`;
-    }
-    
-    return '(MATERIAL PRESTADO/TERCERO)';
 };
-
-const getOrigenMaterial = (r: any) => obtenerEtiquetaOrigen(r);
 
 const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 const tituloLimpioParaPDF = computed(() => {
+    let crudo = props.form?.productoNombre || props.producto?.nombre || '';
+
     if (esConsolidadoReal.value) {
-        return "MEZCLA MULTIPLE";
+        if (crudo && crudo !== "MEZCLA CONSOLIDADA") {
+            return crudo;
+        }
+        return "MEZCLA MÚLTIPLE";
     }
 
-    let crudo = props.form?.productoNombre || props.producto?.nombre || '';
     crudo = crudo.trim();
     const upper = crudo.toUpperCase();
     
@@ -260,8 +277,7 @@ const tituloLimpioParaPDF = computed(() => {
 
 const observacionLimpia = computed(() => {
     if (!props.form?.observacion) return '-';
-    let obs = props.form.observacion.replace(/\[LOTE: HC-[^\]]+\]/g, '').trim();
-    return obs;
+    return props.form.observacion.replace(/\[LOTE: HC-[^\]]+\]/g, '').trim();
 });
 
 const esVerdadero = (valor: any) => {
@@ -303,7 +319,6 @@ const tipoCorona = computed(() => {
     
     return validarCorona(val) ? String(val).toUpperCase() : null;
 });
-
 </script>
 
 <template>
@@ -385,7 +400,7 @@ const tipoCorona = computed(() => {
                 <thead>
                     <tr>
                         <th>INSUMO / MATERIA PRIMA</th>
-                        <th style="width:100px" v-if="!esConsolidadoReal">% MEZCLA</th>
+                        <th style="width:100px; text-align:center;" v-if="!esConsolidadoReal">% MEZCLA</th>
                         <th style="width:120px; text-align:right;">PESO A CARGAR</th>
                         <th data-html2canvas-ignore="true" style="width:40px" v-if="!esConsolidadoReal"></th>
                     </tr>
@@ -400,36 +415,40 @@ const tipoCorona = computed(() => {
                         <tr>
                             <td style="font-weight: 600;">
                                 {{ r.nombreInsumo || r.nombreMateriaPrima }}
-                                <span v-if="!esConsolidadoReal && obtenerEtiquetaOrigen(r)" style="font-size: 0.85em; font-style: italic; color: #555; margin-left: 5px;">
+                                <span v-if="obtenerEtiquetaOrigen(r)" style="font-size: 0.85em; font-style: italic; color: #555; margin-left: 5px;">
                                     {{ obtenerEtiquetaOrigen(r) }}
                                 </span>
                             </td>
                             <td style="text-align:center; vertical-align: middle;" v-if="!esConsolidadoReal">
-                                <div class="porcentaje-celda" v-if="r.esEstearato || (r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase().includes('ESTEARATO')" style="font-weight: bold; color: #2980b9;">
+                                <div v-if="r.esEstearato || (r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase().includes('ESTEARATO')" style="font-weight: bold; color: #2980b9;">
                                     FIJO
                                 </div>
-                                <!-- 🚀 SOLUCIÓN 3: Modificamos el texto estático por un Input editable -->
-                                <div class="porcentaje-celda" v-else style="display:flex; justify-content:center; align-items:center;">
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        :value="Number(r.cantidad).toFixed(2)"
-                                        @change="solicitarModificarPorcentaje(r, ($event.target as HTMLInputElement).value)"
-                                        class="input-porc-edit"
-                                    /> %
+                                <div v-else>
+                                    <div class="ocultar-en-impresion" style="display:flex; justify-content:center; align-items:center;">
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            :value="Number(r.cantidad).toFixed(2)"
+                                            @change="solicitarModificarPorcentaje(r, $event)"
+                                            class="input-porc-edit"
+                                        /> %
+                                    </div>
+                                    <div class="mostrar-en-impresion">
+                                        {{ Number(r.cantidad).toFixed(2) }} %
+                                    </div>
                                 </div>
                             </td>
                             <td style="text-align:right; font-size: 1.1em;">
                                 <strong v-if="r.esEstearato || (r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase().includes('ESTEARATO')" style="color: #2980b9;">
                                     {{ esConsolidadoReal 
-                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.cantidad || 0).toFixed(2) 
+                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
                                         : parseFloat(r.kilosFijos || r.cantidad || 0).toFixed(2) 
                                     }} kg
                                 </strong>
                                 <strong v-else>
                                     {{ esConsolidadoReal 
-                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.cantidad || 0).toFixed(2) 
+                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
                                         : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2) 
                                     }} kg
                                 </strong>
@@ -449,8 +468,8 @@ const tipoCorona = computed(() => {
                         <div v-for="mp in sugerenciasFiltradas" :key="mp.id" class="item-resultado" @click="seleccionarInsumo(mp)">
                             <span class="nombre-insumo-lista">{{ mp.nombre }}</span>
                             
-                            <span v-if="(mp.clienteId || mp.ClienteId) > 0" class="badge-mini-cliente">
-                                👤 {{ cliente?.razonSocial || 'CLIENTE' }}
+                            <span v-if="(mp.clienteId || mp.ClienteId) > 1" class="badge-mini-cliente">
+                                👤 {{ cliente && (mp.clienteId || mp.ClienteId) === cliente.id ? cliente.razonSocial : 'TERCERO' }}
                             </span>
                             <span v-else class="badge-mini-propio">🏢 PROPIO</span>
                         </div>
@@ -579,7 +598,6 @@ const tipoCorona = computed(() => {
 .badge-mini-cliente { background: #f39c12; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; letter-spacing: 0.5px; }
 .badge-mini-propio { background: #3498db; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; letter-spacing: 0.5px; }
 
-/* 🚀 ESTILOS PARA EL INPUT EDITABLE DE PORCENTAJE */
 .input-porc-edit {
     width: 60px;
     text-align: right;
@@ -599,17 +617,32 @@ const tipoCorona = computed(() => {
     box-shadow: 0 0 3px rgba(52, 152, 219, 0.5);
 }
 
-/* 🚀 TRUCO: Que al imprimir no se note que es un input */
-@media print {
-    .input-porc-edit {
-        border: none !important;
-        background: transparent !important;
-        -webkit-appearance: none;
-        appearance: none;
-        box-shadow: none !important;
-        padding: 0 !important;
-        margin-right: 0 !important;
-        width: auto !important;
+@media screen {
+    .mostrar-en-impresion {
+        display: none !important;
     }
+}
+
+@media print {
+    .ocultar-en-impresion {
+        display: none !important;
+    }
+    .mostrar-en-impresion {
+        display: block !important;
+        font-weight: bold;
+        font-size: 12px;
+        text-align: center;
+    }
+}
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 </style>

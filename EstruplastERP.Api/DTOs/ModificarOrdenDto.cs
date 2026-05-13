@@ -12,6 +12,7 @@
     public bool AditivoUV { get; set; }
     public string TipoCorona { get; set; }
     public string Color { get; set; }
+    public bool IgnorarStock { get; set; }
 
     public List<ItemRecetaModificadaDto> RecetaNueva { get; set; }
 }
