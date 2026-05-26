@@ -123,7 +123,7 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
   flex-direction: column;
   z-index: 1000;
   transition: width 0.3s ease;
-  width: 240px;
+  width: 200px; /* Ya estaba en 200px */
   box-shadow: 2px 0 5px rgba(0,0,0,0.1);
 }
 
@@ -150,7 +150,8 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
   background-color: #f4f6f9;
 }
 
-.main-wrapper.margen-normal { margin-left: 240px; width: calc(100% - 240px); }
+/* 🚀 AJUSTE: Cambiamos 240px por 200px para que coincida con el sidebar */
+.main-wrapper.margen-normal { margin-left: 200px; width: calc(100% - 200px); }
 .main-wrapper.margen-reducido { margin-left: 60px; width: calc(100% - 60px); }
 .main-wrapper.full-screen { margin-left: 0; width: 100%; }
 
@@ -160,7 +161,7 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
   background-color: white;
   display: flex;
   align-items: center;
-  justify-content: space-between; /* Separa spacer izquierda y user derecha */
+  justify-content: space-between;
   padding: 0 20px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   position: sticky;
@@ -173,17 +174,16 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%); /* Esto lo centra vertical y horizontalmente */
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%; /* Para evitar colapsos */
-  pointer-events: none; /* Para que no moleste clicks en otras cosas */
+  width: 100%;
+  pointer-events: none;
 }
 
 .logo-central {
-  max-height: 40px; /* Antes estaba en 35px/50px. 28px le da buen margen. */
-  
+  max-height: 40px;
   width: auto;
   max-width: 400px;
   object-fit: contain;
@@ -201,13 +201,14 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); width: 240px; }
+  /* 🚀 AJUSTE RESPONSIVE: Mantenemos los 200px */
+  .sidebar { transform: translateX(-100%); width: 200px; }
   .sidebar.reducido { transform: translateX(0); width: 60px; }
   
   .main-wrapper.margen-normal, .main-wrapper.margen-reducido { margin-left: 0; width: 100%; }
   .sidebar.reducido + .main-wrapper { margin-left: 60px; width: calc(100% - 60px); }
   
   .user-name { display: none; }
-  .logo-central { max-height: 30px; } /* Logo un poco más chico en celular */
+  .logo-central { max-height: 30px; }
 }
 </style>

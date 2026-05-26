@@ -852,7 +852,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
     display: flex; flex-direction: column; padding: 20px; 
     box-shadow: -5px 0 15px rgba(0,0,0,0.1); z-index: 10; border-left: 1px solid #34495e; 
 }
-.bloque-inferior { width: 100%; padding: 20px; background-color: #f8f9fa; border-top: 3px solid #bdc3c7; }
+.bloque-inferior { width: 100%; padding: 7px; background-color: #f8f9fa; border-top: 3px solid #bdc3c7; }
 
 .header-control h3 { margin-top: 0; border-bottom: 2px solid #3498db; padding-bottom: 10px; color: #ecf0f1; font-size: 1.1rem; }
 label { display: block; margin-top: 8px; font-size: 13px; color: #bdc3c7; font-weight: 600; }
