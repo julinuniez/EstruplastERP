@@ -454,7 +454,7 @@ const procesarGuardado = async () => {
             id: 0,
             materiaPrimaId: est.id,
             nombreInsumo: est.nombre,
-            cantidad: "0.08", 
+            cantidad: Number((kilosEstearato.value / (form.value.kilosTotales > 0 ? form.value.kilosTotales : 1) * 100).toFixed(2)), 
             densidad: est.pesoEspecifico || 1,
             esEstearato: true
         });

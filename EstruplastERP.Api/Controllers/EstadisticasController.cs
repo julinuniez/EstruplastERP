@@ -118,9 +118,9 @@ namespace EstruplastERP.Controllers
             if (mes.HasValue && anio.HasValue)
                 query = query.Where(o => o.FechaFin.Value.Month == mes && o.FechaFin.Value.Year == anio);
 
-            // 🚀 ESTE ES EL ÚNICO QUE SE QUEDA EN BRUTO (Consumos Reales)
-            var datos = await query.SelectMany(o => o.Consumos)
-                .Where(c => c.MateriaPrimaId < 990 || c.MateriaPrimaId > 999)
+            // 1. Traemos TODOS los consumos reales
+            var todosLosConsumos = await query.SelectMany(o => o.Consumos)
+                .Where(c => c.MateriaPrimaId < 990 || c.MateriaPrimaId > 999) // (Sigue ignorando los genéricos según tu regla)
                 .GroupBy(c => new
                 {
                     NombreMaterial = c.MateriaPrima.Nombre,
@@ -135,10 +135,22 @@ namespace EstruplastERP.Controllers
                     TotalKilos = Math.Round(g.Sum(c => c.CantidadKilos), 0)
                 })
                 .OrderByDescending(x => x.TotalKilos)
-                .Take(7)
                 .ToListAsync();
 
-            return Ok(datos);
+            // 2. Agarramos los 7 principales
+            var top7 = todosLosConsumos.Take(7).ToList();
+
+            // 3. Sumamos todo lo que quedó afuera
+            var kilosSobrantes = todosLosConsumos.Skip(7).Sum(x => x.TotalKilos);
+
+            // 4. Agregamos la porción "OTROS"
+            if (kilosSobrantes > 0)
+            {
+                // Usamos un tipo anónimo compatible con el anterior
+                top7.Add(new { Material = "OTROS MATERIALES", TotalKilos = kilosSobrantes });
+            }
+
+            return Ok(top7);
         }
 
         [HttpGet("top-clientes")]

@@ -16,16 +16,21 @@
         public decimal Desperdicio { get; set; } = 8;
         public bool EsBobina { get; set; } = false;
         public bool ConBrillo { get; set; }
+        public decimal PorcBrillo { get; set; }
         public bool LlevaFilm { get; set; }
         public bool EsGofrado { get; set; }
         public bool AditivoUV { get; set; }
+        public decimal PorcentajeUv { get; set; }
         public string TipoCorona { get; set; } = "Ninguno";
+        public bool AditivoCaucho { get; set; } 
+        public decimal PorcentajeCaucho { get; set; }
         public List<DetalleConsumoDto> Consumos { get; set; } = new List<DetalleConsumoDto>();
     }
 
     public class DetalleConsumoDto
     {
         public int MateriaPrimaId { get; set; }
-        public decimal CantidadKilos { get; set; } // Ya mandamos los kilos calculados
+        public decimal CantidadKilos { get; set; }
+        public decimal Porcentaje { get; set; }
     }
 }

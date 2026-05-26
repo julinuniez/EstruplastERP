@@ -51,7 +51,18 @@ namespace EstruplastERP.Controllers
                     var material = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
                     if (material != null)
                     {
+                        // Restamos el stock matemático
                         material.StockActual -= consumo.CantidadRealKg;
+
+                        // 🚀 LA SOLUCIÓN: Dejamos el rastro en el Historial general (Kardex)
+                        _context.Movimientos.Add(new Movimiento
+                        {
+                            Fecha = DateTime.Now,
+                            ProductoId = consumo.MateriaPrimaId,
+                            Cantidad = -consumo.CantidadRealKg, // En negativo porque es un consumo
+                            TipoMovimiento = "CONSUMO_MEZCLA",
+                            Observacion = $"Descarga por Hoja de Carga #{id}"
+                        });
                     }
 
                     // 3. Dejar el comprobante en el historial de qué se gastó en este pastón

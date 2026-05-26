@@ -97,6 +97,7 @@ const codigoGrupoSeleccionado = ref('');
 
 const mostrarModalDesglose = ref(false);
 const ordenParaDesglose = ref<ProduccionItem | null>(null);
+const cantidadPalletsSugerida = ref<number>(1); // Prop nueva para pasar al modal
 
 const filasExpandidas = ref<number[]>([]);
 
@@ -231,7 +232,23 @@ async function revertirOrden(item: ProduccionItem) {
     }
 }
 
+// 🚀 MODIFICADO: Preguntar cantidad de pallets si supera 1100kg
 const abrirModalDesglose = (orden: ProduccionItem) => {
+    let sugerencia = 1;
+
+    if (orden.kilos >= 1100) {
+        const input = prompt(`Esta orden tiene ${orden.kilos} kg. ¿En cuántos pallets deseas dividirla?`, String(Math.ceil(orden.kilos / 1000)));
+        if (input === null) return; // El usuario canceló el prompt
+        
+        const numero = parseInt(input, 10);
+        if (isNaN(numero) || numero <= 0) {
+            alert("Por favor, ingrese un número válido mayor a 0.");
+            return;
+        }
+        sugerencia = numero;
+    }
+
+    cantidadPalletsSugerida.value = sugerencia;
     ordenParaDesglose.value = orden;
     mostrarModalDesglose.value = true;
 };
@@ -239,6 +256,7 @@ const abrirModalDesglose = (orden: ProduccionItem) => {
 const cerrarModalDesglose = () => {
     mostrarModalDesglose.value = false;
     ordenParaDesglose.value = null;
+    cantidadPalletsSugerida.value = 1;
 };
 
 const onDesgloseConfirmado = async (palletsCalculados: any[]) => {
@@ -305,7 +323,6 @@ const onCierreConfirmado = () => {
 async function cancelarOrden(item: ProduccionItem) {
     let mensaje = `⚠️ ¿Seguro que quieres cancelar la Orden #${item.id}?`;
     
-    // Verificamos si tiene producción parcial
     const tienePalletsFinalizados = item.pallets && item.pallets.some(p => p.estado === 'Finalizada');
     
     if (tienePalletsFinalizados) {
@@ -317,7 +334,7 @@ async function cancelarOrden(item: ProduccionItem) {
     try {
         await api.post(`/Ordenes/cancelar/${item.id}`);
         alert("✅ Orden cancelada y stock restaurado correctamente.");
-        await cargarHistorial(); // Recargamos la lista
+        await cargarHistorial();
     } catch (e: any) {
         alert("❌ Error: " + (e.response?.data?.mensaje || "No se pudo cancelar"));
     }
@@ -454,14 +471,14 @@ defineExpose({ cargarHistorial })
             <thead>
                 <tr>
                     <th style="width: 30px; text-align: center;">✓</th>
-                    <th style="width: 65px;">Fecha</th>
+                    <th style="width: 25px;">Fecha</th>
                     <th style="width: 95px;">Cliente</th>
                     <th style="width: 50px;">N° Pedido</th>
                     <th>Producto</th>
                     <th style="width: 50px; text-align: center;">Cant.</th>
                     <th style="width: 80px; text-align: right;">Kilos</th>
                     <th style="width: 125px; text-align: center;">Estado</th>
-                    <th style="width: 310px; text-align: center;">Acciones</th>
+                    <th style="width: 230px; text-align: center;">Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -522,7 +539,7 @@ defineExpose({ cargarHistorial })
                                 <template v-if="p.estado === 'Pendiente' || p.estado === 'EnProceso' || p.estado === 'MaterialPreparado'">
                                     <button @click="abrirModalEdicion(p)" class="btn-action" title="Modificar Orden">✏️</button>
                                     
-                                    <button v-if="!p.pallets || p.pallets.length === 0" @click="abrirModalDesglose(p)" class="btn-action btn-desglose" title="Desglosar en Pallets">📦</button>
+                                    <button v-if="(!p.pallets || p.pallets.length === 0) && p.kilos >= 1100" @click="abrirModalDesglose(p)" class="btn-action btn-desglose" title="Desglosar en Pallets">📦</button>
                                     
                                     <button v-if="!p.pallets || p.pallets.length === 0" @click="abrirModalCierre(p)" class="btn-action btn-check" title="Declarar Consumos y Cerrar OP">✅</button>
                                     
@@ -597,6 +614,7 @@ defineExpose({ cargarHistorial })
     <ModalDesglosePallets 
         :visible="mostrarModalDesglose"
         :orden="ordenParaDesglose"
+        :sugerenciaPallets="cantidadPalletsSugerida" 
         @close="cerrarModalDesglose"
         @guardar="onDesgloseConfirmado"
     />
@@ -680,16 +698,18 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .badge-cancel { background: #fef2f2; color: #ef4444; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #fecaca; white-space: nowrap;}
 .badge-prep { background: #eff6ff; color: #3b82f6; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #93c5fd; white-space: nowrap;}
 
-.td-acciones { vertical-align: middle; }
-.acciones-wrapper { display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: nowrap; white-space: nowrap; }
-.btn-action { border: 1px solid #e2e8f0; background: white; border-radius: 6px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); width: 28px; height: 28px; padding: 2px; }
-.btn-action:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-
+/* 🚀 NUEVOS ESTILOS PARA LOS BOTONES FLUIDOS Y PROPORCIONALES */
+.td-acciones { vertical-align: middle; padding: 6px 10px !important; }
+.acciones-wrapper { display: flex; gap: 6px; justify-content: center; align-items: center; width: 100%; max-width: 230px; margin: 0 auto; }
+.btn-action { flex: 1; max-width: 38px; min-width: 30px; height: 32px; border: 1px solid #cbd5e1; background: white; border-radius: 6px; cursor: pointer; font-size: 1.05rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); padding: 0; }
+.btn-action:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); background: #f8fafc; }
 .btn-check:hover { background: #f0fdf4; border-color: #6ee7b7; }
 .btn-ciencia:hover { background: #eff6ff; border-color: #93c5fd; }
 .btn-desglose:hover { background: #f8fafc; border-color: #94a3b8; }
 .btn-cancel { color: #ef4444; }
 .btn-cancel:hover { background: #fef2f2; border-color: #fca5a5; }
+/* ----------------------------------------------------------- */
+
 .vacio { text-align: center; padding: 40px; color: #94a3b8; font-style: italic; font-size: 0.9rem; }
 .loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; background: rgba(255,255,255,0.9); z-index: 10; color: #3498db; font-weight: bold; font-size: 1.2rem; }
 .barra-flotante-consolidada { position: absolute; bottom: 0; left: 0; width: 100%; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 12px 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 15px rgba(0,0,0,0.2); z-index: 20; }
@@ -719,7 +739,6 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
     word-wrap: break-word;
 }
 
-/* 🚀 ESTILOS DEL ACORDEÓN DE PALLETS NUEVOS */
 .btn-desplegar-pallets { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 6px; }
 .btn-desplegar-pallets:hover { background: #bae6fd; }
 .badge-mini-pallets { background: #0284c7; color: white; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; }

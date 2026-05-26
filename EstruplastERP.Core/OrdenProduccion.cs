@@ -28,6 +28,8 @@ namespace EstruplastERP.Core
 
         public int ProductoId { get; set; }
         public Producto Producto { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
         public decimal Cantidad { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
@@ -46,7 +48,7 @@ namespace EstruplastERP.Core
         public Cliente? Cliente { get; set; }
         public string Observacion { get; set; }
 
-        [Column(TypeName = "decimal(18,4)")]
+        [Column(TypeName = "decimal(18,2)")]
         public decimal KilosEstimados { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]

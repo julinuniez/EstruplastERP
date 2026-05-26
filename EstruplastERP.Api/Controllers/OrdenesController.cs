@@ -275,10 +275,15 @@ namespace EstruplastERP.Api.Controllers
                 var orden = await _context.Ordenes
                     .Include(o => o.Producto)
                     .Include(o => o.Consumos)
+                    .Include(o => o.Cliente) 
                     .FirstOrDefaultAsync(o => o.Id == id);
 
                 if (orden == null) return NotFound(new { mensaje = "Orden no encontrada." });
                 if (orden.Estado == EstadoOrden.Finalizada) return BadRequest(new { mensaje = "Esta orden ya fue finalizada." });
+
+                string nombreCliente = orden.Cliente != null ? orden.Cliente.RazonSocial : "FÁBRICA (PROPIO)";
+                string numeroNP = string.IsNullOrWhiteSpace(orden.NotaPedido) ? "S/NP" : orden.NotaPedido;
+                string etiquetaKardex = $"[NP: {numeroNP} | Cli: {nombreCliente}]";
 
                 bool materialYaDescontado = orden.Estado == EstadoOrden.MaterialPreparado;
                 DateTime fechaCierreReal = dto.FechaCierre ?? DateTime.Now;
@@ -337,7 +342,8 @@ namespace EstruplastERP.Api.Controllers
                                 ProductoId = mp.Id,
                                 Cantidad = -consumoUsuario.CantidadKilosReales,
                                 TipoMovimiento = "CONSUMO_PRODUCCION",
-                                Observacion = $"Cierre OP #{id}{(materialYaDescontado ? " (Adición Extra)" : "")}: {dto.Observacion}",
+                                // 🚀 NUEVO: Inyectamos la etiqueta en el consumo
+                                Observacion = $"Cierre OP #{id} {etiquetaKardex}{(materialYaDescontado ? " (Adición Extra)" : "")}: {dto.Observacion}",
                                 OrdenProduccionId = id
                             });
                         }
@@ -355,7 +361,7 @@ namespace EstruplastERP.Api.Controllers
                         ProductoId = orden.ProductoId,
                         Cantidad = dto.KilosProducidosReales,
                         TipoMovimiento = "PRODUCCION_TERMINADA",
-                        Observacion = $"Cierre OP #{id} {(materialYaDescontado ? "(Desde Mezcla)" : "")}",
+                        Observacion = $"Cierre OP #{id} {etiquetaKardex} {(materialYaDescontado ? "(Desde Mezcla)" : "")}",
                         OrdenProduccionId = id
                     });
                 }

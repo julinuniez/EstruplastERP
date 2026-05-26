@@ -8,6 +8,7 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 1. CONFIGURACIÓN DE CORS (Global y permisiva para desarrollo local)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("PermitirVue", policy =>
@@ -45,14 +46,14 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-//if (app.Environment.IsDevelopment())
-//{
-    app.UseDeveloperExceptionPage(); // Obliga a mostrar el error exacto
-    app.UseSwagger();
-    app.UseSwaggerUI();
-//}
+// 2. CONFIGURACIÓN DEL PIPELINE DE SOLICITUDES (El orden acá importa muchísimo)
+app.UseDeveloperExceptionPage();
+app.UseSwagger();
+app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+// 🚀 LA CLAVE: Comentamos la redirección forzada a HTTPS para que no rompa las llamadas HTTP locales (puerto 5122)
+// app.UseHttpsRedirection();
+
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -63,6 +64,7 @@ app.UseStaticFiles(new StaticFileOptions
     }
 });
 
+// 🚀 CORS debe ir OBLIGATORIAMENTE antes de la Autenticación y los Controladores
 app.UseCors("PermitirVue");
 
 app.UseAuthentication();

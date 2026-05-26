@@ -54,11 +54,16 @@ watch(() => props.visible, (isOpen) => {
     if (props.orden.consumos) {
       consumosBase.value = props.orden.consumos.map((c: any) => {
         const mp = props.materiasPrimas.find(m => m.id === c.materiaPrimaId);
+        
+        // 🚀 OBLIGAMOS AL SISTEMA a tratar el valor como número estricto.
+        // Si sigue trayendo un valor dividido por 5, el error está al CREAR la orden.
+        const kilosExactos = Number(c.cantidadKilos) || 0;
+        
         return {
           materiaPrimaId: c.materiaPrimaId,
           nombre: c.nombreMateriaPrima,
-          teorico: c.cantidadKilos,
-          real: c.cantidadKilos,
+          teorico: Number(kilosExactos.toFixed(3)),
+          real: Number(kilosExactos.toFixed(3)),
           stockActual: mp ? mp.stockActual : 0,
           clienteId: mp ? mp.clienteId : 0
         };

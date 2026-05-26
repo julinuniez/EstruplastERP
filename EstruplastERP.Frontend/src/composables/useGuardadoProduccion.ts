@@ -32,7 +32,7 @@ export function useGuardadoProduccion(
             cantidad: 1,
             observacion: '',
             largo: 0, ancho: 0, espesor: 0, color: '',
-            conBrillo: false, tipoBrillo: '777', porcBrillo: 2.00,
+            conBrillo: false, tipoBrillo: '777', porcBrillo: 10.00,
             llevaFilm: false, tipoCorona: 'Ninguno',
             esGofrado: false,
             conEstearato: false, esProductoColor: false, masterbatchId: '', colorTexto: '',
@@ -89,12 +89,21 @@ export function useGuardadoProduccion(
         const porcentajeDesperdicio = Number(form.value.merma || 0);
         const factorMultiplicador = 1 + (porcentajeDesperdicio / 100);
 
+        // 🚀 CORRECCIÓN DE CÁLCULOS BRUTOS BASE
         const consumosRealesBrutos = recetaDinamica.value.map(i => {
+            let kilosInsumoBruto = 0;
             const porcentajeEnReceta = parseFloat(i.cantidad.toString()) || 0;
-            const kilosInsumoBruto = ((pesoNetoGeometrico * porcentajeEnReceta) / 100) * factorMultiplicador;
+            
+            if (i.kilosFijos !== undefined && i.kilosFijos !== null && i.kilosFijos !== "") {
+                kilosInsumoBruto = parseFloat(i.kilosFijos.toString());
+            } else {
+                kilosInsumoBruto = ((pesoNetoGeometrico * porcentajeEnReceta) / 100) * factorMultiplicador;
+            }
+            
             return {
                 materiaPrimaId: Number(i.materiaPrimaId),
-                cantidadKilos: Number(kilosInsumoBruto.toFixed(3))
+                cantidadKilos: Number(kilosInsumoBruto.toFixed(3)),
+                porcentaje: porcentajeEnReceta 
             };
         });
 
@@ -114,19 +123,28 @@ export function useGuardadoProduccion(
                 ancho: Number(form.value.ancho),
                 espesor: Number(form.value.espesor),
                 color: colorFinalParaPDF.value,
+                
+                // 🚀 ADITIVOS Y CONSUMOS COMPLETOS
                 consumos: consumosRealesBrutos,
+                
                 conBrillo: form.value.conBrillo,
+                porcBrillo: Number(form.value.porcBrillo), // Viaja el porcentaje al backend
+                
                 llevaFilm: form.value.llevaFilm,
                 esGofrado: form.value.esGofrado,
+                
                 aditivoUV: form.value.aditivoUV,
+                porcentajeUv: Number(form.value.porcentajeUv), // Viaja el porcentaje
+                
+                aditivoCaucho: form.value.aditivoCaucho,
+                porcentajeCaucho: Number(form.value.porcentajeCaucho), // Viaja el porcentaje
+                
                 tipoCorona: form.value.tipoCorona
             });
 
-            // LLEGAMOS HASTA ACÁ SIN ERRORES DEL BACKEND
             mensaje.value = `✅ Orden Generada (Neto: ${pesoNetoGeometrico.toFixed(2)}kg). Insumos con ${porcentajeDesperdicio}% de desperdicio.`;
             idProduccionGenerada.value = true;
 
-            // AISLAMOS LA LIMPIEZA VISUAL DEL TRY/CATCH PRINCIPAL
             setTimeout(() => {
                 try {
                     if (typeof limpiarBorrador === 'function') limpiarBorrador(); 
@@ -141,7 +159,6 @@ export function useGuardadoProduccion(
             setTimeout(() => { mensaje.value = ''; }, 5000);
             
         } catch (e: any) {
-            // ESTO SOLO ATRAPARÁ ERRORES REALES DE C# / BASE DE DATOS
             error.value = '❌ ' + (e.response?.data?.mensaje || e.message);
         } finally {
             loading.value = false;

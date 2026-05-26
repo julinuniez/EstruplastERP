@@ -21,6 +21,10 @@ export interface PayloadOrdenNueva {
     esGofrado: boolean;
     aditivoUV: boolean;
     tipoCorona: string;
+    porcBrillo?: number;
+    porcentajeUv?: number;
+    aditivoCaucho?: boolean;
+    porcentajeCaucho?: number;
 }
 
 export const ProduccionAPI = {

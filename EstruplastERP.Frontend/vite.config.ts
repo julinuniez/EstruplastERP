@@ -22,5 +22,16 @@ export default defineConfig({
   },
   define: {
     '__APP_VERSION__': JSON.stringify(packageJson.version)
+  },
+  // 🚀 ACÁ ESTÁ LA SOLUCIÓN: El tubo directo hacia C#
+  server: {
+    proxy: {
+      '/api': {
+        // Fijate bien que coincida si tu Swagger dice http o https
+        target: 'https://localhost:7244', 
+        changeOrigin: true,
+        secure: false, // 👈 Esto es CLAVE para que .NET no te rechace la conexión local
+      }
+    }
   }
 })
