@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
 import axios from 'axios'
+import { Alertas } from '@/utils/alertas';
 
 const props = defineProps<{
     visible: boolean,
@@ -15,7 +16,7 @@ const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5122/api';
 const procesando = ref(false);
 const consumosMezcla = ref<{ materiaPrimaId: number, nombre: string, teorico: number, real: number }[]>([])
 
-// 🚀 NUEVO: Variables para cargar insumos extras
+// Variables para cargar insumos extras
 const listaMateriasPrimas = ref<any[]>([]);
 const insumoExtraSeleccionado = ref<number | ''>('');
 
@@ -29,26 +30,17 @@ const hojaCargaId = computed(() => {
     return props.ordenes[0].hojaCargaId;
 });
 
-// 🚀 MODIFICADO: Filtro estricto para mostrar solo insumos reales y usables
 const cargarCatálogoMateriales = async () => {
     try {
         const { data } = await axios.get(`${apiUrl}/Productos`);
         
         listaMateriasPrimas.value = data.filter((p: any) => {
-            // 1. Es materia prima y pertenece a Estruplast (ID 0 o 1)
             const esPropio = p.esMateriaPrima && (!p.clienteId || p.clienteId <= 1);
-            
-            // 2. Debe estar activo (evita traer insumos viejos dados de baja)
             const estaActivo = p.activo !== false && p.estado !== 'Inactivo'; 
-            
-            // 3. Excluir productos genéricos / a medida
             const noEsGenerico = !p.esGenerico; 
-
-            // 4. Excluir materiales que funcionen como "BASE" de cálculo
             const nombreLimpio = (p.nombre || '').toUpperCase().trim();
             const noEsBase = !nombreLimpio.includes('BASE');
 
-            // Solo pasa a la lista si cumple TODAS las condiciones
             return esPropio && estaActivo && noEsGenerico && noEsBase;
         }).sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
         
@@ -90,7 +82,7 @@ watch(() => props.visible, (isOpen) => {
     }
 });
 
-// 🚀 NUEVO: Función para inyectar una fila nueva a la tabla
+// 🚀 Función para inyectar una fila nueva a la tabla (entra con Kg en 0)
 const agregarFilaExtra = () => {
     if (!insumoExtraSeleccionado.value) return;
 
@@ -100,12 +92,12 @@ const agregarFilaExtra = () => {
     // Verificamos si ya está en la tabla para no duplicar
     const yaExiste = consumosMezcla.value.find(c => c.materiaPrimaId === mp.id);
     if (yaExiste) {
-        alert(`El insumo "${mp.nombre}" ya está en la lista. Modificá los kilos en su renglón correspondiente.`);
+        Alertas.advertencia(`El insumo "${mp.nombre}" ya está en la lista. Modificá los kilos en su renglón correspondiente.`);
         insumoExtraSeleccionado.value = '';
         return;
     }
 
-    // Agregamos la fila con teórico 0 (porque es un extra imprevisto)
+    // Agregamos la fila con teórico 0 y real en 0 para ser modificado en la tabla
     consumosMezcla.value.push({
         materiaPrimaId: mp.id,
         nombre: mp.nombre + " (Extra)",
@@ -116,9 +108,14 @@ const agregarFilaExtra = () => {
     insumoExtraSeleccionado.value = ''; // Reseteamos el selector
 };
 
+// 🚀 Función para quitar una fila
+const quitarInsumo = (index: number) => {
+    consumosMezcla.value.splice(index, 1);
+};
+
 const declararConsumos = async () => {
     if (!hojaCargaId.value) {
-        alert("Error crítico: La orden no tiene un HojaCargaId válido.");
+        Alertas.error("Error crítico: La orden no tiene un HojaCargaId válido.");
         return;
     }
 
@@ -135,11 +132,11 @@ const declararConsumos = async () => {
 
         await axios.post(`${apiUrl}/HojasCarga/${hojaCargaId.value}/declarar-consumos`, payload);
         
-        alert("✅ Mezcla declarada correctamente.");
+        Alertas.exito("✅ Mezcla declarada correctamente.");
         emit('actualizar-lista'); 
         emit('close');
     } catch (e: any) {
-        alert("❌ Error: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("❌ Error: " + (e.response?.data?.mensaje || e.message));
     } finally {
         procesando.value = false;
     }
@@ -174,7 +171,7 @@ const declararConsumos = async () => {
                                     <th>Insumo</th>
                                     <th class="text-center">Suma Teórica (Kg)</th>
                                     <th>Consumo Real (Kg)</th>
-                                </tr>
+                                    <th style="width: 40px; text-align: center;"></th> </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="(item, idx) in consumosMezcla" :key="idx">
@@ -183,26 +180,29 @@ const declararConsumos = async () => {
                                         {{ item.teorico > 0 ? item.teorico.toFixed(2) : '---' }}
                                     </td>
                                     <td>
-                                        <input type="number" v-model="item.real" style="width: 120px; padding: 5px; font-weight: bold;" step="0.1">
+                                        <input type="number" v-model="item.real" style="width: 100px; padding: 5px; font-weight: bold;" step="0.1" min="0">
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <button class="btn-quitar" @click="quitarInsumo(idx)" title="Quitar insumo">❌</button>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                         
-                        <div class="barra-agregar-extra" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1; display: flex; gap: 10px; align-items: center;">
-    <label style="font-weight: bold; color: #34495e; white-space: nowrap;">➕ Agregar Extra:</label>
-    
-    <select v-model="insumoExtraSeleccionado" style="flex: 1; padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7; font-weight: bold;">
-        <option value="">Seleccione un insumo no planificado...</option>
-        <option v-for="mp in listaMateriasPrimas" :key="mp.id" :value="mp.id">
-            🏢 ESTRUPLAST | {{ mp.nombre }}
-        </option>
-    </select>
-    
-    <button class="btn-orden" style="padding: 6px 15px;" @click="agregarFilaExtra" :disabled="!insumoExtraSeleccionado">
-        Añadir a la tabla
-    </button>
-</div>
+                        <div class="barra-agregar-extra" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                            <label style="font-weight: bold; color: #34495e;">➕ Agregar Extra:</label>
+                            
+                            <select v-model="insumoExtraSeleccionado" style="flex: 1 1 200px; min-width: 150px; padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7; font-weight: bold; text-overflow: ellipsis;">
+                                <option value="">Seleccione un insumo no planificado...</option>
+                                <option v-for="mp in listaMateriasPrimas" :key="mp.id" :value="mp.id">
+                                    🏢 ESTRUPLAST | {{ mp.nombre }}
+                                </option>
+                            </select>
+                            
+                            <button class="btn-orden" style="padding: 6px 15px; white-space: nowrap;" @click="agregarFilaExtra" :disabled="!insumoExtraSeleccionado">
+                                Añadir
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -242,6 +242,11 @@ table { width: 100%; border-collapse: collapse; }
 th { text-align: left; padding: 8px; border-bottom: 2px solid #cbd5e1; color: #475569; font-size: 0.85rem; }
 td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
 .text-center { text-align: center; }
+
+/* 🚀 Estilo para el botón de quitar */
+.btn-quitar { background: transparent; border: none; cursor: pointer; font-size: 1rem; transition: transform 0.2s; padding: 0; }
+.btn-quitar:hover { transform: scale(1.2); }
+
 .lista-ordenes { list-style: none; padding: 0; margin: 0; }
 .lista-ordenes li { background: #f8fafc; padding: 8px 12px; margin-bottom: 5px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center;}
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #ecf0f1; padding-top: 15px; }

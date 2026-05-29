@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import axios from 'axios'
+import { Alertas } from '@/utils/alertas';
 
 const props = defineProps<{
     visible: boolean
@@ -43,7 +44,7 @@ onMounted(() => {
 
 const guardarColor = async () => {
     if (!form.value.nombreColor.trim()) {
-        alert("El nombre del color es obligatorio.");
+        Alertas.advertencia("El nombre del color es obligatorio.");
         return;
     }
 
@@ -58,11 +59,11 @@ const guardarColor = async () => {
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
         
-        alert("🎨 Color registrado en el inventario.");
+        Alertas.exito("🎨 Color registrado en el inventario.");
         emit('creado');
         emit('close');
     } catch (e: any) {
-        alert("Error al crear: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("Error al crear: " + (e.response?.data?.mensaje || e.message));
     } finally {
         procesando.value = false;
     }

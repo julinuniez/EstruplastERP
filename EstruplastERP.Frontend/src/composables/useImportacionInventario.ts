@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import api from '@/services/axiosInstance';
+import { Alertas } from '@/utils/alertas';
 
 export function useImportacionInventario(
     tabActual: any,
@@ -22,7 +23,7 @@ export function useImportacionInventario(
         const esCsv = archivo.name.toLowerCase().endsWith('.csv');
 
         if (esCsv && tabActual.value === 'CLI' && !clienteFiltro.value) {
-            alert("⚠️ ATENCIÓN:\nPara importar un CSV de stock específico, por favor seleccione primero el CLIENTE en el filtro.");
+            Alertas.advertencia("⚠️ ATENCIÓN:\nPara importar un CSV de stock específico, por favor seleccione primero el CLIENTE en el filtro.");
             target.value = '';
             return;
         }
@@ -46,12 +47,12 @@ export function useImportacionInventario(
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            alert(`✅ ÉXITO:\n${res.data.mensaje}`);
+            Alertas.exito(`✅ ÉXITO:\n${res.data.mensaje}`);
 
             if (res.data.logs && res.data.logs.length > 0) {
                 console.warn("Reporte de Importación (Hojas omitidas):", res.data.logs);
                 if (!importClienteFiltro.value) {
-                    alert("⚠️ Atención: Algunas hojas fueron omitidas por no coincidir con ningún cliente registrado. Revisa la consola (F12) para más detalles.");
+                    Alertas.advertencia("⚠️ Atención: Algunas hojas fueron omitidas por no coincidir con ningún cliente registrado. Revisa la consola (F12) para más detalles.");
                 }
             }
             await cargarDatos(true);
@@ -59,7 +60,7 @@ export function useImportacionInventario(
         } catch (e: any) {
             console.error(e);
             const msg = e.response?.data || "Error al procesar el archivo.";
-            alert(`❌ ERROR: ${msg}`);
+            Alertas.error(`❌ ERROR: ${msg}`);
         } finally {
             importando.value = false;
             if (fileInput.value) fileInput.value.value = '';

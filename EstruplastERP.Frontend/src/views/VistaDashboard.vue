@@ -7,6 +7,7 @@ import {
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'vue-chartjs';
 import packageInfo from '../../package.json';
+import { Alertas } from '@/utils/alertas';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler);
 
@@ -153,7 +154,7 @@ async function exportarProduccionAExcel() {
         const ordenesParaExportar = Array.isArray(resOrdenes.data) ? resOrdenes.data : [];
 
         if (ordenesParaExportar.length === 0) {
-            alert(`No se encontraron órdenes finalizadas en ${nombreMesSeleccionado.value} para exportar.`);
+            Alertas.error(`No se encontraron órdenes finalizadas en ${nombreMesSeleccionado.value} para exportar.`);
             descargandoExcel.value = false;
             return;
         }
@@ -188,7 +189,7 @@ async function exportarProduccionAExcel() {
         document.body.removeChild(link);
 
     } catch (e) {
-        alert("Ocurrió un error de conexión al intentar generar el archivo Excel.");
+        Alertas.error("Ocurrió un error de conexión al intentar generar el archivo Excel.");
     } finally {
         descargandoExcel.value = false;
     }

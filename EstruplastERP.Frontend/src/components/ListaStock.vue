@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router'; 
 import axios from 'axios'; 
+import { Alertas } from '@/utils/alertas';
 
 const listaInventario = ref([]); 
 const busqueda = ref(''); 
@@ -40,7 +41,7 @@ const cargarInventario = async () => {
             estado: (item.stockActual < item.stockMinimo && !item.codigoSku.startsWith('MP-CLI-')) ? 'CRITICO' : 'OK'
         }));
     } catch (e) {
-        if (e.response && e.response.status === 401) alert("Sesión expirada.");
+        if (e.response && e.response.status === 401) Alertas.error("Sesión expirada.");
         listaInventario.value = []; 
     }
 };
@@ -103,9 +104,9 @@ const abrirAjuste = (item) => {
 };
 
 const guardarAjuste = async () => {
-    if (itemAjustar.value.stockRealNuevo === '' || itemAjustar.value.stockRealNuevo === null) return alert('⚠️ Ingrese el stock.');
-    if (itemAjustar.value.precioNuevo === '' || itemAjustar.value.precioNuevo === null) return alert('⚠️ Ingrese el precio.');
-    if (!itemAjustar.value.motivo || itemAjustar.value.motivo.trim() === '') return alert('⚠️ Motivo obligatorio.');
+    if (itemAjustar.value.stockRealNuevo === '' || itemAjustar.value.stockRealNuevo === null) return Alertas.Advertencias('⚠️ Ingrese el stock.');
+    if (itemAjustar.value.precioNuevo === '' || itemAjustar.value.precioNuevo === null) return Alertas.Advertencias('⚠️ Ingrese el precio.');
+    if (!itemAjustar.value.motivo || itemAjustar.value.motivo.trim() === '') return Alertas.Advertencias('⚠️ Motivo obligatorio.');
 
     try {
         const payload = {
@@ -129,12 +130,12 @@ const guardarAjuste = async () => {
             }
         }
 
-        alert('✅ Stock y Costos actualizados.');
+        Alertas.exito('✅ Stock y Costos actualizados.');
         mostrandoModal.value = false;
 
     } catch (e) {
         console.error(e);
-        alert("Error al guardar: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("Error al guardar: " + (e.response?.data?.mensaje || e.message));
     }
 };
 
@@ -145,7 +146,7 @@ const eliminarProducto = async (id, nombre) => {
             listaInventario.value = listaInventario.value.filter(item => item.id !== id);
             mostrandoModal.value = false;
         } catch (error) {
-            alert(`Error: ${error.response?.data?.mensaje || error.message}`);
+            Alertas.error(`Error: ${error.response?.data?.mensaje || error.message}`);
         }
     }
 };

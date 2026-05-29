@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/services/axiosInstance';
+import { Alertas } from '@/utils/alertas';
 
 const route = useRoute();
 const router = useRouter();
@@ -96,7 +97,7 @@ onMounted(async () => {
 
     } catch (e) {
         console.error(e);
-        alert("Error al cargar datos.");
+        Alertas.error("Error al cargar datos.");
         router.push('/stock');
     } finally {
         loading.value = false;
@@ -104,13 +105,13 @@ onMounted(async () => {
 });
 
 const procesarIngresoIngrediente = (idInsumo, cantidadAingresar) => {
-    if (!idInsumo) return alert("Seleccione un insumo.");
+    if (!idInsumo) return Alertas.advertencia("Seleccione un insumo.");
     
     const cantidad = Number(cantidadAingresar);
-    if (!cantidad || cantidad <= 0) return alert("Ingrese un porcentaje válido.");
+    if (!cantidad || cantidad <= 0) return Alertas.advertencia("Ingrese un porcentaje válido.");
 
     if (totalPorcentaje.value + cantidad > 100) {
-        return alert(`⚠️ No puedes agregar ${cantidad}%. El total superaría el 100% (Actual: ${totalPorcentaje.value}%).`);
+        return Alertas.advertencia(`⚠️ No puedes agregar ${cantidad}%. El total superaría el 100% (Actual: ${totalPorcentaje.value}%).`);
     }
 
     const mpInfo = listaMateriasPrimas.value.find(m => m.id === idInsumo);
@@ -145,10 +146,10 @@ const quitarIngrediente = (index) => {
 
 const guardarConfiguracion = async () => {
     if (producto.value.esProductoTerminado && totalPorcentaje.value !== 100) {
-        return alert(`⚠️ La receta debe sumar exactamente 100%. Actual: ${totalPorcentaje.value}%`);
+        return Alertas.advertencia(`⚠️ La receta debe sumar exactamente 100%. Actual: ${totalPorcentaje.value}%`);
     }
     if (producto.value.esMateriaPrima && (!producto.value.rubro || producto.value.precioCosto <= 0)) {
-        return alert(`⚠️ Por favor complete el Rubro y el Precio de Costo (debe ser mayor a cero).`);
+        return Alertas.advertencia(`⚠️ Por favor complete el Rubro y el Precio de Costo (debe ser mayor a cero).`);
     }
 
     guardando.value = true;
@@ -169,13 +170,13 @@ const guardarConfiguracion = async () => {
 
         await api.put(`/Productos/configurar/${producto.value.id}`, payload);
         
-        alert("✅ Configuración guardada correctamente.");
+        Alertas.exito("Configuración guardada correctamente.");
         router.back();
         
     } catch (e) {
         console.error(e);
         const msg = e.response?.data || e.message; 
-        alert("Error al guardar: " + (typeof msg === 'object' ? JSON.stringify(msg) : msg));
+        Alertas.error("Error al guardar: " + (typeof msg === 'object' ? JSON.stringify(msg) : msg));
     } finally {
         guardando.value = false;
     }

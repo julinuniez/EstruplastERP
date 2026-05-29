@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import api from '@/services/axiosInstance';
+import { Alertas } from '@/utils/alertas';
 
 export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<void>) {
     
@@ -11,7 +12,7 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
 
     const guardarNuevaMateriaPrima = async () => {
         if (!nuevaMP.value.nombre || !nuevaMP.value.codigoSku) {
-            return alert("⚠️ El Nombre y el SKU son obligatorios.");
+            return Alertas.advertencia("⚠️ El Nombre y el SKU son obligatorios.");
         }
         guardandoMP.value = true;
         try {
@@ -22,7 +23,7 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
                 proveedorId: nuevaMP.value.proveedorId
             });
             
-            alert("✅ Insumo creado correctamente.");
+            Alertas.exito("✅ Insumo creado correctamente.");
             nuevaMP.value = { nombre: '', codigoSku: '', proveedorId: null };
             mostrarModalNuevaMP.value = false;
             
@@ -30,7 +31,7 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
             
         } catch (e: any) {
             const msg = e.response?.data?.mensaje || e.response?.data || "Error de conexión";
-            alert("❌ Error al crear: " + msg);
+            Alertas.error("❌ Error al crear: " + msg);
         } finally {
             guardandoMP.value = false;
         }
@@ -54,7 +55,7 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
         } catch (e) {
             console.error(e);
             cargandoReservas.value = false;
-            alert("Error al cargar el detalle de reservas.");
+            Alertas.error("Error al cargar el detalle de reservas.");
         }
     };
 

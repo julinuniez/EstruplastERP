@@ -8,8 +8,11 @@ const route = useRoute();
 const router = useRouter();
 const sesion = useSesionStore();
 const version = __APP_VERSION__;
+
+// Controla si el sidebar está ancho (200px) o contraído (60px)
 const menuReducido = ref(false); 
 
+// No mostramos el menú en la pantalla de Login
 const mostrarMenu = computed(() => route.name !== 'login');
 
 function cerrarSesion() {
@@ -81,7 +84,6 @@ function toggleMenu() {
     <div class="main-wrapper" :class="{ 'margen-reducido': menuReducido, 'margen-normal': !menuReducido, 'full-screen': !mostrarMenu }">
       
       <header v-if="mostrarMenu" class="top-bar">
-        
         <div class="left-spacer"></div>
 
         <div class="center-brand">
@@ -111,7 +113,7 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
 
 .app-layout { display: flex; min-height: 100vh; width: 100%; position: relative; }
 
-/* --- SIDEBAR (FIJO A LA IZQUIERDA) --- */
+/* --- SIDEBAR --- */
 .sidebar {
   position: fixed;
   top: 0;
@@ -123,7 +125,7 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
   flex-direction: column;
   z-index: 1000;
   transition: width 0.3s ease;
-  width: 200px; /* Ya estaba en 200px */
+  width: 200px;
   box-shadow: 2px 0 5px rgba(0,0,0,0.1);
 }
 
@@ -141,7 +143,7 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
 .text { margin-left: 10px; font-weight: 500; white-space: nowrap; opacity: 1; transition: opacity 0.2s; }
 .sidebar.reducido .text { display: none; }
 
-/* --- WRAPPER DERECHO (CONTENIDO) --- */
+/* --- WRAPPER DERECHO --- */
 .main-wrapper {
   display: flex;
   flex-direction: column;
@@ -150,12 +152,11 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
   background-color: #f4f6f9;
 }
 
-/* 🚀 AJUSTE: Cambiamos 240px por 200px para que coincida con el sidebar */
 .main-wrapper.margen-normal { margin-left: 200px; width: calc(100% - 200px); }
 .main-wrapper.margen-reducido { margin-left: 60px; width: calc(100% - 60px); }
 .main-wrapper.full-screen { margin-left: 0; width: 100%; }
 
-/* --- TOP BAR --- */
+/* --- TOP BAR (Siempre visible) --- */
 .top-bar {
   height: 60px;
   background-color: white;
@@ -169,7 +170,6 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
   z-index: 900;
 }
 
-/* Elemento central absoluto */
 .center-brand {
   position: absolute;
   left: 50%;
@@ -192,7 +192,6 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
 
 .user-area { display: flex; align-items: center; gap: 15px; }
 .user-name { color: #555; font-size: 0.95rem; }
-.avatar-circle { width: 35px; height: 35px; background-color: #3498db; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
 .btn-salir-top { padding: 5px 10px; background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; transition: background 0.2s; }
 .btn-salir-top:hover { background: #ffcdd2; }
 
@@ -201,13 +200,10 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
-  /* 🚀 AJUSTE RESPONSIVE: Mantenemos los 200px */
   .sidebar { transform: translateX(-100%); width: 200px; }
   .sidebar.reducido { transform: translateX(0); width: 60px; }
-  
   .main-wrapper.margen-normal, .main-wrapper.margen-reducido { margin-left: 0; width: 100%; }
   .sidebar.reducido + .main-wrapper { margin-left: 60px; width: calc(100% - 60px); }
-  
   .user-name { display: none; }
   .logo-central { max-height: 30px; }
 }

@@ -1,4 +1,5 @@
 import type { Ref } from 'vue';
+import { Alertas } from '@/utils/alertas';
 
 const DENSIDAD_DEFAULT = 1.1;
 const ID_BRILLO_777 = 1073; 
@@ -130,7 +131,7 @@ export function useRecetaProduccion(
             }
             balancearBase();
         } else {
-            alert("⚠️ Ocurrió un error: No pudimos encontrar los datos técnicos de este material.");
+            Alertas.advertencia("⚠️ Ocurrió un error: No pudimos encontrar los datos técnicos de este material.");
         }
     }
 

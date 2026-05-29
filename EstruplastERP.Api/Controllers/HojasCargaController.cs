@@ -20,7 +20,6 @@ namespace EstruplastERP.Controllers
             _context = context;
         }
 
-        // DTO ligero para recibir la lista de materiales desde Vue
         public class DeclararConsumoDto
         {
             public int MateriaPrimaId { get; set; }
@@ -30,7 +29,6 @@ namespace EstruplastERP.Controllers
         [HttpPost("{id}/declarar-consumos")]
         public async Task<IActionResult> DeclararConsumos(int id, [FromBody] List<DeclararConsumoDto> consumosReales)
         {
-            // 1. Buscamos la Hoja de Carga y traemos sus Órdenes hijas
             var hojaCarga = await _context.HojasCarga
                 .Include(h => h.Ordenes)
                 .FirstOrDefaultAsync(h => h.Id == id);
@@ -41,31 +39,55 @@ namespace EstruplastERP.Controllers
             if (hojaCarga.Estado == EstadoHojaCarga.ConsumosDeclarados)
                 return BadRequest(new { mensaje = "⛔ Esta hoja de carga ya tiene los consumos descontados del inventario." });
 
-            // Abrimos una transacción: O se guarda todo, o no se guarda nada (Anti-fallos)
+            // 🚀 NUEVA LÓGICA: Acumular todos los errores de stock
+            List<string> erroresFaltantes = new List<string>();
+
+            foreach (var consumo in consumosReales)
+            {
+                var material = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
+                if (material == null)
+                {
+                    erroresFaltantes.Add($"❌ El insumo con ID {consumo.MateriaPrimaId} no existe.");
+                    continue;
+                }
+
+                if (material.StockActual < consumo.CantidadRealKg)
+                {
+                    decimal faltante = consumo.CantidadRealKg - material.StockActual;
+                    erroresFaltantes.Add($"🔸 {material.Nombre}: Faltan {faltante} Kg (Intento: {consumo.CantidadRealKg} Kg | Stock: {material.StockActual} Kg)");
+                }
+            }
+
+            // Si la lista tiene al menos un error, frenamos todo y mostramos el reporte completo
+            if (erroresFaltantes.Any())
+            {
+                string mensajeFallo = "⛔ Stock insuficiente para procesar la mezcla. Faltan registrar los siguientes materiales:\n\n" +
+                                      string.Join("\n", erroresFaltantes);
+
+                return BadRequest(new { mensaje = mensajeFallo });
+            }
+
+            // Si pasamos la validación (erroresFaltantes está vacía), abrimos transacción y guardamos
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 foreach (var consumo in consumosReales)
                 {
-                    // 2. Restar el material real del inventario general
                     var material = await _context.Productos.FindAsync(consumo.MateriaPrimaId);
                     if (material != null)
                     {
-                        // Restamos el stock matemático
                         material.StockActual -= consumo.CantidadRealKg;
 
-                        // 🚀 LA SOLUCIÓN: Dejamos el rastro en el Historial general (Kardex)
                         _context.Movimientos.Add(new Movimiento
                         {
                             Fecha = DateTime.Now,
                             ProductoId = consumo.MateriaPrimaId,
-                            Cantidad = -consumo.CantidadRealKg, // En negativo porque es un consumo
+                            Cantidad = -consumo.CantidadRealKg,
                             TipoMovimiento = "CONSUMO_MEZCLA",
                             Observacion = $"Descarga por Hoja de Carga #{id}"
                         });
                     }
 
-                    // 3. Dejar el comprobante en el historial de qué se gastó en este pastón
                     _context.ConsumosHojasCarga.Add(new ConsumoHojaCarga
                     {
                         HojaCargaId = id,
@@ -74,16 +96,13 @@ namespace EstruplastERP.Controllers
                     });
                 }
 
-                // 4. Sellamos la Hoja de Carga como "Declarada"
                 hojaCarga.Estado = EstadoHojaCarga.ConsumosDeclarados;
                 hojaCarga.FechaDeclaracion = DateTime.Now;
 
-                // 5. LA MAGIA: Movemos todas las OPs atadas a esta hoja al nuevo estado
                 foreach (var orden in hojaCarga.Ordenes)
                 {
                     if (orden.Estado == EstadoOrden.Pendiente)
                     {
-                        // "MaterialPreparado" significa que ya no hay que restarle material al cerrarla
                         orden.Estado = EstadoOrden.MaterialPreparado;
                     }
                 }

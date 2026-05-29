@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue';
 import api from '@/services/axiosInstance';
+import { Alertas } from '@/utils/alertas';
 
 const props = defineProps<{
     visible: boolean;
@@ -30,7 +31,7 @@ watch(() => props.visible, (newVal) => {
 
 const ejecutarAjuste = async () => {
     if (!form.cantidad || form.cantidad <= 0) {
-        return alert("⚠️ Por favor ingresa una cantidad mayor a cero.");
+        return Alertas.advertencia("⚠️ Por favor ingresa una cantidad mayor a cero.");
     }
     
     // Validar stock negativo si es un egreso
@@ -51,7 +52,7 @@ const ejecutarAjuste = async () => {
         emit('confirmado');
         emit('close');
     } catch (e: any) {
-        alert("❌ Error al ajustar el stock: " + (e.response?.data || e.message));
+        Alertas.error("❌ Error al ajustar el stock: " + (e.response?.data || e.message));
     } finally {
         guardando.value = false;
     }

@@ -13,6 +13,7 @@ import ModalHistorialStock from '@/components/ModalHistorialStock.vue';
 import ModalAjusteStock from '@/components/ModalAjusteStock.vue'; 
 import ModalNuevoMasterbatch from '@/components/ModalNuevoMasterbatch.vue'; 
 import { exportarInventarioExcel } from '@/composables/useExportacionInventario';
+import { Alertas } from '@/utils/alertas';
 
 const router = useRouter();
 const maestrosStore = useMaestrosStore();
@@ -94,25 +95,20 @@ async function cargarDatos(forzar = false) {
 }
 
 const abrirPantallazoGlobal = (producto: any) => {
-    // 1. Detectamos la familia usando tu función exacta (PAI, PEAD, etc.)
     const familiaOriginal = detectarTipo(producto).toUpperCase();
 
-    // 2. Filtramos buscando la palabra TUTI y que pertenezcan a la misma familia
     detalleGlobal.value = listaProductos.value.filter(item => {
         const n = (item.nombre || '').toUpperCase();
         const sku = (item.codigoSku || '').toUpperCase();
         const textoCompleto = n + ' ' + sku;
         
-        // Verificamos que sea un TUTI
         const esTuti = textoCompleto.includes('TUTI');
         
-        // Comparamos usando la misma función para asegurar que ambos son PAI (o PEAD, etc.)
         const esMismaFamilia = detectarTipo(item).toUpperCase() === familiaOriginal;
 
         return esTuti && esMismaFamilia;
     });
 
-    // 3. Calculamos los totales sobre ese grupo súper específico
     resumenGlobal.value.fisico = detalleGlobal.value.reduce((acc, item) => acc + (item.stockFisico ?? item.stockActual ?? 0), 0);
     resumenGlobal.value.reservado = detalleGlobal.value.reduce((acc, item) => acc + (item.stockReservado ?? 0), 0);
     resumenGlobal.value.libre = resumenGlobal.value.fisico - resumenGlobal.value.reservado;
@@ -122,7 +118,8 @@ const abrirPantallazoGlobal = (producto: any) => {
 
 const descargarAuditoria = async () => {
     if (!listaProductos.value || listaProductos.value.length === 0) {
-        alert("No hay datos de inventario para exportar.");
+        // 🚀 Reemplazo de alert por Alertas.advertencia
+        Alertas.advertencia("No hay datos de inventario para exportar.");
         return;
     }
     
@@ -131,7 +128,8 @@ const descargarAuditoria = async () => {
         await exportarInventarioExcel(listaProductos.value, listaClientes.value);
     } catch (e) {
         console.error("Error al generar Excel:", e);
-        alert("Hubo un problema al crear el archivo Excel.");
+        // 🚀 Reemplazo de alert por Alertas.error
+        Alertas.error("Hubo un problema al crear el archivo Excel.");
     } finally {
         exportando.value = false;
     }
@@ -206,7 +204,6 @@ const listaProveedores = ref<any[]>([]);
 
 const cargarProveedores = async () => {
     try {
-        // Asegurate de que la ruta sea la correcta (suele ser '/Proveedores')
         const response = await api.get('/Proveedores'); 
         listaProveedores.value = response.data;
     } catch (e) {
@@ -221,12 +218,10 @@ const generarExcelFazon = async (clienteId: number) => {
     descargandoExcelFazon.value = true;
 
     try {
-        // 1. OBTENEMOS DATOS DIRECTO DE LA PANTALLA (Instantáneo, sin llamar a la API)
         const clienteSeleccionado = listaClientes.value.find(c => Number(c.id) === clienteId);
         const nombreClienteReal = clienteSeleccionado ? clienteSeleccionado.razonSocial : 'Cliente_Desconocido';
         const fechaHoy = new Date().toISOString().split('T')[0];
         
-        // Filtramos el inventario y ORDENAMOS: 1° por SKU, 2° por Nombre
         const inventarioCliente = listaProductos.value
             .filter(p => Number(getClienteId(p)) === Number(clienteId))
             .sort((a, b) => {
@@ -237,7 +232,6 @@ const generarExcelFazon = async (clienteId: number) => {
 
         const workbook = new ExcelJS.Workbook();
         
-        // --- ÚNICA HOJA: INVENTARIO ACTUAL ---
         const wsInv = workbook.addWorksheet('Inventario Actual');
         
         wsInv.mergeCells('A1:C1');
@@ -264,7 +258,6 @@ const generarExcelFazon = async (clienteId: number) => {
                 const reservado = p.stockReservado ?? 0;
                 const disponible = p.stockDisponible ?? (fisico - reservado);
 
-                // Limpieza del nombre comercial
                 const nombreLimpio = (p.nombre || 'Sin Nombre').replace(/\[MOLIDO\]/gi, '').trim();
 
                 const row = wsInv.addRow({ 
@@ -278,14 +271,14 @@ const generarExcelFazon = async (clienteId: number) => {
             wsInv.addRow({ sku: '', nombre: 'No hay productos en stock para este cliente', stock: 0 });
         }
 
-        // 2. Descarga automática
         const nombreArchivoLimpio = nombreClienteReal.replace(/[^a-zA-Z0-9]/g, '_'); 
         const buffer = await workbook.xlsx.writeBuffer();
         saveAs(new Blob([buffer]), `Reporte_Inventario_${nombreArchivoLimpio}_${fechaHoy}.xlsx`);
 
     } catch (e) {
         console.error("Error excel fazon:", e);
-        alert("Error al generar el Excel. Revisa la consola.");
+        // 🚀 Reemplazo de alert por Alertas.error
+        Alertas.error("Error al generar el Excel. Revisa la consola.");
     } finally {
         descargandoExcelFazon.value = false;
     }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { Alertas } from '@/utils/alertas';
 
 // 1. IMPORTAMOS TU COMPONENTE GIGANTE
 // Asegúrate de que la ruta sea correcta según dónde lo guardaste
@@ -34,7 +35,7 @@ async function cargarDatos() {
 
 // Esta función se ejecuta cuando tu hijo emite "guardado"
 function ordenGuardadaExitosamente() {
-    alert("¡Orden registrada en el sistema!");
+    Alertas.exito("¡Orden registrada en el sistema!");
     mostrarFormulario.value = false; // Ocultamos el formulario
     cargarDatos(); // Recargamos la tabla para ver la nueva orden
 }
@@ -44,7 +45,7 @@ async function finalizarOrden(id: number) {
     try {
         await axios.post(`${apiUrl}/Ordenes/finalizar/${id}`, {}, getAuthConfig());
         cargarDatos();
-    } catch (e: any) { alert(e.response?.data || "Error"); }
+    } catch (e: any) { Alertas.error(e.response?.data || "Error"); }
 }
 
 async function cancelarOrden(id: number) {

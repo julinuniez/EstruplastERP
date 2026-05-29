@@ -3,6 +3,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import axios from 'axios'
 // @ts-ignore
 import html2pdf from 'html2pdf.js'
+import { Alertas } from '@/utils/alertas';
 
 // --- INTERFACES ---
 interface Cliente {
@@ -75,7 +76,7 @@ async function descargarPDF(remito: Remito) {
     if (element) {
         await html2pdf().set(opt).from(element).save();
     } else {
-        alert("Error generando el documento.");
+        Alertas.error("Error generando el documento.");
     }
 }
 

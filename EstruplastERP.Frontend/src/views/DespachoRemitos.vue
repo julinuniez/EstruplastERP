@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import axios from 'axios'
+import { Alertas } from '@/utils/alertas';
 
 // --- 1. INTERFACES (Tipado Estricto) ---
 interface Producto {
@@ -64,7 +65,7 @@ async function cargarProductos() {
         listaProductosTerminados.value = todos.filter(p => p.esProductoTerminado);
     } catch (e: any) { 
         console.error("Error productos:", e);
-        if (e.response?.status === 401) alert("Sesión expirada");
+        if (e.response?.status === 401) Alertas.error("Sesión expirada");
     }
 }
 
@@ -92,10 +93,10 @@ async function crearClienteRapido() {
         if(res.data && res.data.id) {
             datosRemito.value.clienteId = res.data.id;
         }
-        alert("✅ Cliente agregado.");
+        Alertas.exito("✅ Cliente agregado.");
 
     } catch (e: any) { 
-        alert("Error al crear cliente: " + (e.response?.data?.mensaje || e.message)); 
+        Alertas.error("Error al crear cliente: " + (e.response?.data?.mensaje || e.message)); 
     }
 }
 
@@ -122,7 +123,7 @@ const agregarItem = () => {
     const detalleTexto = itemTemporal.value.detalle.trim();
     
     if (!pid || cant <= 0) {
-        alert("Selecciona producto y cantidad válida.");
+        Alertas.advertencia("Selecciona producto y cantidad válida.");
         return;
     }
 
@@ -145,13 +146,13 @@ const quitarDelCarrito = (index: number) => {
 };
 
 const procesarRemito = async () => {
-    if (carrito.value.length === 0) return alert("El remito está vacío.");
-    if (!datosRemito.value.clienteId) return alert("Seleccione un Cliente.");
+    if (carrito.value.length === 0) return Alertas.advertencia("El remito está vacío.");
+    if (!datosRemito.value.clienteId) return Alertas.advertencia("Seleccione un Cliente.");
 
     // Validación de formato estricta antes de enviar
     const regex = /^\d{4}-\d{8}$/;
     if (!datosRemito.value.numero || !regex.test(datosRemito.value.numero)) {
-        return alert("⚠️ Error: El N° de Remito debe tener el formato 0000-00000000 (4 dígitos, guion, 8 dígitos).");
+        return Alertas.error("⚠️ Error: El N° de Remito debe tener el formato 0000-00000000 (4 dígitos, guion, 8 dígitos).");
     }
 
     cargando.value = true;
@@ -170,7 +171,7 @@ const procesarRemito = async () => {
 
         await axios.post(`${apiUrl}/Remitos`, payload, getAuthConfig());
 
-        alert("🚚 Despacho Exitoso! Stock descontado.");
+        Alertas.exito("🚚 Despacho Exitoso! Stock descontado.");
         
         carrito.value = [];
         datosRemito.value.numero = '';
@@ -181,7 +182,7 @@ const procesarRemito = async () => {
     } catch (e: any) {
         console.error(e);
         const mensaje = e.response?.data || e.message || "Error desconocido";
-        alert("❌ Error al procesar: " + mensaje);
+        Alertas.error("❌ Error al procesar: " + mensaje);
     } finally {
         cargando.value = false;
     }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import api from '@/services/axiosInstance';
+import { Alertas } from '@/utils/alertas';
 
 const clientes = ref<any[]>([]);
 const materialesBase = ref<any[]>([]);
@@ -96,7 +97,7 @@ const usarVariante = (variedad: string, id: number) => {
 
 const guardar = async () => {
     if (!form.value.materialBaseId || form.value.kilos <= 0) {
-        return alert("⚠️ Faltan datos: Seleccione la Familia y cargue los Kilos.");
+        return Alertas.advertencia("⚠️ Faltan datos: Seleccione la Familia y cargue los Kilos.");
     }
 
     loading.value = true;
@@ -126,7 +127,7 @@ const guardar = async () => {
         todosLosProductos.value = resProd.data;
 
     } catch (e: any) {
-        alert("❌ Error: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("❌ Error: " + (e.response?.data?.mensaje || e.message));
     } finally {
         loading.value = false;
     }

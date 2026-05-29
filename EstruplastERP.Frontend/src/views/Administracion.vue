@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { Alertas } from '@/utils/alertas';
 
 interface Entidad {
   id: number;
@@ -61,7 +62,7 @@ async function cargarDatos() {
 
 async function guardar() {
   if (!itemForm.value.nombre) {
-    alert("La Razón Social es obligatoria.");
+    Alertas.advertencia("La Razón Social es obligatoria.");
     return;
   }
 
@@ -92,15 +93,17 @@ async function guardar() {
   try {
     if (modoEdicion.value) {
       await axios.put(`${apiUrl}/${endpoint}/${itemForm.value.id}`, payload, getAuthConfig());
+      Alertas.exito("Registro actualizado correctamente.");
     } else {
       payload.id = 0; 
       await axios.post(`${apiUrl}/${endpoint}`, payload, getAuthConfig());
+      Alertas.exito("Registro creado correctamente.");
     }
     limpiarForm();
     cargarDatos();
   } catch (error: any) {
     console.error(error);
-    alert("Error: " + (error.response?.data || error.message));
+    Alertas.error("Error: " + (error.response?.data || error.message));
   }
 }
 
@@ -121,14 +124,15 @@ function editar(item: Entidad) {
 }
 
 async function eliminar(id: number) {
-  if (!confirm("¿Estás seguro de eliminar/desactivar este registro?")) return;
+  if (!await Alertas.confirmar("¿Eliminar registro?", "¿Estás seguro de eliminar/desactivar este registro?")) return;
   const endpoints = { clientes: 'Clientes', proveedores: 'Proveedores' };
   
   try {
     await axios.delete(`${apiUrl}/${endpoints[pestana.value]}/${id}`, getAuthConfig());
+    Alertas.exito("Registro eliminado/desactivado correctamente.");
     cargarDatos();
   } catch (error: any) {
-    alert("Error: " + (error.response?.data?.mensaje || error.message));
+    Alertas.error("Error: " + (error.response?.data?.mensaje || error.message));
   }
 }
 
@@ -142,19 +146,19 @@ function limpiarForm() {
 
 const toggleFazon = async (cliente: Entidad) => {
     if (cliente.esFazon) {
-        alert("Este cliente ya está habilitado para servicios.");
+        Alertas.advertencia("Este cliente ya está habilitado para servicios.");
         return;
     }
 
-    if (!confirm(`¿Habilitar a ${cliente.razonSocial} para operar con Fazón?`)) return;
+    if (!await Alertas.confirmar("Habilitar Fazón", `¿Habilitar a ${cliente.razonSocial} para operar con Fazón?`)) return;
 
     cargandoFazon.value = cliente.id;
     try {
         const res = await axios.post(`${apiUrl}/Clientes/habilitar-fazon/${cliente.id}`, {}, getAuthConfig());
         cliente.esFazon = true;
-        alert(res.data.mensaje);
+        Alertas.exito(res.data.mensaje);
     } catch (e: any) {
-        alert("Error: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("Error: " + (e.response?.data?.mensaje || e.message));
     } finally {
         cargandoFazon.value = null;
     }

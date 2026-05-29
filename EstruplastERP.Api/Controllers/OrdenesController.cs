@@ -196,6 +196,8 @@ namespace EstruplastERP.Api.Controllers
                 orden.AditivoUV = dto.AditivoUV;
                 orden.TipoCorona = dto.TipoCorona;
                 orden.Color = dto.Color;
+                orden.NotaPedido = dto.NotaPedido;
+                orden.NumeroPedidoCliente = dto.NumeroPedidoCliente;
 
                 orden.Consumos = nuevosConsumos;
 

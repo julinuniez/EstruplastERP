@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import api from '@/services/axiosInstance'
 import type { ProduccionItem } from './ListaProduccion.vue'
+import { Alertas } from '@/utils/alertas';
 
 const ID_BRILLO_777 = 1073;
 const ID_BRILLO_555 = 2290;
@@ -139,7 +140,7 @@ async function guardarEdicionRapida() {
         emit('guardado');
         emit('close');
     } catch (e: any) {
-        alert(e.response?.data?.mensaje || e.response?.data || "Error al modificar la orden.");
+        Alertas.error(e.response?.data?.mensaje || e.response?.data || "Error al modificar la orden.");
     } finally {
         guardandoEdicion.value = false;
     }

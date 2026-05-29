@@ -6,6 +6,8 @@ import ModalEdicionRapida from './ModalEdicionRapida.vue'
 import ModalDetalleGrupo from './ModalDetalleGrupo.vue'
 import ModalDesglosePallets from './ModalDesglosePallets.vue'
 import { useConsolidacion } from '@/composables/useConsolidacion'
+import { Alertas } from '@/utils/alertas';
+import Swal from 'sweetalert2'; // 🚀 Importado para usar el input del desglose
 
 const emit = defineEmits(['imprimir-historial', 'imprimir-carga-consolidada', 'imprimir-lote-op']);
 
@@ -97,7 +99,7 @@ const codigoGrupoSeleccionado = ref('');
 
 const mostrarModalDesglose = ref(false);
 const ordenParaDesglose = ref<ProduccionItem | null>(null);
-const cantidadPalletsSugerida = ref<number>(1); // Prop nueva para pasar al modal
+const cantidadPalletsSugerida = ref<number>(1); 
 
 const filasExpandidas = ref<number[]>([]);
 
@@ -220,32 +222,43 @@ async function cargarMateriasPrimas() {
     }
 }
 
+// 🚀 Modificado con Alertas
 async function revertirOrden(item: ProduccionItem) {
-    const mensaje = `⚠️ PELIGRO: Vas a revertir la orden #${item.id} a Pendiente.\n\nEsto devolverá los materiales al stock y restará el producto terminado del inventario.\n¿Estás completamente seguro?`;
-    if (!confirm(mensaje)) return;
+    const mensaje = `Esto devolverá los materiales al stock y restará el producto terminado del inventario.`;
+    const confirmado = await Alertas.confirmar(`⚠️ ¿Revertir orden #${item.id}?`, mensaje);
+    
+    if (!confirmado) return;
 
     try {
         await api.post(`/Ordenes/revertir/${item.id}`);
         await cargarHistorial();
     } catch (e: any) {
-        alert("❌ Error al revertir: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("Error al revertir: " + (e.response?.data?.mensaje || e.message));
     }
 }
 
-// 🚀 MODIFICADO: Preguntar cantidad de pallets si supera 1100kg
-const abrirModalDesglose = (orden: ProduccionItem) => {
+// 🚀 Modificado para usar Swal tipo Input
+const abrirModalDesglose = async (orden: ProduccionItem) => {
     let sugerencia = 1;
 
     if (orden.kilos >= 1100) {
-        const input = prompt(`Esta orden tiene ${orden.kilos} kg. ¿En cuántos pallets deseas dividirla?`, String(Math.ceil(orden.kilos / 1000)));
-        if (input === null) return; // El usuario canceló el prompt
-        
-        const numero = parseInt(input, 10);
-        if (isNaN(numero) || numero <= 0) {
-            alert("Por favor, ingrese un número válido mayor a 0.");
-            return;
-        }
-        sugerencia = numero;
+        const result = await Swal.fire({
+            title: 'Dividir en Pallets',
+            text: `Esta orden tiene ${orden.kilos} kg. ¿En cuántos pallets deseas dividirla?`,
+            input: 'number',
+            inputValue: Math.ceil(orden.kilos / 1000),
+            showCancelButton: true,
+            confirmButtonText: 'Continuar',
+            cancelButtonText: 'Cancelar',
+            inputValidator: (value) => {
+                if (!value || parseInt(value) <= 0) {
+                    return 'Debes ingresar un número válido mayor a 0';
+                }
+            }
+        });
+
+        if (!result.isConfirmed) return;
+        sugerencia = parseInt(result.value);
     }
 
     cantidadPalletsSugerida.value = sugerencia;
@@ -271,24 +284,30 @@ const onDesgloseConfirmado = async (palletsCalculados: any[]) => {
 
         await api.post(`/Ordenes/${idOrden}/desglose`, payload);
         
-        alert("✅ ¡Desglose guardado con éxito!");
+        Alertas.exito("¡Desglose guardado con éxito!");
         cerrarModalDesglose();
         await cargarHistorial(); 
         
     } catch (e: any) {
         console.error("Error en desglose:", e);
-        alert("❌ Error al guardar el desglose: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("Error al guardar el desglose: " + (e.response?.data?.mensaje || e.message));
     }
 };
 
+// 🚀 Modificado con Alertas
 const finalizarPalletAcordeon = async (palletId: number, numero: number) => {
-    if (!confirm(`¿Confirmás el ingreso a stock del Pallet N° ${numero}?\nSe descontará la materia prima proporcional y se sumará el producto terminado.`)) return;
+    const confirmado = await Alertas.confirmar(
+        "Confirmar Ingreso", 
+        `¿Confirmás el ingreso a stock del Pallet N° ${numero}?\nSe descontará la materia prima proporcional y se sumará el producto terminado.`
+    );
+    
+    if (!confirmado) return;
     
     try {
         await api.post(`/Ordenes/finalizar-pallet/${palletId}`);
         await cargarHistorial(); 
     } catch (e: any) {
-        alert("❌ Error al confirmar pallet: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("Error al confirmar pallet: " + (e.response?.data?.mensaje || e.message));
     }
 };
 
@@ -320,29 +339,38 @@ const onCierreConfirmado = () => {
     cargarHistorial();
 }
 
+// 🚀 Modificado con Alertas
 async function cancelarOrden(item: ProduccionItem) {
-    let mensaje = `⚠️ ¿Seguro que quieres cancelar la Orden #${item.id}?`;
+    let titulo = `¿Cancelar Orden #${item.id}?`;
+    let mensaje = `Esto devolverá el material al inventario.`;
     
     const tienePalletsFinalizados = item.pallets && item.pallets.some(p => p.estado === 'Finalizada');
     
     if (tienePalletsFinalizados) {
-        mensaje = `🚨 ATENCIÓN: Esta orden tiene pallets ya ingresados a stock.\n\nAl cancelar, se RESTARÁ el producto terminado y se DEVOLVERÁ la materia prima al inventario.\n\n¿Confirmas la cancelación total?`;
+        titulo = "🚨 ATENCIÓN: Orden Parcialmente Ingresada";
+        mensaje = `Esta orden tiene pallets ya ingresados a stock.\nAl cancelar, se RESTARÁ el producto terminado y se DEVOLVERÁ la materia prima al inventario.\n¿Confirmas la cancelación total?`;
     }
 
-    if (!confirm(mensaje)) return;
+    const confirmado = await Alertas.confirmar(titulo, mensaje);
+    if (!confirmado) return;
 
     try {
         await api.post(`/Ordenes/cancelar/${item.id}`);
-        alert("✅ Orden cancelada y stock restaurado correctamente.");
+        Alertas.exito("Orden cancelada y stock restaurado correctamente.");
         await cargarHistorial();
     } catch (e: any) {
-        alert("❌ Error: " + (e.response?.data?.mensaje || "No se pudo cancelar"));
+        Alertas.error("Error: " + (e.response?.data?.mensaje || "No se pudo cancelar"));
     }
 }
 
-const solicitarImpresion = (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
+// 🚀 Modificado con Alertas
+const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
     if (tipo === 'orden' && orden.esImpreso) {
-        if (!confirm(`La orden #${orden.id} ya fue impresa. ¿Seguro quieres reimprimirla?`)) return;
+        const confirmado = await Alertas.confirmar(
+            "Orden ya impresa", 
+            `La orden #${orden.id} ya fue impresa. ¿Seguro quieres reimprimirla?`
+        );
+        if (!confirmado) return;
     }
     emit('imprimir-historial', { orden, tipo, materiasPrimasBase: materiasPrimas.value });
 };
@@ -356,7 +384,8 @@ function toggleSeleccionMultiple(id: number) {
     }
 }
 
-function imprimirLoteOP() {
+// 🚀 Modificado con Alertas
+async function imprimirLoteOP() {
     if (ordenesSeleccionadas.value.length === 0) return;
     const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id));
     
@@ -365,7 +394,9 @@ function imprimirLoteOP() {
         const msj = yaImpresas === 1 
             ? "Hay 1 orden seleccionada que ya fue impresa. ¿Seguro quieres reimprimirla?" 
             : `Hay ${yaImpresas} órdenes seleccionadas que ya fueron impresas. ¿Seguro quieres reimprimirlas?`;
-        if (!confirm(msj)) return;
+        
+        const confirmado = await Alertas.confirmar("Órdenes ya impresas", msj);
+        if (!confirmado) return;
     }
 
     emit('imprimir-lote-op', ordenesAImprimir);

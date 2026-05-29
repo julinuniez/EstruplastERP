@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import axios from 'axios'
+import { Alertas } from '@/utils/alertas';
 
 const props = defineProps<{
   orden: any,
@@ -55,8 +56,7 @@ watch(() => props.visible, (isOpen) => {
       consumosBase.value = props.orden.consumos.map((c: any) => {
         const mp = props.materiasPrimas.find(m => m.id === c.materiaPrimaId);
         
-        // 🚀 OBLIGAMOS AL SISTEMA a tratar el valor como número estricto.
-        // Si sigue trayendo un valor dividido por 5, el error está al CREAR la orden.
+        // OBLIGAMOS AL SISTEMA a tratar el valor como número estricto.
         const kilosExactos = Number(c.cantidadKilos) || 0;
         
         return {
@@ -74,15 +74,20 @@ watch(() => props.visible, (isOpen) => {
   }
 });
 
-const agregarAdicion = () => {
+// 🚀 Transformada a async para poder usar el await
+const agregarAdicion = async () => {
   if (!adicionSeleccionada.value || !cantidadAdicion.value || Number(cantidadAdicion.value) <= 0) {
-    alert("Ingrese datos válidos.");
+    Alertas.advertencia("Ingrese datos válidos.");
     return;
   }
   const mp = props.materiasPrimas.find(m => m.id === adicionSeleccionada.value);
   if (mp) {
     if (mp.stockActual < Number(cantidadAdicion.value)) {
-      const confirmarNegativo = confirm(`⚠️ CUIDADO: El stock de ${mp.nombre} quedará en negativo.\nStock: ${mp.stockActual} Kg\nAgregas: ${cantidadAdicion.value} Kg\n¿Deseas continuar?`);
+      // 🚀 Reemplazo del confirm nativo
+      const confirmarNegativo = await Alertas.confirmar(
+        "⚠️ Stock en Negativo",
+        `El stock de ${mp.nombre} quedará en negativo.\nStock actual: ${mp.stockActual} Kg\nAgregas: ${cantidadAdicion.value} Kg\n¿Deseas continuar?`
+      );
       if (!confirmarNegativo) return;
     }
     formCierre.value.adiciones.push({
@@ -105,7 +110,7 @@ const quitarAdicion = (index: number) => {
 const confirmarCierre = async () => {
   let todosLosConsumos: any[] = [];
 
-  // 🚀 SI LA BASE YA FUE DESCONTADA, enviamos SOLO las adiciones extra
+  // SI LA BASE YA FUE DESCONTADA, enviamos SOLO las adiciones extra
   if (materialYaDescontado.value) {
     todosLosConsumos = formCierre.value.adiciones.map(a => ({ 
       materiaPrimaId: a.materiaPrimaId, 
@@ -144,7 +149,7 @@ const confirmarCierre = async () => {
   }
 
   if (hayNegativos) {
-    alert(mensajeError);
+    Alertas.error(mensajeError);
     return;
   }
 
@@ -152,7 +157,9 @@ const confirmarCierre = async () => {
     ? `¿Cerrar orden con ${kilosReales.value}kg finales? \n\nMaterial Base: YA DESCONTADO.\nExtras a descontar ahora: ${formCierre.value.adiciones.length > 0 ? formCierre.value.adiciones.length + ' insumo(s)' : 'Ninguno'}.`
     : `¿Estás seguro de cerrar la orden con estos consumos reales?`;
 
-  if (!confirm(msjConfirmacion)) return;
+  // 🚀 Reemplazo del confirm nativo
+  const confirmado = await Alertas.confirmar("Confirmar Cierre", msjConfirmacion);
+  if (!confirmado) return;
 
   try {
     const payload = {
@@ -170,7 +177,7 @@ const confirmarCierre = async () => {
     emit('confirmar');
     emit('close');
   } catch (e: any) {
-    alert("Error al cerrar: " + (e.response?.data?.mensaje || e.message));
+    Alertas.error("Error al cerrar: " + (e.response?.data?.mensaje || e.message));
   }
 }
 </script>
