@@ -3,6 +3,7 @@ import type { Ref } from 'vue';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 import { ProduccionAPI } from '@/services/produccionService';
+import Swal from 'sweetalert2'; // 🚀 Importado para reemplazar el prompt
 
 export function useImpresionProduccion(
     form: Ref<any>,
@@ -170,10 +171,34 @@ export function useImpresionProduccion(
 
             if (!form.value.esConsolidado && typeof balancearBase === 'function') balancearBase();
 
+            // 🚀 ESTE ES EL CARTEL REEMPLAZADO
             if (tipo === 'orden' && form.value.kilosTotales > 1000) {
                 const palletsSugeridos = Math.ceil(form.value.kilosTotales / 1000);
-                const respuesta = prompt(`⚠️ Pedido grande (${form.value.kilosTotales} kg).\n¿En cuántos pallets querés dividir la impresión?`, String(palletsSugeridos));
-                cantidadPalletsUsuario.value = respuesta ? parseInt(respuesta) : 1;
+                
+                const result = await Swal.fire({
+                    title: 'Dividir Impresión',
+                    text: `⚠️ Pedido grande (${form.value.kilosTotales} kg).\n¿En cuántos pallets querés dividir la impresión de las OP?`,
+                    input: 'number',
+                    inputValue: palletsSugeridos,
+                    showCancelButton: true,
+                    confirmButtonText: 'Imprimir',
+                    cancelButtonText: 'Cancelar',
+                    confirmButtonColor: '#3498db',
+                    inputValidator: (value) => {
+                        if (!value || parseInt(value) <= 0) {
+                            return 'Debe ser mayor a 0';
+                        }
+                    }
+                });
+
+                if (!result.isConfirmed) {
+                    // Si cancela, abortamos la impresión
+                    loading.value = false;
+                    imprimiendoHistorial.value = false;
+                    return;
+                }
+
+                cantidadPalletsUsuario.value = parseInt(result.value);
             } else {
                 cantidadPalletsUsuario.value = 1;
             }
@@ -219,12 +244,12 @@ export function useImpresionProduccion(
                 form.value.observacion = orden.observacion || '';
                 form.value.kilosTotales = orden.kilos; 
                 
-                // 🚀 ESTA ES LA CORRECCIÓN EXACTA
                 form.value.conBrillo = orden.conBrillo || orden.ConBrillo || false;
                 form.value.llevaFilm = orden.llevaFilm || orden.LlevaFilm || false;
                 form.value.tipoCorona = orden.tipoCorona || orden.TipoCorona || 'Ninguno';
                 form.value.esGofrado = orden.esGofrado || orden.EsGofrado || false;
-
+                form.value.aditivoUV = orden.aditivoUV || orden.AditivoUV || false;
+                
                 form.value.color = orden.color || orden.colorTexto || '';
                 form.value.colorTexto = orden.colorTexto || orden.color || '';
                 form.value.Color = orden.color || '';
