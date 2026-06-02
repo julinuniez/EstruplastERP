@@ -8,6 +8,9 @@ import {
 import { Bar, Doughnut, Line } from 'vue-chartjs';
 import packageInfo from '../../package.json';
 import { Alertas } from '@/utils/alertas';
+// 🚀 Importamos ExcelJS y FileSaver para generar el reporte premium con filtros dinámicos
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler);
 
@@ -147,49 +150,117 @@ async function exportarProduccionAExcel() {
     
     const mes = fechaFiltro.value.getMonth() + 1;
     const anio = fechaFiltro.value.getFullYear();
-    const nombreArchivo = `Produccion_Estruplast_${mes}_${anio}.csv`;
 
     try {
-        const resOrdenes = await axios.get(`${apiUrl}/Produccion/exportar/${mes}/${anio}`, getAuthConfig());
-        const ordenesParaExportar = Array.isArray(resOrdenes.data) ? resOrdenes.data : [];
+        // 🚀 Ahora leemos SOLO del Kardex (Movimientos), que tiene la verdad absoluta y filtrada
+        const resMovimientos = await axios.get(`${apiUrl}/Movimientos/auditoria?mes=${mes}&anio=${anio}`, getAuthConfig());
+        const datosMovimientos = Array.isArray(resMovimientos.data) ? resMovimientos.data : [];
 
-        if (ordenesParaExportar.length === 0) {
-            Alertas.error(`No se encontraron órdenes finalizadas en ${nombreMesSeleccionado.value} para exportar.`);
+        if (datosMovimientos.length === 0) {
+            Alertas.error(`No se detectaron consumos reales en el período seleccionado.`);
             descargandoExcel.value = false;
             return;
         }
 
-        let csvContent = "Fecha Inicio;Fecha Cierre;Cliente;Producto;Kilos Producidos;Observaciones\n";
+        const workbook = new ExcelJS.Workbook();
+        
+        // --- HOJA 1: TABLA MAESTRA INTERACTIVA ---
+        const wsMaestra = workbook.addWorksheet('Auditoría de Consumos');
+        wsMaestra.views = [{ showGridLines: true }];
 
-        ordenesParaExportar.forEach(o => {
-            const fInicioCruda = o.fechaInicio || o.FechaInicio;
-            const fechaInicio = fInicioCruda ? new Date(fInicioCruda).toLocaleDateString('es-AR') : '-';
-            
-            const fCierreCruda = o.fechaCierre || o.FechaCierre;
-            const fechaCierre = fCierreCruda ? new Date(fCierreCruda).toLocaleDateString('es-AR') : '-';
-            
-            const cliente = (o.clienteNombre || o.ClienteNombre || 'Stock Estruplast').replace(/;/g, ',');
-            const producto = (o.productoNombre || o.ProductoNombre || 'Desconocido').replace(/;/g, ',');
-            const observacion = (o.observacion || o.Observacion || '').replace(/;/g, ',').replace(/[\n\r]/g, ' ');
-            
-            const kilos = o.kilosProducidos || o.KilosProducidos || 0;
+        wsMaestra.mergeCells('A1:F1');
+        const cellTitulo = wsMaestra.getCell('A1');
+        cellTitulo.value = `REPORTE UNIFICADO DE CONSUMOS REALES - ${nombreMesSeleccionado.value.toUpperCase()}`;
+        cellTitulo.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+        cellTitulo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+        cellTitulo.alignment = { horizontal: 'center', vertical: 'middle' };
+        wsMaestra.getRow(1).height = 35;
 
-            const fila = `${fechaInicio};${fechaCierre};${cliente};${producto};${kilos};${observacion}`;
-            csvContent += fila + "\n";
+        wsMaestra.getCell('A2').value = `Filtre las columnas para obtener totales dinámicos por Cliente o Insumo.`;
+        wsMaestra.getCell('A2').font = { name: 'Segoe UI', size: 10, italic: true, color: { argb: 'FF7F8C8D' } };
+
+        const columnasMaestra = [
+            { header: 'Fecha Mov.', key: 'fecha', width: 15 },
+            { header: 'Origen / Módulo', key: 'origen', width: 22 },
+            { header: 'Dueño / Cliente', key: 'cliente', width: 35 },
+            { header: 'Material / Insumo', key: 'insumo', width: 45 },
+            { header: 'Tipo Movimiento', key: 'tipo', width: 20 },
+            { header: 'Consumo Real (Kg)', key: 'kilos', width: 22 }
+        ];
+        wsMaestra.columns = columnasMaestra;
+
+        wsMaestra.getRow(4).height = 25;
+        wsMaestra.getRow(4).eachCell((cell) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF34495E' } };
+            cell.font = { name: 'Segoe UI', color: { argb: 'FFFFFFFF' }, bold: true, size: 10 };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            cell.border = { bottom: { style: 'medium', color: { argb: 'FF2C3E50' } } };
         });
 
-        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", nombreArchivo);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        let filaActual = 5;
+
+        // Inyectamos la data sin duplicaciones
+        datosMovimientos.forEach(m => {
+            const row = wsMaestra.addRow({
+                fecha: m.fecha ? new Date(m.fecha).toLocaleDateString('es-AR') : '-',
+                origen: m.tipoMovimiento === 'CONSUMO_MEZCLA' ? 'Hoja de Carga (Mezcla)' : 'Cierre de OP',
+                cliente: m.clienteNombre || 'Stock Estruplast (Propio)',
+                insumo: m.productoNombre || 'Materia Prima',
+                tipo: m.tipoMovimiento || 'CONSUMO',
+                kilos: Math.abs(Number(m.cantidad || 0))
+            });
+            row.getCell('kilos').numFmt = '#,##0.00 "Kg"';
+            filaActual++;
+        });
+
+        wsMaestra.autoFilter = `A4:F${filaActual - 1}`;
+
+        const filaTotales = filaActual + 1;
+        wsMaestra.mergeCells(`A${filaTotales}:E${filaTotales}`);
+        wsMaestra.getCell(`A${filaTotales}`).value = 'TOTAL CONSUMIDO SELECCIONADO:';
+        wsMaestra.getCell(`A${filaTotales}`).font = { name: 'Segoe UI', bold: true, size: 11, color: { argb: 'FF27AE60' } };
+        wsMaestra.getCell(`A${filaTotales}`).alignment = { horizontal: 'right', vertical: 'middle' };
+
+        const cellTotalKilos = wsMaestra.getCell(`F${filaTotales}`);
+        cellTotalKilos.value = { formula: `=SUBTOTAL(109,F5:F${filaTotales - 2})`, date1904: false };
+        cellTotalKilos.font = { name: 'Segoe UI', bold: true, size: 12, color: { argb: 'FF27AE60' } };
+        cellTotalKilos.numFmt = '#,##0.00 "Kg"';
+        cellTotalKilos.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F8F5' } };
+        
+        wsMaestra.getRow(filaTotales).height = 24;
+        wsMaestra.getRow(filaTotales).border = {
+            top: { style: 'thin', color: { argb: 'FFBDC3C7' } },
+            bottom: { style: 'double', color: { argb: 'FF27AE60' } }
+        };
+
+        // --- HOJA 2: RESUMEN DE KILOS ACUMULADOS POR CLIENTE ---
+        const wsClientes = workbook.addWorksheet('Resumen por Cliente');
+        wsClientes.views = [{ showGridLines: true }];
+        
+        wsClientes.addRow(['CLIENTE / DUEÑO', 'KILOS CONSUMIDOS TOTALES (MES)']);
+        wsClientes.getRow(1).font = { name: 'Segoe UI', bold: true, color: { argb: 'FFFFFFFF' } };
+        wsClientes.getRow(1).eachCell(c => c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE67E22' } });
+        wsClientes.columns = [{ width: 45 }, { width: 30 }];
+
+        const mapaClientes: Record<string, number> = {};
+        datosMovimientos.forEach(m => { 
+            const cl = m.clienteNombre || 'Stock Estruplast (Propio)';
+            mapaClientes[cl] = (mapaClientes[cl] || 0) + Math.abs(Number(m.cantidad || 0)); 
+        });
+
+        Object.entries(mapaClientes).forEach(([cli, kg]) => {
+            const r = wsClientes.addRow([cli, kg]);
+            r.getCell(2).numFmt = '#,##0.00 "Kg"';
+        });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        saveAs(new Blob([buffer]), `Auditoria_Consumos_Estruplast_${mes}_${anio}.xlsx`);
+        
+        Alertas.exito("¡Reporte generado correctamente!");
 
     } catch (e) {
-        Alertas.error("Ocurrió un error de conexión al intentar generar el archivo Excel.");
+        console.error("Error en exportación:", e);
+        Alertas.error("Ocurrió un error al generar el archivo.");
     } finally {
         descargandoExcel.value = false;
     }
@@ -197,12 +268,10 @@ async function exportarProduccionAExcel() {
 
 const obtenerRangoFechasPorSemana = (periodoStr: string) => {
     if (!periodoStr) return '';
-    // Extrae el número de la semana, sin importar si dice "Semana 12" o "12"
     const match = periodoStr.match(/\d+/);
     if (!match) return periodoStr;
 
     const numeroSemana = parseInt(match[0], 10);
-    // Usamos el año actual para calcular el rango.
     const anio = new Date().getFullYear(); 
 
     const fechaBase = new Date(anio, 0, 4);
@@ -235,7 +304,6 @@ const chartDataMensual = computed(() => ({
 }));
 
 const chartDataSemanal = computed(() => ({
-    // 👇 ACÁ APLICAMOS LA FUNCIÓN AL GRÁFICO
     labels: produccionSemanal.value.map(s => obtenerRangoFechasPorSemana(s?.periodo || '')),
     datasets: [{
         label: 'Kilos (Últimas 8 semanas)',
@@ -270,7 +338,6 @@ const chartDataProductos = computed(() => {
     const datosKilos = topProductos.value.map(p => Math.round(p?.totalKilos || 0));
 
     const coloresProductos = ['#3498db', '#2ecc71', '#e67e22', '#e74c3c', '#9b59b6'];
-    
     const colorGrisOtros = '#95a5a6'; 
 
     const listaColoresFinal = etiquetas.map((label, index) => {
@@ -283,8 +350,8 @@ const chartDataProductos = computed(() => {
     return {
         labels: etiquetas,
         datasets: [{
-            backgroundColor: listaColoresFinal, // 🚀 Usamos la lista inteligente
-            borderWidth: 2, // Le agregamos un bordecito blanco para separarlos mejor
+            backgroundColor: listaColoresFinal, 
+            borderWidth: 2, 
             borderColor: '#ffffff',
             data: datosKilos
         }]

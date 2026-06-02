@@ -119,8 +119,12 @@ const declararConsumos = async () => {
         return;
     }
 
-    if (!confirm("⚠️ ¿Descontar estos materiales del stock?\n\nLas órdenes de este grupo pasarán a 'Material Preparado' y ya no descontarán material base al cerrarse.")) return;
+   const confirmado = await Alertas.confirmar(
+    "Confirmar Descuento",
+    "⚠️ ¿Descontar estos materiales del stock?\n\nLas órdenes de este grupo pasarán a 'Material Preparado' y ya no descontarán material base al cerrarse."
+    );
 
+if (!confirmado) return;
     procesando.value = true;
     try {
         const payload = consumosMezcla.value

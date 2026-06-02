@@ -22,7 +22,6 @@ namespace EstruplastERP.Controllers
         {
             var fechaLimite = DateTime.Now.AddMonths(-12);
 
-            // 🚀 VOLVEMOS AL NETO (Producción Real Vendible)
             var ordenesRaw = await _context.Ordenes
                 .Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null && o.FechaFin >= fechaLimite)
                 .Select(o => new { FechaFin = o.FechaFin.Value, o.KilosEstimados })
@@ -46,7 +45,6 @@ namespace EstruplastERP.Controllers
         {
             var fechaLimite = DateTime.Today.AddDays(-56);
 
-            // 🚀 VOLVEMOS AL NETO
             var ordenesRaw = await _context.Ordenes
                 .Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null && o.FechaFin >= fechaLimite)
                 .Select(o => new { FechaFin = o.FechaFin.Value, o.KilosEstimados })
@@ -78,7 +76,6 @@ namespace EstruplastERP.Controllers
             if (mes.HasValue && anio.HasValue)
                 query = query.Where(o => o.FechaFin.Value.Month == mes && o.FechaFin.Value.Year == anio);
 
-            // 1. Traemos todo
             var ordenes = await query
                 .Select(o => new {
                     Producto = o.Producto != null ? o.Producto.Nombre : "Desconocido",
@@ -86,7 +83,6 @@ namespace EstruplastERP.Controllers
                 })
                 .ToListAsync();
 
-            // 2. Agrupamos y ordenamos TODOS los productos
             var todosLosProductos = ordenes
                 .GroupBy(x => x.Producto)
                 .Select(g => new {
@@ -96,13 +92,9 @@ namespace EstruplastERP.Controllers
                 .OrderByDescending(x => x.TotalKilos)
                 .ToList();
 
-            // 3. Agarramos los 5 primeros
             var top5 = todosLosProductos.Take(5).ToList();
-
-            // 4. Sumamos todo lo que quedó afuera del Top 5
             var kilosSobrantes = todosLosProductos.Skip(5).Sum(x => x.TotalKilos);
 
-            // 5. Si hay sobrante, agregamos la porción "OTROS" a la torta
             if (kilosSobrantes > 0)
             {
                 top5.Add(new { Producto = "OTROS PRODUCTOS", TotalKilos = kilosSobrantes });
@@ -114,17 +106,23 @@ namespace EstruplastERP.Controllers
         [HttpGet("top-materiales")]
         public async Task<IActionResult> GetTopMateriales([FromQuery] int? mes, [FromQuery] int? anio)
         {
-            var query = _context.Ordenes.Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null).AsQueryable();
-            if (mes.HasValue && anio.HasValue)
-                query = query.Where(o => o.FechaFin.Value.Month == mes && o.FechaFin.Value.Year == anio);
+            var targetMes = mes ?? DateTime.Today.Month;
+            var targetAnio = anio ?? DateTime.Today.Year;
 
-            // 1. Traemos TODOS los consumos reales
-            var todosLosConsumos = await query.SelectMany(o => o.Consumos)
-                .Where(c => c.MateriaPrimaId < 990 || c.MateriaPrimaId > 999) // (Sigue ignorando los genéricos según tu regla)
-                .GroupBy(c => new
-                {
-                    NombreMaterial = c.MateriaPrima.Nombre,
-                    NombreCliente = c.MateriaPrima.Cliente != null ? c.MateriaPrima.Cliente.RazonSocial : null
+            // 🚀 LEEMOS LA ÚNICA FUENTE DE VERDAD ABSOLUTA: EL KARDEX (MOVIMIENTOS)
+            // Atrapamos cualquier movimiento que contenga la palabra "CONSUMO" (Mezcla, Orden, Extra, etc)
+            var consumosKardex = await _context.Movimientos
+                .Include(m => m.Producto)
+                    .ThenInclude(p => p.Cliente)
+                .Where(m => m.Fecha.Month == targetMes &&
+                            m.Fecha.Year == targetAnio &&
+                            m.TipoMovimiento != null &&
+                            m.TipoMovimiento.StartsWith("CONSUMO") && 
+                            m.Producto != null &&
+                            (m.Producto.Id < 990 || m.Producto.Id > 999)) // Ignoramos genéricos
+                .GroupBy(m => new {
+                    NombreMaterial = m.Producto.Nombre,
+                    NombreCliente = m.Producto.Cliente != null ? m.Producto.Cliente.RazonSocial : null
                 })
                 .Select(g => new
                 {
@@ -132,21 +130,17 @@ namespace EstruplastERP.Controllers
                         ? $"{g.Key.NombreMaterial} ({g.Key.NombreCliente})"
                         : g.Key.NombreMaterial,
 
-                    TotalKilos = Math.Round(g.Sum(c => c.CantidadKilos), 0)
+                    // Convertimos todo a positivo para sumar correctamente la estadística
+                    TotalKilos = Math.Round(g.Sum(m => Math.Abs(m.Cantidad)), 0)
                 })
                 .OrderByDescending(x => x.TotalKilos)
                 .ToListAsync();
 
-            // 2. Agarramos los 7 principales
-            var top7 = todosLosConsumos.Take(7).ToList();
+            var top7 = consumosKardex.Take(7).ToList();
+            var kilosSobrantes = consumosKardex.Skip(7).Sum(x => x.TotalKilos);
 
-            // 3. Sumamos todo lo que quedó afuera
-            var kilosSobrantes = todosLosConsumos.Skip(7).Sum(x => x.TotalKilos);
-
-            // 4. Agregamos la porción "OTROS"
             if (kilosSobrantes > 0)
             {
-                // Usamos un tipo anónimo compatible con el anterior
                 top7.Add(new { Material = "OTROS MATERIALES", TotalKilos = kilosSobrantes });
             }
 
@@ -160,7 +154,6 @@ namespace EstruplastERP.Controllers
             if (mes.HasValue && anio.HasValue)
                 query = query.Where(o => o.FechaFin.Value.Month == mes && o.FechaFin.Value.Year == anio);
 
-            // 🚀 VOLVEMOS AL NETO
             var ordenes = await query
                 .Select(o => new {
                     Cliente = o.Cliente != null ? o.Cliente.RazonSocial : "Sin Cliente",
@@ -193,7 +186,6 @@ namespace EstruplastERP.Controllers
             var fechaInicioAnt = fechaInicio.AddMonths(-1);
             var fechaFinAnt = fechaInicio.AddDays(-1);
 
-            // 🚀 VOLVEMOS AL NETO
             var kilosMes = await _context.Ordenes
                 .Where(o => o.Estado == EstadoOrden.Finalizada && o.FechaFin != null && o.FechaFin >= fechaInicio && o.FechaFin <= fechaFin)
                 .SumAsync(o => (decimal?)o.KilosEstimados) ?? 0;

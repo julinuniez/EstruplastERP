@@ -39,7 +39,6 @@ namespace EstruplastERP.Controllers
             if (hojaCarga.Estado == EstadoHojaCarga.ConsumosDeclarados)
                 return BadRequest(new { mensaje = "⛔ Esta hoja de carga ya tiene los consumos descontados del inventario." });
 
-            // 🚀 NUEVA LÓGICA: Acumular todos los errores de stock
             List<string> erroresFaltantes = new List<string>();
 
             foreach (var consumo in consumosReales)
@@ -58,7 +57,6 @@ namespace EstruplastERP.Controllers
                 }
             }
 
-            // Si la lista tiene al menos un error, frenamos todo y mostramos el reporte completo
             if (erroresFaltantes.Any())
             {
                 string mensajeFallo = "⛔ Stock insuficiente para procesar la mezcla. Faltan registrar los siguientes materiales:\n\n" +
@@ -67,7 +65,6 @@ namespace EstruplastERP.Controllers
                 return BadRequest(new { mensaje = mensajeFallo });
             }
 
-            // Si pasamos la validación (erroresFaltantes está vacía), abrimos transacción y guardamos
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
@@ -88,7 +85,8 @@ namespace EstruplastERP.Controllers
                         });
                     }
 
-                    _context.ConsumosHojasCarga.Add(new ConsumoHojaCarga
+                    // 🚀 CORRECCIÓN: Usamos _context.Add directo para evitar problemas de pluralización en el DbSet
+                    _context.Add(new ConsumoHojaCarga
                     {
                         HojaCargaId = id,
                         MateriaPrimaId = consumo.MateriaPrimaId,
@@ -117,6 +115,30 @@ namespace EstruplastERP.Controllers
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { mensaje = "Error crítico al procesar los consumos.", detalle = ex.Message });
             }
+        }
+
+        [HttpGet("consumos-detallados")]
+        public async Task<IActionResult> GetConsumosDetallados([FromQuery] int mes, [FromQuery] int anio)
+        {
+            // 🚀 Este usa el DbSet exacto que ya sabemos que te compila (ConsumoHojaCarga)
+            var consumos = await _context.ConsumosHojasCarga
+                .Include(c => c.HojaCarga)
+                .Include(c => c.MateriaPrima)
+                    .ThenInclude(mp => mp.Cliente)
+                .Where(c => c.HojaCarga != null &&
+                            c.HojaCarga.FechaDeclaracion != null &&
+                            c.HojaCarga.FechaDeclaracion.Value.Month == mes &&
+                            c.HojaCarga.FechaDeclaracion.Value.Year == anio)
+                .Select(c => new {
+                    hojaCargaId = c.HojaCargaId,
+                    fecha = c.HojaCarga.FechaDeclaracion,
+                    cantidadRealKg = c.CantidadRealKg,
+                    nombreMateriaPrima = c.MateriaPrima != null ? c.MateriaPrima.Nombre : "Insumo",
+                    clienteNombre = (c.MateriaPrima != null && c.MateriaPrima.Cliente != null) ? c.MateriaPrima.Cliente.RazonSocial : null
+                })
+                .ToListAsync();
+
+            return Ok(consumos);
         }
     }
 }

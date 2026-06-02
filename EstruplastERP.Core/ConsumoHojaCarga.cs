@@ -11,7 +11,7 @@ namespace EstruplastERP.Core
         public HojaCarga HojaCarga { get; set; }
 
         public int MateriaPrimaId { get; set; }
-        [ForeignKey("MateriaPrimaId")]
+        [ForeignKey("MateriaPrimaId")]  
         public Producto MateriaPrima { get; set; }
 
         [Column(TypeName = "decimal(18,4)")]

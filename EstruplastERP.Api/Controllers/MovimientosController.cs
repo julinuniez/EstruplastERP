@@ -225,7 +225,6 @@ namespace EstruplastERP.Api.Controllers
                 return StatusCode(500, $"Error variante: {ex.Message}");
             }
         }
-        
 
 
         [HttpPost("ingresar-molido")]
@@ -339,6 +338,29 @@ namespace EstruplastERP.Api.Controllers
                 Console.WriteLine($"\n\n❌ ERROR FATAL EN INGRESAR MOLIDO: {ex.Message}\n{ex.StackTrace}\n\n");
                 return StatusCode(500, new { mensaje = ex.Message, detalle = ex.InnerException?.Message });
             }
+        }
+
+        [HttpGet("auditoria")]
+        public async Task<IActionResult> GetAuditoria([FromQuery] int mes, [FromQuery] int anio)
+        {
+            var movs = await _context.Movimientos
+                .Include(m => m.Producto)
+                    .ThenInclude(p => p.Cliente)
+                .Where(m => m.Fecha.Month == mes &&
+                            m.Fecha.Year == anio &&
+                            m.TipoMovimiento != null &&
+                            m.TipoMovimiento.StartsWith("CONSUMO")) // 👈 Filtramos solo los consumos reales
+                .Select(m => new {
+                    fecha = m.Fecha,
+                    tipoMovimiento = m.TipoMovimiento,
+                    cantidad = Math.Abs(m.Cantidad), // Lo pasamos a positivo para la suma del Excel
+                    observacion = m.Observacion,
+                    productoNombre = m.Producto != null ? m.Producto.Nombre : "Insumo",
+                    clienteNombre = (m.Producto != null && m.Producto.Cliente != null) ? m.Producto.Cliente.RazonSocial : null
+                })
+                .ToListAsync();
+
+            return Ok(movs);
         }
     }
 }
