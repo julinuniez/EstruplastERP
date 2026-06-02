@@ -636,17 +636,17 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 <div class="fila-input">
                     <div v-if="!form.esBobina">
                         <label>Largo (mm)</label>
-                        <input type="number" v-model="form.largo" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}" />
+                        <input type="number" v-model="form.largo" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}" @wheel.prevent />
                     </div>
                     
                     <div v-else>
                         <label style="color:#f39c12">Kilos x Bobina</label>
-                        <input type="number" v-model="form.kilosPorBobina" step="0.1" style="border: 2px solid #f39c12; font-weight: bold; background: #fff3e0; color: #d35400;" />
+                        <input type="number" v-model="form.kilosPorBobina" step="0.1" style="border: 2px solid #f39c12; font-weight: bold; background: #fff3e0; color: #d35400;" @wheel.prevent />
                     </div>
                     
                     <div>
                         <label>Ancho (mm)</label>
-                        <input type="number" v-model="form.ancho" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}" />
+                        <input type="number" v-model="form.ancho" :disabled="medidasBloqueadas" :class="{'input-lock': medidasBloqueadas}" @wheel.prevent />
                     </div>
                 </div>
                 
@@ -656,7 +656,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                         <input type="number" v-model="form.espesor" step="0.01" 
                             :disabled="medidasBloqueadas" 
                             :class="{'input-lock': medidasBloqueadas, 'input-error': !espesorValido}" 
-                            style="font-weight:bold;" />
+                            style="font-weight:bold;" @wheel.prevent />
                         
                         <span v-if="!espesorValido" style="color: #e74c3c; font-size: 11px; font-weight: bold; display: block; margin-top: 4px;">
                             <span v-if="limiteMaximo > 0">⚠️ Rango permitido: {{ limiteMinimo }} a {{ limiteMaximo }} mm</span>
@@ -665,7 +665,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     </div>
                     <div>
                         <label>Cantidad</label>
-                        <input type="number" v-model="form.cantidad" min="1" />
+                        <input type="number" v-model="form.cantidad" min="1" @wheel.prevent />
                     </div>
                 </div>
                 
@@ -698,7 +698,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                             <option value="555">Brillo 555 (Cristal)</option>
                         </select>
                         <div class="input-porcentaje">
-                            <input type="number" v-model="form.porcBrillo" step="0.01" min="0" /> %
+                            <input type="number" v-model="form.porcBrillo" step="0.01" min="0" @wheel.prevent /> %
                         </div>
                     </div>
                 </div>
@@ -721,7 +721,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     </label>
                     <div v-if="form.aditivoUV" class="bloque-derecha">
                         <div class="input-porcentaje">
-                            <input type="number" v-model="form.porcentajeUv" step="0.01" min="0" /> %
+                            <input type="number" v-model="form.porcentajeUv" step="0.01" min="0" @wheel.prevent /> %
                         </div>
                     </div>
                 </div>
@@ -732,7 +732,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     </label>
                     <div v-if="form.aditivoCaucho" class="bloque-derecha">
                         <div class="input-porcentaje">
-                            <input type="number" v-model="form.porcentajeCaucho" step="0.01" min="0" /> %
+                            <input type="number" v-model="form.porcentajeCaucho" step="0.01" min="0" @wheel.prevent /> %
                         </div>
                     </div>
                 </div>
@@ -748,7 +748,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 <div class="fila-input">
                     <div style="flex:1">
                         <label>Carga Mineral (%)</label>
-                        <input type="number" v-model="form.aditivoCarga" />
+                        <input type="number" v-model="form.aditivoCarga" @wheel.prevent />
                     </div>
                 </div>
                 
