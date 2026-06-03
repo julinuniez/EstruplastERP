@@ -140,24 +140,61 @@ const kilosEstearato = computed(() => {
 });
 
 const recetaConExtrasParaVista = computed(() => {
-    const recetaLimpia = recetaDinamica.value.filter(r => !(r.nombreInsumo || '').toUpperCase().includes('ESTEARATO'));
+    // 1. Clonamos la receta asegurando que no haya aditivos colados
+    const recetaLimpia = recetaDinamica.value.filter(r => {
+        const n = (r.nombreInsumo || '').toUpperCase();
+        return !n.includes('ESTEARATO') && !n.includes('BRILLO') && !n.includes('UV') && !n.includes('CAUCHO');
+    });
 
+    const kilosBase = form.value.kilosTotales > 0 ? form.value.kilosTotales : 1;
+
+    // 2. Inyectar Estearato Fijo
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
-
     if (est && kilosEstearato.value > 0) {
-        const valorClavadoTexto = kilosEstearato.value.toFixed(2);
-        
+        const valorKilos = kilosEstearato.value.toFixed(2);
         recetaLimpia.push({
-            id: 'estearato-fijo',
-            materiaPrimaId: est.id,
-            nombreInsumo: est.nombre,
-            densidad: est.pesoEspecifico || 1,
-            esEstearato: true,
-            cantidad: valorClavadoTexto,     
-            kilosFijos: valorClavadoTexto
+            id: 'estearato-fijo', materiaPrimaId: est.id, nombreInsumo: `🧪 ${est.nombre}`,
+            densidad: est.pesoEspecifico || 1, esEstearato: true, cantidad: valorKilos, kilosFijos: valorKilos
         });
     }
 
+    // 3. Inyectar Brillo (Calculando kilos)
+    if (form.value.conBrillo && form.value.porcBrillo > 0) {
+        const mpBrillo = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('BRILLO'));
+        if (mpBrillo) {
+            const kilosAditivo = ((kilosBase * form.value.porcBrillo) / 100).toFixed(2);
+            recetaLimpia.push({
+                id: 'brillo-fijo', materiaPrimaId: mpBrillo.id, nombreInsumo: `✨ ${mpBrillo.nombre} (${form.value.porcBrillo}%)`,
+                densidad: mpBrillo.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo
+            });
+        }
+    }
+
+    // 4. Inyectar UV (Calculando kilos)
+    if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
+        const mpUV = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('UV'));
+        if (mpUV) {
+            const kilosAditivo = ((kilosBase * form.value.porcentajeUv) / 100).toFixed(2);
+            recetaLimpia.push({
+                id: 'uv-fijo', materiaPrimaId: mpUV.id, nombreInsumo: `☀️ ${mpUV.nombre} (${form.value.porcentajeUv}%)`,
+                densidad: mpUV.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo
+            });
+        }
+    }
+
+    // 5. Inyectar Caucho (Calculando kilos)
+    if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
+        const mpCaucho = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('CAUCHO'));
+        if (mpCaucho) {
+            const kilosAditivo = ((kilosBase * form.value.porcentajeCaucho) / 100).toFixed(2);
+            recetaLimpia.push({
+                id: 'caucho-fijo', materiaPrimaId: mpCaucho.id, nombreInsumo: `🚜 ${mpCaucho.nombre} (${form.value.porcentajeCaucho}%)`,
+                densidad: mpCaucho.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo
+            });
+        }
+    }
+
+    // Mapeo final asegurando formato decimal
     return recetaLimpia.map(r => {
         let c = r.cantidad;
         let k = r.kilosFijos;
@@ -418,6 +455,9 @@ const procesarGuardado = async () => {
     error.value = ''; 
     mostrarOpcionMismoPedido.value = false; 
 
+    const copiaProfundaOriginal = JSON.parse(JSON.stringify(recetaDinamica.value));
+
+    // LÓGICA PARA TIPO NATURAL
     if (tipoSalidaVisual.value === 'NATURAL') {
         let porcentajeRemovido = 0;
         const listaLimpia: any[] = [];
@@ -446,9 +486,8 @@ const procesarGuardado = async () => {
         form.value.colorTexto = '';
     }
 
+    // INYECCIÓN DE ESTEARATO
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
-    let agregadoParaGuardar = false;
-
     if (est && !recetaDinamica.value.some(r => r.materiaPrimaId === est.id)) {
         recetaDinamica.value.push({
             id: 0,
@@ -458,7 +497,48 @@ const procesarGuardado = async () => {
             densidad: est.pesoEspecifico || 1,
             esEstearato: true
         });
-        agregadoParaGuardar = true;
+    }
+
+    if (form.value.conBrillo && form.value.porcBrillo > 0) {
+        const keywordBrillo = form.value.tipoBrillo === '555' ? '555' : '777';
+        let mpBrillo = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes(`BRILLO ${keywordBrillo}`)) 
+                    || listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('BRILLO'));
+        
+        if (mpBrillo) {
+            recetaDinamica.value.push({
+                id: 0,
+                materiaPrimaId: mpBrillo.id,
+                nombreInsumo: mpBrillo.nombre,
+                cantidad: Number(form.value.porcBrillo).toFixed(2),
+                densidad: mpBrillo.pesoEspecifico || 1
+            });
+        }
+    }
+
+    if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
+        const mpUV = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('UV'));
+        if (mpUV) {
+            recetaDinamica.value.push({
+                id: 0, 
+                materiaPrimaId: mpUV.id, 
+                nombreInsumo: mpUV.nombre,
+                cantidad: Number(form.value.porcentajeUv).toFixed(2),
+                densidad: mpUV.pesoEspecifico || 1
+            });
+        }
+    }
+
+    if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
+        const mpCaucho = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('CAUCHO'));
+        if (mpCaucho) {
+            recetaDinamica.value.push({
+                id: 0, 
+                materiaPrimaId: mpCaucho.id, 
+                nombreInsumo: mpCaucho.nombre,
+                cantidad: Number(form.value.porcentajeCaucho).toFixed(2),
+                densidad: mpCaucho.pesoEspecifico || 1
+            });
+        }
     }
 
     ultimoPedidoGuardado.value = {
@@ -467,11 +547,11 @@ const procesarGuardado = async () => {
         notaPedido: form.value.notaPedido
     };
 
+    // Enviamos la receta modificada con todos sus aditivos reales al servidor
     await registrarProduccion();
 
-    if (agregadoParaGuardar) {
-        recetaDinamica.value = recetaDinamica.value.filter(r => r.materiaPrimaId !== est?.id);
-    }
+    // 🚀 RESTAURACIÓN TOTAL: Devolvemos la grilla exactamente a su estado inicial puro (100%)
+    recetaDinamica.value = copiaProfundaOriginal;
 
     if (!error.value) {
         mostrarOpcionMismoPedido.value = true;

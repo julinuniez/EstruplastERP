@@ -22,19 +22,35 @@ export function useRecetaProduccion(
     function balancearBase() {
         if (form.value.esConsolidado) return; 
         if (recetaDinamica.value.length === 0) return;
-
+    
         recetaDinamica.value.forEach(r => r.esBase = false);
-
-        const sorted = [...recetaDinamica.value].sort((a, b) => Number(b.cantidad) - Number(a.cantidad));
+    
+        // 🚀 Tiene que ser idéntico al de la Hoja de Impresión
+        const esAditivoOnTop = (item: any) => {
+            if (!item) return false;
+            const n = String(item.nombreInsumo || item.nombreMateriaPrima || item.nombre || '').toUpperCase();
+            return n.includes('ESTEARATO') || n.includes('BRILLO') || n.includes('CRISTAL') || n.includes('777') || n.includes('555') || n.includes('UV') || n.includes('CAUCHO');
+        };
+    
+        // Filtramos solo los plásticos reales para ver quién es la base
+        const materialesEstructurales = recetaDinamica.value.filter(r => !esAditivoOnTop(r));
+        const arrayParaOrdenar = materialesEstructurales.length > 0 ? materialesEstructurales : recetaDinamica.value;
+    
+        const sorted = [...arrayParaOrdenar].sort((a, b) => Number(b.cantidad) - Number(a.cantidad));
         const nuevaBase = sorted[0];
-
+    
         if (nuevaBase) {
             nuevaBase.esBase = true; 
-            const sumaOtros = recetaDinamica.value.reduce((acc, item) => {
+            
+            const sumaOtros = recetaDinamica.value.reduce((acc, item: any) => {
                 if (item === nuevaBase) return acc;
-                return acc + (parseFloat(item.cantidad.toString()) || 0);
+                
+                // 🔥 LA CLAVE: Si es Brillo, UV o Caucho, LO IGNORAMOS, no le quita % a la base
+                if (esAditivoOnTop(item)) return acc; 
+                
+                return acc + (parseFloat(item.cantidad?.toString() || 0));
             }, 0);
-
+    
             const nuevoPorcentajeBase = 100 - sumaOtros;
             nuevaBase.cantidad = parseFloat(Math.max(0, nuevoPorcentajeBase).toFixed(2));
         }

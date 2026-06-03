@@ -98,24 +98,39 @@ const densidadReal = computed(() => {
 });
 
 const obtenerEtiquetaOrigen = (itemReceta: any) => {
-    // 1. Tomamos los datos EXACTOS que nos transfirió ListaProduccion / Consolidación
     const idDuenio = Number(itemReceta.clienteId || itemReceta.ClienteId || 0);
     const nombreDuenio = itemReceta.clienteNombre || itemReceta.ClienteNombre || '';
 
-    // 2. Si es 0 o 1 (Estruplast), no mostramos nada.
     if (idDuenio <= 1) return '';
 
-    // 3. Si nos llegó el nombre del cliente, lo imprimimos con orgullo
     if (nombreDuenio && nombreDuenio.trim() !== '') {
         return `(DE ${nombreDuenio.toUpperCase()})`;
     }
 
-    // 4. Rescate de último recurso cruzando con la orden actual
     if (props.cliente && Number(props.cliente.id) === idDuenio) {
         return `(DE ${String(props.cliente.razonSocial || '').toUpperCase()})`;
     }
-
     return '';
+};
+
+// 🚀 HELPER DEFINITIVO: Atrapa aditivos, brillos y cristales
+const esInsumoFijo = (r: any) => {
+    if (!r) return false;
+    if (r.esEstearato) return true;
+    if (r.kilosFijos !== undefined && r.kilosFijos !== null) return true;
+    
+    const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
+    
+    // Agregamos CRISTAL, 777 y 555 a la lista de exclusión
+    if (n.includes('ESTEARATO') || 
+        n.includes('BRILLO') || 
+        n.includes('CRISTAL') || 
+        n.includes('777') || 
+        n.includes('555') || 
+        n.includes('UV') || 
+        n.includes('CAUCHO')) return true;
+    
+    return false;
 };
 
 const recetaVisual = computed(() => {
@@ -171,6 +186,7 @@ const recetaVisual = computed(() => {
         });
 
         if (listaLimpia.length > 0 && kilosRemovidos > 0) {
+            // Ordenamiento temporal solo para encontrar la base
             listaLimpia.sort((a: any, b: any) => Number(b.cantidadKilos || b.CantidadKilos || 0) - Number(a.cantidadKilos || a.CantidadKilos || 0));
             const materialPrincipal = listaLimpia.find((i: any) => i.esBase) || listaLimpia[0];
 
@@ -187,7 +203,22 @@ const recetaVisual = computed(() => {
         lista = listaLimpia;
     }
 
-    return lista.sort((a: any, b: any) => Number(b.cantidadKilos || b.CantidadKilos || b.cantidad || 0) - Number(a.cantidadKilos || a.CantidadKilos || a.cantidad || 0));
+    // 🚀 ORDENAMIENTO INTELIGENTE: Primero los estructurales (por Kilos/%), luego los extras (por Kilos/%)
+    return lista.sort((a: any, b: any) => {
+        const aEsFijo = esInsumoFijo(a) ? 1 : 0;
+        const bEsFijo = esInsumoFijo(b) ? 1 : 0;
+
+        // 1. Si uno es Extra y el otro no, mandamos el Extra al fondo
+        if (aEsFijo !== bEsFijo) {
+            return aEsFijo - bEsFijo;
+        }
+
+        // 2. Si ambos son del mismo tipo (ej: ambos estructurales o ambos extras), ordenamos por cantidad (mayor a menor)
+        const cantidadA = Number(a.cantidadKilos || a.CantidadKilos || a.cantidad || 0);
+        const cantidadB = Number(b.cantidadKilos || b.CantidadKilos || b.cantidad || 0);
+        
+        return cantidadB - cantidadA;
+    });
 });
 
 const sugerenciasFiltradas = computed(() => {
@@ -198,7 +229,6 @@ const sugerenciasFiltradas = computed(() => {
 
     lista = lista.filter(mp => {
         const idDuenio = Number(mp.clienteId || mp.ClienteId || 0);
-        
         if (idDuenio > 1 && idDuenio !== idClienteActual) return false;
 
         const nombreLimpio = (mp.nombre || '').toUpperCase().trim();
@@ -420,8 +450,8 @@ const tipoCorona = computed(() => {
                                 </span>
                             </td>
                             <td style="text-align:center; vertical-align: middle;" v-if="!esConsolidadoReal">
-                                <div v-if="r.esEstearato || (r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase().includes('ESTEARATO')" style="font-weight: bold; color: #2980b9;">
-                                    FIJO
+                                <div v-if="esInsumoFijo(r)" style="font-weight: bold; color: #2980b9; font-size: 11px; letter-spacing: 1px;">
+                                    (EXTRA)
                                 </div>
                                 <div v-else>
                                     <div class="ocultar-en-impresion" style="display:flex; justify-content:center; align-items:center;">
@@ -440,12 +470,14 @@ const tipoCorona = computed(() => {
                                 </div>
                             </td>
                             <td style="text-align:right; font-size: 1.1em;">
-                                <strong v-if="r.esEstearato || (r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase().includes('ESTEARATO')" style="color: #2980b9;">
-                                    {{ esConsolidadoReal 
-                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
-                                        : parseFloat(r.kilosFijos || r.cantidad || 0).toFixed(2) 
-                                    }} kg
-                                </strong>
+                                <strong v-if="esInsumoFijo(r)" style="color: #2980b9;">
+    {{ esConsolidadoReal 
+        ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
+        : (r.kilosFijos 
+            ? parseFloat(r.kilosFijos).toFixed(2) 
+            : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2)) 
+    }} kg
+</strong>
                                 <strong v-else>
                                     {{ esConsolidadoReal 
                                         ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
@@ -454,7 +486,7 @@ const tipoCorona = computed(() => {
                                 </strong>
                             </td>
                             <td data-html2canvas-ignore="true" v-if="!esConsolidadoReal" style="text-align:center;">
-                                <button v-if="!r.esEstearato" @click="solicitarQuitar(r)" class="btn-borrar-insumo" title="Quitar insumo">❌</button>
+                                <button v-if="!esInsumoFijo(r)" @click="solicitarQuitar(r)" class="btn-borrar-insumo" title="Quitar insumo">❌</button>
                             </td>
                         </tr>
                     </template>
