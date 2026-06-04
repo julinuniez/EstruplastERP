@@ -17,7 +17,7 @@ const procesando = ref(false);
 const consumosMezcla = ref<{ materiaPrimaId: number, nombre: string, teorico: number, real: number }[]>([])
 
 // Variables para cargar insumos extras
-const listaMateriasPrimas = ref<any[]>([]);
+const todasMateriasPrimas = ref<any[]>([]);
 const insumoExtraSeleccionado = ref<number | ''>('');
 
 const yaEstaDeclarado = computed(() => {
@@ -30,20 +30,65 @@ const hojaCargaId = computed(() => {
     return props.ordenes[0].hojaCargaId;
 });
 
+const idClienteUnico = computed(() => {
+    if (props.ordenes.length === 0) return null;
+    const primerId = props.ordenes[0].clienteId || props.ordenes[0].ClienteId;
+    
+    if (!primerId || primerId <= 1) return null;
+
+    const todosIguales = props.ordenes.every(o => (o.clienteId || o.ClienteId) === primerId);
+    return todosIguales ? primerId : null;
+});
+
+// 🚀 AGRUPACIÓN Y ORDENAMIENTO INTELIGENTE
+const materiasPrimasAgrupadas = computed(() => {
+    const idClienteHabilitado = idClienteUnico.value;
+    
+    const grupos = {
+        estruplast: { label: '🏢 ESTRUPLAST (MATERIAL PROPIO)', items: [] as any[] },
+        cliente: { label: '', items: [] as any[] }
+    };
+
+    todasMateriasPrimas.value.forEach((p: any) => {
+        const esPropio = !p.clienteId || p.clienteId <= 1;
+        const esDelCliente = idClienteHabilitado !== null && p.clienteId === idClienteHabilitado;
+
+        const materialValido = p.esMateriaPrima && (esPropio || esDelCliente);
+        const estaActivo = p.activo !== false && p.estado !== 'Inactivo'; 
+        const noEsGenerico = !p.esGenerico; 
+        const nombreLimpio = (p.nombre || '').toUpperCase().trim();
+        const noEsBase = !nombreLimpio.includes('BASE');
+
+        if (materialValido && estaActivo && noEsGenerico && noEsBase) {
+            if (esPropio) {
+                grupos.estruplast.items.push(p);
+            } else if (esDelCliente) {
+                // Capturamos la razón social real desde la orden o el producto
+                if (!grupos.cliente.label) {
+                    const orden = props.ordenes.find(o => (o.clienteId || o.ClienteId) === p.clienteId);
+                    let nombreCliente = orden?.clienteNombre || orden?.ClienteNombre || p.cliente?.razonSocial || p.clienteNombre || `CLIENTE #${p.clienteId}`;
+                    grupos.cliente.label = `👤 PROPIEDAD DE: ${nombreCliente.toUpperCase()}`;
+                }
+                grupos.cliente.items.push(p);
+            }
+        }
+    });
+
+    // Ordenamos alfabéticamente dentro de cada grupo
+    grupos.estruplast.items.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    grupos.cliente.items.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+    const resultado = [];
+    if (grupos.estruplast.items.length > 0) resultado.push(grupos.estruplast);
+    if (grupos.cliente.items.length > 0) resultado.push(grupos.cliente);
+
+    return resultado;
+});
+
 const cargarCatálogoMateriales = async () => {
     try {
         const { data } = await axios.get(`${apiUrl}/Productos`);
-        
-        listaMateriasPrimas.value = data.filter((p: any) => {
-            const esPropio = p.esMateriaPrima && (!p.clienteId || p.clienteId <= 1);
-            const estaActivo = p.activo !== false && p.estado !== 'Inactivo'; 
-            const noEsGenerico = !p.esGenerico; 
-            const nombreLimpio = (p.nombre || '').toUpperCase().trim();
-            const noEsBase = !nombreLimpio.includes('BASE');
-
-            return esPropio && estaActivo && noEsGenerico && noEsBase;
-        }).sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
-        
+        todasMateriasPrimas.value = data; 
     } catch (error) {
         console.error("Error cargando insumos", error);
     }
@@ -78,18 +123,17 @@ watch(() => props.visible, (isOpen) => {
             return c;
         });
 
-        insumoExtraSeleccionado.value = ''; // Limpiamos el combo al abrir
+        insumoExtraSeleccionado.value = ''; 
     }
 });
 
-// 🚀 Función para inyectar una fila nueva a la tabla (entra con Kg en 0)
 const agregarFilaExtra = () => {
     if (!insumoExtraSeleccionado.value) return;
 
-    const mp = listaMateriasPrimas.value.find(m => m.id === insumoExtraSeleccionado.value);
+    // Buscamos en la lista completa
+    const mp = todasMateriasPrimas.value.find(m => m.id === insumoExtraSeleccionado.value);
     if (!mp) return;
 
-    // Verificamos si ya está en la tabla para no duplicar
     const yaExiste = consumosMezcla.value.find(c => c.materiaPrimaId === mp.id);
     if (yaExiste) {
         Alertas.advertencia(`El insumo "${mp.nombre}" ya está en la lista. Modificá los kilos en su renglón correspondiente.`);
@@ -97,7 +141,6 @@ const agregarFilaExtra = () => {
         return;
     }
 
-    // Agregamos la fila con teórico 0 y real en 0 para ser modificado en la tabla
     consumosMezcla.value.push({
         materiaPrimaId: mp.id,
         nombre: mp.nombre + " (Extra)",
@@ -105,10 +148,9 @@ const agregarFilaExtra = () => {
         real: 0
     });
 
-    insumoExtraSeleccionado.value = ''; // Reseteamos el selector
+    insumoExtraSeleccionado.value = ''; 
 };
 
-// 🚀 Función para quitar una fila
 const quitarInsumo = (index: number) => {
     consumosMezcla.value.splice(index, 1);
 };
@@ -124,11 +166,11 @@ const declararConsumos = async () => {
     "⚠️ ¿Descontar estos materiales del stock?\n\nLas órdenes de este grupo pasarán a 'Material Preparado' y ya no descontarán material base al cerrarse."
     );
 
-if (!confirmado) return;
+    if (!confirmado) return;
     procesando.value = true;
     try {
         const payload = consumosMezcla.value
-            .filter(c => Number(c.real) > 0) // Ignoramos si agregaron algo pero lo dejaron en 0
+            .filter(c => Number(c.real) > 0) 
             .map(c => ({
                 materiaPrimaId: c.materiaPrimaId,
                 cantidadRealKg: Number(c.real)
@@ -196,11 +238,13 @@ if (!confirmado) return;
                         <div class="barra-agregar-extra" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
                             <label style="font-weight: bold; color: #34495e;">➕ Agregar Extra:</label>
                             
-                            <select v-model="insumoExtraSeleccionado" style="flex: 1 1 200px; min-width: 150px; padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7; font-weight: bold; text-overflow: ellipsis;">
+                            <select v-model="insumoExtraSeleccionado" class="select-lindo-agrupado">
                                 <option value="">Seleccione un insumo no planificado...</option>
-                                <option v-for="mp in listaMateriasPrimas" :key="mp.id" :value="mp.id">
-                                    🏢 ESTRUPLAST | {{ mp.nombre }}
-                                </option>
+                                <optgroup v-for="grupo in materiasPrimasAgrupadas" :key="grupo.label" :label="grupo.label">
+                                    <option v-for="mp in grupo.items" :key="mp.id" :value="mp.id">
+                                        {{ mp.nombre }}
+                                    </option>
+                                </optgroup>
                             </select>
                             
                             <button class="btn-orden" style="padding: 6px 15px; white-space: nowrap;" @click="agregarFilaExtra" :disabled="!insumoExtraSeleccionado">
@@ -247,7 +291,6 @@ th { text-align: left; padding: 8px; border-bottom: 2px solid #cbd5e1; color: #4
 td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
 .text-center { text-align: center; }
 
-/* 🚀 Estilo para el botón de quitar */
 .btn-quitar { background: transparent; border: none; cursor: pointer; font-size: 1rem; transition: transform 0.2s; padding: 0; }
 .btn-quitar:hover { transform: scale(1.2); }
 
@@ -264,4 +307,38 @@ td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
 .btn-orden { background: #34495e; border: 1px solid #7f8c8d; color: white; cursor: pointer; border-radius: 4px; font-weight: bold; } 
 .btn-orden:hover:not(:disabled) { background: #2980b9; }
 .btn-orden:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 🚀 Estilos del nuevo select con marco lindo */
+.select-lindo-agrupado {
+    flex: 1 1 200px;
+    min-width: 150px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 2px solid #3498db;
+    background-color: #f0f8ff;
+    font-weight: bold;
+    color: #2c3e50;
+    outline: none;
+    box-shadow: 0 2px 4px rgba(52, 152, 219, 0.15);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+.select-lindo-agrupado:focus {
+    border-color: #2980b9;
+    box-shadow: 0 2px 8px rgba(41, 128, 185, 0.4);
+    background-color: #ffffff;
+}
+.select-lindo-agrupado optgroup {
+    font-weight: 900;
+    color: #d35400;
+    background-color: #ffffff;
+    font-style: normal;
+    padding: 5px;
+}
+.select-lindo-agrupado option {
+    font-weight: 600;
+    color: #34495e;
+    padding: 6px;
+    background-color: #ffffff;
+}
 </style>
