@@ -1,6 +1,11 @@
 <script setup lang="ts">
+<<<<<<< HEAD
 import { ref, onMounted, computed, watch } from 'vue'
 import api from '@/services/axiosInstance' 
+=======
+import { ref, onMounted, computed } from 'vue'
+// Asegúrate de que este archivo exista en la misma carpeta o ajusta la ruta
+>>>>>>> master
 import ModalCierreOrden from './ModalCierreOrden.vue' 
 import ModalEdicionRapida from './ModalEdicionRapida.vue'
 import ModalDetalleGrupo from './ModalDetalleGrupo.vue'
@@ -45,6 +50,7 @@ const producciones = ref<ProduccionItem[]>([])
 const cargando = ref(false)
 const error = ref('')
 
+<<<<<<< HEAD
 const filtroEstado = ref('Pendientes'); 
 const filtroLibre = ref(''); 
 
@@ -59,6 +65,39 @@ const categoriasFiltro = [
   { id: 'PEAD', label: 'PEAD' },
   { id: 'PP', label: 'PP' }
 ];
+=======
+// FILTROS
+const filtroFecha = ref(''); // Formato YYYY-MM-DD
+const filtroEstado = ref('todos'); // 'todos', 'pendiente', 'finalizada'
+
+
+// MODAL
+const mostrarModalCierre = ref(false)
+const ordenSeleccionada = ref<ProduccionItem | null>(null)
+const listaMateriasPrimas = ref<any[]>([]) 
+
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
+
+// --- COMPUTED PARA FILTRAR ---
+const produccionesFiltradas = computed(() => {
+  let items = producciones.value;
+
+  // 1. Filtrar por estado
+  if (filtroEstado.value !== 'todos') {
+    const esFinalizada = filtroEstado.value === 'finalizada';
+    items = items.filter(p => p.esFinalizada === esFinalizada);
+  }
+
+  // 2. Filtrar por fecha
+  if (filtroFecha.value) {
+    // Comparamos solo la parte de la fecha (YYYY-MM-DD)
+    items = items.filter(p => p.fecha.startsWith(filtroFecha.value));
+  }
+
+  return items;
+});
+
+>>>>>>> master
 
 const fechaActual = new Date();
 const mesSeleccionado = ref(fechaActual.getMonth() + 1);
@@ -484,6 +523,7 @@ defineExpose({ cargarHistorial })
         </div>
     </div>
 
+<<<<<<< HEAD
     <div class="filtros-produccion">
         <button 
             v-for="cat in categoriasFiltro" 
@@ -494,6 +534,26 @@ defineExpose({ cargarHistorial })
             {{ cat.label }}
         </button>
     </div>
+=======
+    <!-- SECCIÓN DE FILTROS -->
+    <div class="filtros-container">
+        <div class="filtro-item">
+            <label for="filtro-fecha">Filtrar por Fecha:</label>
+            <input type="date" id="filtro-fecha" v-model="filtroFecha" class="input-filtro">
+        </div>
+        <div class="filtro-item">
+            <label for="filtro-estado">Filtrar por Estado:</label>
+            <select id="filtro-estado" v-model="filtroEstado" class="input-filtro">
+                <option value="todos">Todos</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="finalizada">Finalizada</option>
+            </select>
+        </div>
+    </div>
+
+    <div v-if="cargando" class="loading">Cargando...</div>
+    <div v-else-if="error" class="error-msg">{{ error }}</div>
+>>>>>>> master
 
     <div v-if="error" class="error-msg">{{ error }}</div>
 
@@ -513,6 +573,7 @@ defineExpose({ cargarHistorial })
                 </tr>
             </thead>
             <tbody>
+<<<<<<< HEAD
                 <template v-for="p in produccionesFiltradas" :key="p.id">
                     <tr :class="{'fila-impresa': p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-no-impresa': !p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-ok': p.estado === 'Finalizada', 'fila-cancel': p.estado === 'Cancelada', 'fila-seleccionada': ordenesSeleccionadas.includes(p.id)}">
                         
@@ -622,6 +683,37 @@ defineExpose({ cargarHistorial })
                 
                 <tr v-if="produccionesFiltradas.length === 0 && !cargando">
                     <td colspan="9" class="vacio">No hay órdenes en esta bandeja para los filtros seleccionados.</td>
+=======
+                <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-ok': p.esFinalizada}">
+                    <td>{{ p.fecha }}</td>
+                    <td class="td-prod">{{ p.producto }}</td>
+                    <td style="text-align: center;">{{ p.cantidad }}</td>
+                    <td style="text-align: right; font-weight: bold;">{{ p.kilos }}</td>
+                    <td>{{ p.operario }}</td>
+                    <td>
+                        <span :class="p.esFinalizada ? 'badge-ok' : 'badge-pend'">
+                            {{ p.esFinalizada ? 'FINALIZADA' : 'PENDIENTE' }}
+                        </span>
+                    </td>
+                    <td class="td-acciones">
+                        <button 
+                            v-if="!p.esFinalizada" 
+                            @click="confirmarOrdenRapida(p)" 
+                            class="btn-action btn-check" 
+                            title="Confirmar Producción y Stock">
+                            ✅
+                        </button>
+                        
+                        <button @click="imprimirEtiqueta(p)" class="btn-action btn-print" title="Imprimir Etiqueta">
+                            🖨️
+                        </button>
+                    </td>
+                </tr>
+                <tr v-if="produccionesFiltradas.length === 0">
+                    <td colspan="7" class="vacio">
+                        No hay órdenes que coincidan con los filtros seleccionados.
+                    </td>
+>>>>>>> master
                 </tr>
             </tbody>
         </table>
@@ -696,10 +788,50 @@ defineExpose({ cargarHistorial })
 .btn-filtro:hover { background-color: #e2e8f0; color: #334155; }
 .btn-filtro.activo { background-color: #3b82f6; color: white; border-color: #3b82f6; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3); }
 
+<<<<<<< HEAD
 .tabla-scroll { overflow-y: auto; flex: 1; margin-bottom: 55px; border-radius: 6px; border: 1px solid #e2e8f0; }
 .tabla-custom { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; }
 .tabla-custom th { background: #f8fafc; color: #475569; padding: 12px 10px; text-align: left; position: sticky; top: 0; z-index: 5; font-weight: 700; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
 .tabla-custom td { padding: 10px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; transition: background-color 0.2s; }
+=======
+/* Estilos para los filtros */
+.filtros-container {
+    display: flex;
+    gap: 20px;
+    padding: 10px 5px;
+    margin-bottom: 10px;
+    background-color: #f9f9f9;
+    border-radius: 6px;
+    border: 1px solid #eee;
+}
+.filtro-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.filtro-item label {
+    font-size: 0.85rem;
+    color: #555;
+    font-weight: 600;
+}
+.input-filtro {
+    padding: 5px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+.input-filtro:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+
+.tabla-scroll { overflow-y: auto; flex: 1; }
+.tabla-custom { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.tabla-custom th { background: #2c3e50; color: white; padding: 8px; text-align: left; position: sticky; top: 0; z-index: 5; }
+.tabla-custom td { padding: 8px; border-bottom: 1px solid #eee; color: #333; }
+>>>>>>> master
 
 tr.fila-impresa td { background-color: #d4edda; }
 tr.fila-no-impresa td { background-color: #f8d7da; }

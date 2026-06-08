@@ -24,6 +24,7 @@ namespace EstruplastERP.Api.Controllers
             try
             {
                 var productos = await _context.Productos
+<<<<<<< HEAD
                     .Include(p => p.Proveedor)
                     .Where(p => p.Activo)
                     .OrderBy(p => p.Nombre)
@@ -53,6 +54,38 @@ namespace EstruplastERP.Api.Controllers
                 string errorReal = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
                 return StatusCode(500, new { mensaje = $"Error de BD: {errorReal}" });
             }
+=======
+                .Where(p => p.Activo == true)
+                .OrderBy(p => p.Nombre)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Nombre,
+                    p.CodigoSku,
+                    StockActual = (decimal?)p.StockActual ?? 0,
+                    StockMinimo = (decimal?)p.StockMinimo ?? 0,
+                    PesoEspecifico = (decimal?)p.PesoEspecifico ?? 0,
+                    EsMateriaPrima = p.EsMateriaPrima == true,
+                    EsProductoTerminado = p.EsProductoTerminado == true,
+                    EsFazon = p.EsFazon == true,
+                    PrecioCosto = (decimal?)p.PrecioCosto ?? 0
+                })
+                .ToListAsync();
+
+                return Ok(productos);
+            }
+            catch(Exception ex)
+            {
+                return BadRequest(new
+                {
+                    ERROR_CRITICO = "Hubo un fallo al leer la base de datos.",
+                    MENSAJE = ex.Message,
+                    CAUSA_INTERNA = ex.InnerException?.Message ?? "N/A",
+                    DONDE = ex.StackTrace
+                });
+            }
+            
+>>>>>>> master
         }
 
         [HttpGet("materias-primas")]
@@ -78,6 +111,23 @@ namespace EstruplastERP.Api.Controllers
                 .ToListAsync();
         }
 
+<<<<<<< HEAD
+=======
+        // ==========================================
+        // 3. GET: TODOS LOS PRODUCTOS (CORREGIDO EL FALLO)
+        // ==========================================
+        // GET: api/Productos?clienteId=5
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<object>>> GetProductos([FromQuery] int? clienteId)
+        {
+            var query = _context.Productos
+                .Where(p => p.Activo == true)
+                .AsQueryable();
+            if (clienteId.HasValue && clienteId.Value > 0)
+            {
+                query = query.Where(p => p.ClienteId == null || p.ClienteId == clienteId);
+            }
+>>>>>>> master
 
         [HttpGet("insumos-disponibles/{clienteId}")]
         public async Task<IActionResult> GetInsumosParaOrden(int clienteId)
@@ -124,9 +174,17 @@ namespace EstruplastERP.Api.Controllers
                     p.EsFazon,
                     p.EsScrap,
                     p.EsGenerico,
+<<<<<<< HEAD
                     p.ClienteId,
                     p.PrecioCosto,
                     p.StockMinimo,
+=======
+                    ClienteId = p.ClienteId,
+                    EsFazonCalculado = p.ClienteId != null,
+                    EsFazon = p.EsFazon == true, 
+                    EsScrap = p.EsScrap == true,
+                    p.StockActual,
+>>>>>>> master
                     p.PesoEspecifico,
                     ProveedorId = p.ProveedorId,
                     ProveedorNombre = p.Proveedor != null ? p.Proveedor.RazonSocial : null,
@@ -353,16 +411,22 @@ namespace EstruplastERP.Api.Controllers
             if (id <= 0) return BadRequest("ID inválido.");
 
             var producto = await _context.Productos.FirstOrDefaultAsync(p => p.Id == id);
+
             if (producto == null) return NotFound("❌ Producto no encontrado.");
 
             producto.Nombre = data.Nombre.Trim();
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
+<<<<<<< HEAD
+=======
+            producto.Color = data.Color;
+            producto.StockActual = data.StockActual;
+>>>>>>> master
 
             try
             {
                 await _context.SaveChangesAsync();
-                return Ok(new { mensaje = "✅ Ítem actualizado correctamente." });
+                return Ok(new { mensaje = "✅ Producto actualizado correctamente." });
             }
             catch (Exception ex)
             {
@@ -417,14 +481,24 @@ namespace EstruplastERP.Api.Controllers
             producto.PrecioCosto = dto.PrecioCosto;
             producto.Rubro = dto.Rubro;
 
+            // 🔥 AGREGAR ESTA LÍNEA AQUÍ 🔥
+            producto.StockActual = dto.StockActual;
+
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+<<<<<<< HEAD
                 if (dto.Receta != null)
                 {
+=======
+                // 2. ACTUALIZAR RECETA (Esto lo dejamos igual, funcionaba bien)
+                if (dto.Receta != null)
+                {
+                    // ... lógica de borrar e insertar receta ...
+>>>>>>> master
                     var formulasViejas = await _context.Formulas
-                        .Where(f => f.ProductoTerminadoId == id)
-                        .ToListAsync();
+                               .Where(f => f.ProductoTerminadoId == id)
+                               .ToListAsync();
 
                     _context.Formulas.RemoveRange(formulasViejas);
 
@@ -442,7 +516,7 @@ namespace EstruplastERP.Api.Controllers
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                return Ok(new { mensaje = "✅ Configuración y Receta guardadas." });
+                return Ok(new { mensaje = "✅ Configuración y Stock guardados." });
             }
             catch (Exception ex)
             {

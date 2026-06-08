@@ -11,12 +11,16 @@ const props = defineProps<{
 
 const emit = defineEmits(['close', 'confirmar'])
 
+<<<<<<< HEAD
 const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
 
 const kilosReales = ref<number>(0)
 const fechaCierreManual = ref<string>(new Date().toISOString().slice(0, 10))
 
 const consumosBase = ref<{ materiaPrimaId: number, nombre: string, teorico: number, real: number, stockActual: number, clienteId?: number }[]>([])
+=======
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
+>>>>>>> master
 
 const formCierre = ref({
   adiciones: [] as { materiaPrimaId: number, nombre: string, cantidad: number, motivo: string, clienteId?: number }[],

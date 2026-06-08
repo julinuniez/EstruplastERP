@@ -20,6 +20,7 @@ builder.Services.AddCors(options =>
 });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
 
@@ -44,6 +45,7 @@ builder.Services.AddSwaggerGen(c =>
     c.CustomSchemaIds(type => type.ToString());
 });
 
+System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 var app = builder.Build();
 
 // 2. CONFIGURACIÓN DEL PIPELINE DE SOLICITUDES (El orden acá importa muchísimo)
@@ -54,6 +56,7 @@ app.UseSwaggerUI();
 // 🚀 LA CLAVE: Comentamos la redirección forzada a HTTPS para que no rompa las llamadas HTTP locales (puerto 5122)
 // app.UseHttpsRedirection();
 
+<<<<<<< HEAD
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -63,6 +66,10 @@ app.UseStaticFiles(new StaticFileOptions
         ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store");
     }
 });
+=======
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+>>>>>>> master
 
 // 🚀 CORS debe ir OBLIGATORIAMENTE antes de la Autenticación y los Controladores
 app.UseCors("PermitirVue");

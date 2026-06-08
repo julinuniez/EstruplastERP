@@ -15,10 +15,16 @@ const producto = ref({
     id: 0,
     nombre: '',
     codigoSku: '',
+<<<<<<< HEAD
     pesoEspecifico: 1.1,
     stockMinimo: 0,
     precioCosto: 0,
     rubro: '',
+=======
+    stockActual: 0,
+    stockMinimo: 0,
+    pesoEspecifico: 1.0,
+>>>>>>> master
     esMateriaPrima: false,
     esProductoTerminado: false,
     esFazon: false,
@@ -28,16 +34,31 @@ const producto = ref({
 const ingredienteSeleccionado = ref('');
 const cantidadIngrediente = ref('');
 
+<<<<<<< HEAD
 const mostrarCalculadora = ref(false);
 const calcPorcentajeCapa = ref(20);
 const calcPorcentajeInterno = ref(99.92);
 
+=======
+// Configuración de Headers (Token)
+const getConfig = () => {
+    const token = localStorage.getItem('token');
+    return { headers: { Authorization: `Bearer ${token}` } };
+};
+
+// URL Base (Asegúrate de que coincida con tu variable de entorno o hardcode)
+// Si usas proxy en vite, puedes dejar solo '/api'
+const apiBase = '/api'; 
+
+// --- COMPUTED ---
+>>>>>>> master
 const totalPorcentaje = computed(() => {
     if (!producto.value.receta) return 0;
     const suma = producto.value.receta.reduce((acc, item) => acc + Number(item.cantidad), 0);
     return Math.round(suma * 10000) / 10000;
 });
 
+<<<<<<< HEAD
 const porcentajeProyectado = computed(() => {
     const pCapa = Number(calcPorcentajeCapa.value) || 0;
     const pInterno = Number(calcPorcentajeInterno.value) || 0;
@@ -47,6 +68,8 @@ const porcentajeProyectado = computed(() => {
 const faltaPrecioCosto = computed(() => producto.value.esMateriaPrima && (!producto.value.precioCosto || producto.value.precioCosto <= 0));
 const faltaRubro = computed(() => producto.value.esMateriaPrima && !producto.value.rubro);
 
+=======
+>>>>>>> master
 const puedeGuardar = computed(() => {
     if (guardando.value) return false;
     if (producto.value.esMateriaPrima) {
@@ -58,6 +81,7 @@ const puedeGuardar = computed(() => {
     return true; 
 });
 
+<<<<<<< HEAD
 const setTipoProducto = (tipo) => {
     producto.value.esProductoTerminado = tipo === 'PT';
     producto.value.esMateriaPrima = tipo === 'MP';
@@ -75,18 +99,26 @@ const isRecuperado = (p) => {
            nom.includes('SCRAP') || nom.includes('MOLIDO') || nom.includes('PELET');
 };
 
+=======
+// --- CARGA DE DATOS ---
+>>>>>>> master
 onMounted(async () => {
     const id = route.params.id;
     if (!id) return router.push('/stock'); 
 
     try {
+<<<<<<< HEAD
         const resProd = await api.get(`/Productos/${id}`);
+=======
+        const resProd = await axios.get(`${apiBase}/Productos/${id}`, getConfig());
+>>>>>>> master
         producto.value = resProd.data;
         if (!producto.value.receta) producto.value.receta = [];
         
         producto.value.rubro = resProd.data.rubro || resProd.data.Rubro || '';
         producto.value.precioCosto = resProd.data.precioCosto || resProd.data.PrecioCosto || 0;
 
+<<<<<<< HEAD
         const resTodos = await api.get('/Productos');
         
         listaMateriasPrimas.value = resTodos.data.filter(p => 
@@ -94,6 +126,10 @@ onMounted(async () => {
             (p.esMateriaPrima || p.EsMateriaPrima) &&
             !isRecuperado(p) 
         ).sort((a, b) => getNombre(a).localeCompare(getNombre(b)));
+=======
+        const resMP = await axios.get(`${apiBase}/Productos/materias-primas`, getConfig());
+        listaMateriasPrimas.value = resMP.data.filter(mp => mp.id !== Number(id));
+>>>>>>> master
 
     } catch (e) {
         console.error(e);
@@ -104,8 +140,14 @@ onMounted(async () => {
     }
 });
 
+<<<<<<< HEAD
 const procesarIngresoIngrediente = (idInsumo, cantidadAingresar) => {
     if (!idInsumo) return Alertas.advertencia("Seleccione un insumo.");
+=======
+// --- LÓGICA DE RECETA ---
+const agregarIngrediente = () => {
+    if (!ingredienteSeleccionado.value) return alert("Seleccione una materia prima.");
+>>>>>>> master
     
     const cantidad = Number(cantidadAingresar);
     if (!cantidad || cantidad <= 0) return Alertas.advertencia("Ingrese un porcentaje válido.");
@@ -114,6 +156,7 @@ const procesarIngresoIngrediente = (idInsumo, cantidadAingresar) => {
         return Alertas.advertencia(`⚠️ No puedes agregar ${cantidad}%. El total superaría el 100% (Actual: ${totalPorcentaje.value}%).`);
     }
 
+<<<<<<< HEAD
     const mpInfo = listaMateriasPrimas.value.find(m => m.id === idInsumo);
     const existe = producto.value.receta.find(r => r.materiaPrimaId === idInsumo);
     
@@ -127,6 +170,12 @@ const procesarIngresoIngrediente = (idInsumo, cantidadAingresar) => {
         });
     }
 };
+=======
+    const mpInfo = listaMateriasPrimas.value.find(m => m.id === ingredienteSeleccionado.value);
+    const existe = producto.value.receta.find(r => r.materiaPrimaId === ingredienteSeleccionado.value);
+    
+    if (existe) return alert("Esta materia prima ya está en la receta.");
+>>>>>>> master
 
 const agregarIngredienteSimple = () => {
     procesarIngresoIngrediente(ingredienteSeleccionado.value, cantidadIngrediente.value);
@@ -144,6 +193,41 @@ const quitarIngrediente = (index) => {
     producto.value.receta.splice(index, 1);
 };
 
+<<<<<<< HEAD
+=======
+// --- FUNCIÓN ELIMINAR
+const eliminarProducto = async () => {
+    if (!confirm(`⚠️ ¿Estás SEGURO de eliminar "${producto.value.nombre}"?\n\nEsta acción borrará:\n- El producto\n- Sus movimientos de stock\n- Su fórmula (si es prod. terminado)`)) {
+        return;
+    }
+
+    guardando.value = true;
+
+    try {
+        const response = await axios.delete(`${apiBase}/Productos/eliminar/${producto.value.id}`, getConfig());
+        
+        alert(response.data.mensaje);
+        router.push('/productos'); 
+
+    } catch (e) {
+        console.error(e);
+        const msgBackend = e.response?.data?.mensaje;
+        const msgGeneral = e.message;
+
+        if (msgBackend) {
+            alert(msgBackend);
+        } else if (e.response?.status === 404) {
+            alert("❌ El producto no se encontró (quizás ya fue borrado).");
+            router.push('/');
+        } else {
+            alert("❌ Error al eliminar: " + msgGeneral);
+        }
+    } finally {
+        guardando.value = false;
+    }
+};
+// --- FUNCIÓN GUARDAR ---
+>>>>>>> master
 const guardarConfiguracion = async () => {
     if (producto.value.esProductoTerminado && totalPorcentaje.value !== 100) {
         return Alertas.advertencia(`⚠️ La receta debe sumar exactamente 100%. Actual: ${totalPorcentaje.value}%`);
@@ -157,8 +241,12 @@ const guardarConfiguracion = async () => {
         const payload = {
             stockMinimo: Number(producto.value.stockMinimo),
             pesoEspecifico: Number(producto.value.pesoEspecifico),
+<<<<<<< HEAD
             precioCosto: Number(producto.value.precioCosto),
             rubro: producto.value.rubro,
+=======
+            stockActual: Number(producto.value.stockActual), // Stock editable
+>>>>>>> master
             esMateriaPrima: producto.value.esMateriaPrima,
             esProductoTerminado: producto.value.esProductoTerminado,
             esFazon: producto.value.esFazon,
@@ -168,9 +256,15 @@ const guardarConfiguracion = async () => {
             }))
         };
 
+<<<<<<< HEAD
         await api.put(`/Productos/configurar/${producto.value.id}`, payload);
         
         Alertas.exito("Configuración guardada correctamente.");
+=======
+        await axios.put(`${apiBase}/Productos/configurar/${producto.value.id}`, payload, getConfig());
+        
+        alert("✅ Datos actualizados correctamente.");
+>>>>>>> master
         router.back();
         
     } catch (e) {
@@ -183,11 +277,7 @@ const guardarConfiguracion = async () => {
 };
 
 const volver = () => {
-    if (window.history.length > 1) {
-        router.back(); 
-    } else {
-        router.push('/'); 
-    }
+    if (window.history.length > 1) { router.back(); } else { router.push('/'); }
 };
 </script>
 
@@ -225,14 +315,21 @@ const volver = () => {
             </div>
 
             <div class="seccion-box">
+<<<<<<< HEAD
                 <h4>📊 Parámetros Técnicos y Comerciales</h4>
                 <div class="grid-2">
+=======
+                <h4>📊 Inventario y Datos Técnicos</h4>
+                
+                <div class="grid-3">
+>>>>>>> master
                     <div class="campo">
                         <label>SKU (Flexxus)</label>
                         <input type="text" v-model="producto.codigoSku" disabled class="input-readonly">
                     </div>
                     
                     <div class="campo">
+<<<<<<< HEAD
                         <label>🏷️ Rubro <span v-if="producto.esMateriaPrima" style="color:red">*</span></label>
                         <select v-model="producto.rubro" :class="{'input-error': faltaRubro}">
                             <option value="" disabled>-- Seleccionar Rubro --</option>
@@ -273,6 +370,28 @@ const volver = () => {
                         <input type="number" v-model.number="producto.stockMinimo" placeholder="Ej: 100">
                     </div>
                 </div>
+=======
+                        <label>📦 Stock Actual (Kg)</label>
+                        <div class="input-stock-wrapper">
+                            <input type="number" v-model.number="producto.stockActual" class="input-stock" step="0.01">
+                        </div>
+                    </div>
+
+                    <div class="campo">
+                        <label>⚠️ Stock Mínimo (Alerta)</label>
+                        <input type="number" v-model.number="producto.stockMinimo" placeholder="Ej: 100">
+                    </div>
+                </div>
+
+                <div class="campo mt-2">
+                    <label>🧪 Peso Específico (g/cm³)</label>
+                    <div class="input-group">
+                        <input type="number" v-model.number="producto.pesoEspecifico" step="0.0001">
+                        <span class="unit">g/cm³</span>
+                    </div>
+                    <small>Usado para calcular rendimiento.</small>
+                </div>
+>>>>>>> master
             </div>
 
             <div v-if="producto.esProductoTerminado" class="seccion-box">
@@ -336,7 +455,11 @@ const volver = () => {
                                 </td>
                             </tr>
                             <tr v-if="producto.receta.length === 0">
+<<<<<<< HEAD
                                 <td colspan="3" class="text-center text-muted">Aún no hay ingredientes.</td>
+=======
+                                <td colspan="3" class="text-center text-muted">Agregue materias primas para completar el 100%.</td>
+>>>>>>> master
                             </tr>
                         </tbody>
                     </table>
@@ -344,13 +467,28 @@ const volver = () => {
             </div>
 
             <div class="footer-actions">
+<<<<<<< HEAD
                 <button @click="volver" class="btn-cancelar" :disabled="guardando">Cancelar</button>
                 <button @click="guardarConfiguracion" class="btn-guardar" :disabled="!puedeGuardar">
                     <span v-if="guardando">Guardando...</span>
                     <span v-else-if="faltaPrecioCosto || faltaRubro">⚠️ Faltan Datos Obligatorios</span>
                     <span v-else-if="!puedeGuardar">⚠️ Complete el 100%</span>
                     <span v-else>💾 Guardar Todo</span>
+=======
+                <button @click="eliminarProducto" class="btn-eliminar" :disabled="guardando">
+                    🗑️ Eliminar Producto
+>>>>>>> master
                 </button>
+
+                <div class="acciones-derecha">
+                    <button @click="volver" class="btn-cancelar" :disabled="guardando">Cancelar</button>
+                    
+                    <button @click="guardarConfiguracion" class="btn-guardar" :disabled="!puedeGuardar">
+                        <span v-if="guardando">Guardando...</span>
+                        <span v-else-if="!puedeGuardar">⚠️ Complete 100%</span>
+                        <span v-else>💾 Guardar Cambios</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -358,7 +496,18 @@ const volver = () => {
 
 <style scoped>
 .container-edit { display: flex; justify-content: center; padding: 20px; background: #f4f6f8; min-height: 100vh; font-family: 'Segoe UI', sans-serif; }
+<<<<<<< HEAD
 .card-edit { background: white; width: 900px; max-width: 95vw; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+=======
+.card-edit { 
+    background: white; 
+    width: 900px; 
+    max-width: 95vw;
+    padding: 30px; 
+    border-radius: 8px; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+}
+>>>>>>> master
 
 .header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
 .header h2 { margin: 0; color: #2c3e50; }
@@ -378,27 +527,52 @@ const volver = () => {
 .seccion-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 20px; margin-bottom: 20px; }
 .seccion-box h4 { margin-top: 0; color: #3498db; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
 
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+/* GRID DE 3 COLUMNAS */
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+
 .campo { display: flex; flex-direction: column; }
 .campo label { font-weight: bold; margin-bottom: 5px; color: #555; font-size: 0.9em; }
 .campo input, .campo select { padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; font-family: inherit; }
 .input-readonly { background: #e9ecef; color: #666; cursor: not-allowed; }
-.mt-2 { margin-top: 15px; }
 
+<<<<<<< HEAD
 .input-error { border: 2px solid #e74c3c !important; background-color: #fdf2f1; }
 .text-error { color: #e74c3c; font-size: 0.8em; font-weight: bold; margin-top: 4px; }
 .input-group { position: relative; display: flex; align-items: center; }
+=======
+/* ESTILO INPUT STOCK */
+.input-stock {
+    border: 2px solid #3498db !important;
+    background-color: #f0f8ff;
+    font-weight: bold;
+    color: #2c3e50;
+    width: 100%;
+    box-sizing: border-box;
+}
+.input-stock:focus { box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); outline: none; }
+
+.mt-2 { margin-top: 15px; }
+.input-group { position: relative; }
+>>>>>>> master
 .input-group input { width: 100%; padding-right: 50px; box-sizing: border-box; }
 .input-money { padding-left: 30px !important; font-weight: bold; color: #27ae60; }
 .unit { position: absolute; right: 10px; color: #999; }
 .unit-left { position: absolute; left: 12px; color: #27ae60; font-weight: bold; font-size: 1.1em; }
 
+<<<<<<< HEAD
+=======
+/* RECETA */
+>>>>>>> master
 .header-receta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
 .total-badge { font-weight: bold; padding: 5px 15px; border-radius: 20px; font-size: 0.9em; }
 .total-badge.ok { background: #27ae60; color: white; }
 .total-badge.error { background: #c0392b; color: white; animation: pulse 2s infinite; }
+<<<<<<< HEAD
 
 .buscador-receta { display: flex; gap: 10px; margin-bottom: 15px; background: white; padding: 10px; border: 1px solid #eee; border-radius: 6px; align-items: center; }
+=======
+.buscador-receta { display: flex; gap: 10px; margin-bottom: 15px; background: white; padding: 10px; border: 1px solid #eee; border-radius: 6px; }
+>>>>>>> master
 .select-mp { flex-grow: 1; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; }
 .input-cant { width: 100px; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; text-align: center; }
 .btn-add { background: #27ae60; color: white; border: none; border-radius: 4px; width: 50px; height: 40px; cursor: pointer; font-size: 1.4em; transition: background 0.2s; }
@@ -425,7 +599,20 @@ const volver = () => {
 .btn-x { background: none; border: none; color: #c0392b; font-weight: bold; cursor: pointer; font-size: 1.4em; }
 .btn-x:hover { color: #e74c3c; transform: scale(1.1); }
 
-.footer-actions { display: flex; justify-content: flex-end; gap: 15px; border-top: 1px solid #eee; padding-top: 20px; }
+/* FOOTER ACTIONS */
+.footer-actions { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+    border-top: 1px solid #eee; 
+    padding-top: 20px; 
+}
+.acciones-derecha { display: flex; gap: 15px; }
+
+.btn-eliminar { padding: 12px 20px; border: 1px solid #e74c3c; background: #fff; color: #e74c3c; border-radius: 4px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
+.btn-eliminar:hover:not(:disabled) { background: #e74c3c; color: white; }
+.btn-eliminar:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .btn-cancelar { padding: 12px 25px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer; font-weight: bold; color: #666; }
 .btn-guardar { padding: 12px 30px; border: none; background: #3498db; color: white; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1em; transition: background 0.3s; }
 .btn-guardar:disabled { background: #bdc3c7; cursor: not-allowed; }
@@ -434,6 +621,13 @@ const volver = () => {
 .text-center { text-align: center; }
 .text-muted { color: #999; font-style: italic; padding: 20px; }
 .font-bold { font-weight: bold; color: #2c3e50; }
+
+@media (max-width: 768px) {
+    .grid-3 { grid-template-columns: 1fr; }
+    .footer-actions { flex-direction: column-reverse; gap: 15px; }
+    .acciones-derecha { width: 100%; justify-content: space-between; }
+    .btn-eliminar { width: 100%; }
+}
 
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.8; } 100% { opacity: 1; } }
 </style>

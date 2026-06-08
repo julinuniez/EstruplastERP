@@ -15,7 +15,7 @@ namespace EstruplastERP.Api.Controllers
     public class AuthController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
-        private readonly IConfiguration _configuration; // Para leer el appsettings
+        private readonly IConfiguration _configuration; 
 
         public AuthController(ApplicationDbContext context, IConfiguration configuration)
         {

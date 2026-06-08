@@ -36,7 +36,11 @@ const cargando = ref(false)
 const error = ref('')
 const remitoParaImprimir = ref<Remito | null>(null)
 
+<<<<<<< HEAD
 const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
+=======
+const apiUrl = '/api'; 
+>>>>>>> master
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');

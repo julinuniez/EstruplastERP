@@ -11,6 +11,7 @@ import { useFiltrosProduccion } from '@/composables/useFiltrosProduccion';
 import { useFazonProduccion } from '@/composables/useFazonProduccion';
 import { useGuardadoProduccion } from '@/composables/useGuardadoProduccion';
 
+<<<<<<< HEAD
 interface Producto {
     id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean;
     esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; esScrap?: boolean; rubro?: string;
@@ -25,6 +26,21 @@ interface ItemReceta {
     esBrillo?: boolean; esEstearato?: boolean; esUv?: boolean; esCaucho?: boolean;
     esFazonInput?: boolean; materialBase?: string;
     kilosFijos?: number | string;
+=======
+// CONFIGURACIÓN
+const apiUrl = import.meta.env.VITE_API_URL || '/api'; 
+const DENSIDAD_DEFAULT = 1.1;
+const ID_MASTERBATCH_GENERICO = 90; 
+const PESO_LATA_KG = 0.150;        
+const KILOS_BASE_LATA = 25;
+// INTERFACES
+interface Producto { 
+    id: number; nombre: string; CodigoSku: string; esProductoTerminado: boolean; 
+    esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; rubro?: string;           
+    largo: number; ancho: number; espesor: number; pesoEspecifico: number; color?: string; receta?: any[];
+    espesorMinimo?: number; espesorMaximo?: number;
+    clienteId?: number; 
+>>>>>>> master
 }
 
 const loading = ref(false);
@@ -302,6 +318,7 @@ async function CargarDatosProductos(id: number) {
             if (typeof balancearBase === 'function') balancearBase();
         }
 
+<<<<<<< HEAD
         if (!form.value.largo || form.value.largo === 0) {
             form.value.esBobina = (prod.nombre || '').toUpperCase().includes('BOBINA');
             form.value.largo = form.value.esBobina ? 0 : Number(prod.largo || prod.Largo || 0);
@@ -320,6 +337,33 @@ async function CargarDatosProductos(id: number) {
 
     } catch (e) { 
         console.error("Error cargando datos maestros:", e); 
+=======
+async function actualizarRecetaFazonConCliente(clienteId: string | number, producto: Producto) {
+    if (!clienteId || !producto) return;
+    const itemFazon = recetaDinamica.value.find(r => r.esFazonInput);
+    if (!itemFazon) return;
+    const materialesCliente = listaInventarioCompleto.value.filter((p: any) => p.esMateriaPrima && p.clienteId == clienteId);
+    if (materialesCliente.length === 0) { itemFazon.nombreInsumo = "⚠️ CLIENTE SIN STOCK DE MP"; stockFazonDetectado.value = 0; return; }
+    let materialElegido = null;
+    const nombreProd = producto.nombre.toUpperCase();
+    const reglas = [ { key: "TUTTI", match: ["TUTTI", "MEZCLA", "RECUPERADO"] }, { key: "GRUESO", match: ["GRUESO", "GRU", "GSO", "AI"] }, { key: "FINO", match: ["FINO", "FIN", "LAM", "AI"] }, { key: "ABS", match: ["ABS"] }, { key: "PEAD", match: ["PEAD", "AD", "ALTA"] }, { key: "PEBD", match: ["PEBD", "BAJA"] }, { key: "PP", match: ["PP", "POLIPROPILENO"] } ];
+    const regla = reglas.find(r => nombreProd.includes(r.key));
+    if (regla) {
+        materialElegido = materialesCliente.find(m => {
+            const txt = (m.nombre + (m.CodigoSku||'')).toUpperCase();
+            return regla.match.some(palabra => txt.includes(palabra));
+        });
+    }
+    if (!materialElegido && (nombreProd.includes("A.I.") || nombreProd.includes("IMPACTO"))) { materialElegido = materialesCliente.find(m => m.nombre.toUpperCase().includes("AI") || m.nombre.toUpperCase().includes("IMPACTO")); }
+    if (!materialElegido && materialesCliente.length > 0) { materialElegido = materialesCliente[0]; }
+    if (materialElegido) {
+        const clienteObj = clientes.value.find(c => c.id == clienteId);
+        const nombreCli = clienteObj ? clienteObj.razonSocial : 'CLIENTE';
+        itemFazon.materiaPrimaId = materialElegido.id;
+        itemFazon.nombreInsumo = `MP: ${materialElegido.nombre} (${nombreCli})`;
+        itemFazon.densidad = materialElegido.pesoEspecifico;
+        stockFazonDetectado.value = materialElegido.stockActual;
+>>>>>>> master
     }
 }
 

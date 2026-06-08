@@ -49,6 +49,7 @@ const form = ref({
 const mensaje = ref('')
 const error = ref('')
 
+<<<<<<< HEAD
 const formatearFecha = (fechaOriginal: string | null | undefined) => {
     if (!fechaOriginal) return '-';
     try {
@@ -58,6 +59,13 @@ const formatearFecha = (fechaOriginal: string | null | undefined) => {
     } catch {
         return '-';
     }
+=======
+const apiUrl = import.meta.env.VITE_API_URL || '/api'; 
+
+const getAuthConfig = () => {
+    const token = localStorage.getItem('token');
+    return { headers: { Authorization: `Bearer ${token}` } };
+>>>>>>> master
 };
 
 // Reiniciar a la página 1 cuando se cambian los filtros
