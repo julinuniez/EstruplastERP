@@ -3,6 +3,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import axios from 'axios'
 // @ts-ignore
 import html2pdf from 'html2pdf.js'
+import { Alertas } from '@/utils/alertas';
 
 // --- INTERFACES ---
 interface Cliente {
@@ -24,7 +25,6 @@ interface Remito {
   fecha: string;
   clienteId: number;
   cliente?: Cliente;
-  // Propiedad de respaldo por si el cliente es null (borrado)
   clienteNombreBackup?: string; 
   observacion?: string;
   items?: RemitoItem[]; 
@@ -36,7 +36,11 @@ const cargando = ref(false)
 const error = ref('')
 const remitoParaImprimir = ref<Remito | null>(null)
 
+<<<<<<< HEAD
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
+=======
 const apiUrl = '/api'; 
+>>>>>>> master
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');
@@ -50,7 +54,7 @@ async function cargarHistorial() {
         const res = await axios.get(`${apiUrl}/Remitos`, getAuthConfig());
         remitos.value = res.data.map((r: any) => ({
             ...r,
-            items: r.remitoDetalles || r.items 
+            items: r.items || r.detalles || [] // Aseguramos compatibilidad
         }));
     } catch (e: any) {
         console.error(e);
@@ -60,24 +64,24 @@ async function cargarHistorial() {
     }
 }
 
-// --- GENERAR PDF ---
 async function descargarPDF(remito: Remito) {
     remitoParaImprimir.value = remito;
     await nextTick();
 
-    const opt: any = {
+    const opt = {
         margin:       0, 
-        filename:     `Remito-${remito.id}-${remito.cliente?.razonSocial || 'Cliente'}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { 
-            scale: 2, 
-            useCORS: true, 
-            scrollY: 0 
-        },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        filename:     `Remito-${remito.id.toString().padStart(4,'0')}.pdf`,
+        image:        { type: 'jpeg' as const, quality: 0.98 }, 
+        html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
+        jsPDF:        { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const } // ✅ Corrección TS
     };
-    const element = document.getElementById('remito-impresion');
-    html2pdf().set(opt).from(element!).save();
+
+    const element = document.getElementById('remito-imprimible');
+    if (element) {
+        await html2pdf().set(opt).from(element).save();
+    } else {
+        Alertas.error("Error generando el documento.");
+    }
 }
 
 onMounted(() => {
@@ -143,11 +147,11 @@ onMounted(() => {
                 <div class="empresa-info">
                     <h1>ESTRUPLAST</h1>
                     <p>Fábrica de Plásticos</p>
-                    <p>Dirección de la fábrica, Buenos Aires</p>
+                    <p>Carlos Spegazzini, Buenos Aires</p>
                     <p>Tel: (011) 1234-5678</p>
                 </div>
                 <div class="remito-info">
-                    <h2>REMITO</h2>
+                    <div class="box-titulo">REMITO</div>
                     <div class="box-numero">N° {{ remitoParaImprimir.id.toString().padStart(8, '0') }}</div>
                     <p><strong>Fecha:</strong> {{ new Date(remitoParaImprimir.fecha).toLocaleDateString() }}</p>
                 </div>
@@ -178,7 +182,7 @@ onMounted(() => {
                         </td>
                         <td>-</td>
                     </tr>
-                    <tr v-for="n in (10 - (remitoParaImprimir.items?.length || 0))" :key="n" class="fila-vacia">
+                    <tr v-for="n in Math.max(0, 10 - (remitoParaImprimir.items?.length || 0))" :key="n" class="fila-vacia">
                         <td>&nbsp;</td><td></td><td></td>
                     </tr>
                 </tbody>
@@ -210,19 +214,17 @@ onMounted(() => {
 
 <style scoped>
 /* =================================================================
-   ESTILOS DE PANTALLA
+   ESTILOS DE PANTALLA (Tu diseño actual)
    ================================================================= */
 .contenedor-historial { padding: 25px; background: #f8f9fa; border-radius: 8px; min-height: 500px; font-family: 'Segoe UI', sans-serif; }
 .header-seccion { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid #e9ecef; padding-bottom: 15px; }
 h2 { margin: 0; color: #2c3e50; font-size: 1.5rem; }
 .botones { display: flex; gap: 12px; }
 
-/* Botones */
 .btn-recargar { background: #95a5a6; color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: 600; }
 .btn-nuevo { background: #27ae60; color: white; text-decoration: none; padding: 10px 18px; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block; border: none; cursor: pointer; }
 .btn-nuevo:hover { background: #219150; }
 
-/* Tabla */
 .tabla-container { overflow-x: auto; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e1e1e1; }
 table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 th { background: #34495e; color: white; padding: 15px; text-align: left; text-transform: uppercase; font-size: 0.85rem; }
@@ -239,8 +241,9 @@ tr:hover { background-color: #f8f9fa; }
 
 
 /* =================================================================
-   ESTILOS DEL PDF (A4 OCULTO) - SOLUCIÓN ANCHO Y DOBLE HOJA
+   ESTILOS DEL PDF (DISEÑO A4)
    ================================================================= */
+/* 1. Ocultar el contenedor del PDF para que no se vea en la pantalla normal */
 .contenedor-impresion {
     position: fixed;
     left: -9999px;
@@ -248,52 +251,48 @@ tr:hover { background-color: #f8f9fa; }
     z-index: -1;
 }
 
+/* 2. Diseño de la hoja A4 */
 #remito-imprimible {
-    width: 209mm; 
-    min-height: 290mm;
+    width: 210mm; 
+    min-height: 297mm;
     background: white;
     padding: 15mm; 
-    
     font-family: 'Helvetica', 'Arial', sans-serif;
     color: #000;
-    
-    /* 4. CLAVE: Box-sizing para que el padding no sume al width */
     box-sizing: border-box; 
-    
     border: none;
     position: relative;
-    overflow: hidden;
 }
 
 .pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
 .empresa-info h1 { margin: 0 0 5px 0; font-size: 26px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
 .empresa-info p { margin: 2px 0; font-size: 11px; color: #333; }
+
 .remito-info { text-align: right; min-width: 150px; }
-.remito-info h2 { margin: 0 0 10px 0; font-size: 22px; background: #f1f1f1; padding: 6px 15px; display: inline-block; border-radius: 4px; border: 1px solid #ddd; }
-.box-numero { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+.box-titulo { background: #eee; padding: 5px 10px; font-weight: bold; border: 1px solid #000; display: inline-block; margin-bottom: 5px; font-size: 14px; }
+.box-numero { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
 
 .pdf-divider { border: 0; border-top: 2px solid #000; margin: 10px 0 20px 0; }
 
-.pdf-cliente { border: 1px solid #000; padding: 12px; border-radius: 4px; margin-bottom: 25px; background: #fff; }
-.pdf-cliente p { margin: 6px 0; font-size: 13px; line-height: 1.4; }
+.pdf-cliente { border: 1px solid #000; padding: 10px; border-radius: 0; margin-bottom: 25px; background: #fff; }
+.pdf-cliente p { margin: 4px 0; font-size: 12px; }
 
-.pdf-tabla { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+.pdf-tabla { width: 100%; border-collapse: collapse; margin-bottom: 40px; border: 1px solid #000; }
 .pdf-tabla th { background: #000; color: white; padding: 8px; font-size: 11px; text-transform: uppercase; border: 1px solid #000; text-align: center; }
-.pdf-tabla td { border: 1px solid #000; padding: 10px 8px; font-size: 12px; vertical-align: middle; }
+.pdf-tabla td { border: 1px solid #000; padding: 8px; font-size: 12px; vertical-align: middle; }
 .pdf-tabla .center { text-align: center; }
 .fila-vacia td { height: 25px; border-bottom: 1px solid #000; }
 
 .pdf-footer { 
     position: absolute;
-    bottom: 15mm; /* Mismo valor que tu padding general */
+    bottom: 15mm; 
     left: 15mm;
     right: 15mm;
-    margin-top: 0; 
 }
-.observaciones { border: 1px solid #000; padding: 10px; min-height: 50px; margin-bottom: 60px; font-size: 11px; }
-.firmas { display: flex; justify-content: space-between; margin-top: 50px; padding: 0 20px; }
+.observaciones { border: 1px solid #000; padding: 10px; min-height: 40px; margin-bottom: 40px; font-size: 11px; }
+.firmas { display: flex; justify-content: space-between; margin-top: 20px; padding: 0 20px; }
 .firma-box { text-align: center; width: 40%; }
-.linea { border-top: 1px solid #000; margin-bottom: 8px; }
-.firma-box p { font-size: 11px; color: #000; margin: 0; font-weight: bold; }
-.nota-legal { text-align: center; font-size: 9px; color: #555; margin-top: 40px; border-top: 1px solid #ccc; padding-top: 5px; }
+.linea { border-top: 1px solid #000; margin-bottom: 5px; }
+.firma-box p { font-size: 10px; font-weight: bold; }
+.nota-legal { text-align: center; font-size: 9px; color: #555; margin-top: 20px; border-top: 1px solid #ccc; padding-top: 5px; }
 </style>

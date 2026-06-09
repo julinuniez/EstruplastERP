@@ -19,16 +19,8 @@ namespace EstruplastERP.Core
         [MaxLength(50)]
         public string TipoMovimiento { get; set; } = string.Empty;
 
-        [MaxLength(20)]
-        public string? Turno { get; set; } // "Mañana", "Tarde", "Noche"
-
         [MaxLength(200)]
         public string? Observacion { get; set; }
-
-        public int? EmpleadoId { get; set; }
-
-        [ForeignKey("EmpleadoId")]
-        public Empleado? Empleado { get; set; }
 
         public int? ClienteId { get; set; }
         [ForeignKey("ClienteId")]
@@ -40,13 +32,10 @@ namespace EstruplastERP.Core
 
         [MaxLength(50)]
         public string? NumeroRemito { get; set; }
-        [MaxLength(50)]
-        public string? LoteProveedor { get; set; }
+        public int? OrdenProduccionId { get; set; }
 
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal PrecioUnitario { get; set; } = 0;
+        [ForeignKey("OrdenProduccionId")]
+        public OrdenProduccion? OrdenProduccion { get; set; }
 
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal PrecioTotal { get; set; } = 0;
     }
 }

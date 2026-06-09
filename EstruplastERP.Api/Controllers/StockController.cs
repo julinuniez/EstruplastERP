@@ -39,8 +39,7 @@ namespace EstruplastERP.Api.Controllers
                 ProductoId = ingreso.ProductoId,
                 Cantidad = ingreso.Cantidad,
                 TipoMovimiento = "COMPRA_INSUMO",
-                Observacion = $"Prov: {ingreso.Proveedor}",
-                Turno = "General"
+                Observacion = $"Prov: {ingreso.Proveedor}"
             });
 
             await _context.SaveChangesAsync();
@@ -88,10 +87,7 @@ namespace EstruplastERP.Api.Controllers
                     ProductoId = ajuste.ProductoId,
                     Cantidad = diferencia,
                     TipoMovimiento = "AJUSTE_INVENTARIO",
-                    Observacion = $"Ajuste: {ajuste.Motivo}",
-                    Turno = "Administracion",
-                    PrecioUnitario = producto.PrecioCosto,
-                    PrecioTotal = producto.PrecioCosto * Math.Abs(diferencia)
+                    Observacion = $"Ajuste: {ajuste.Motivo}"
                 });
 
                 producto.StockActual = ajuste.CantidadReal;

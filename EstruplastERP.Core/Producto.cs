@@ -11,42 +11,21 @@ namespace EstruplastERP.Core
         [MaxLength(100)]
         public string Nombre { get; set; } = string.Empty;
 
-        [MaxLength(500)]
-        public string? Descripcion { get; set; }
-
         // Identificación
         [MaxLength(50)]
         public string? CodigoSku { get; set; } 
 
-        [MaxLength(50)]
-        public string? CodigoBarras { get; set; }
-        [MaxLength(50)]
-        public string? Color { get; set; } // Ej: "Gris Goff"
-
         public string? Rubro { get; set; }// Valores sugeridos: "VIRGEN", "SCRAP", "TUTTI", "ADITIVO", "MASTERBATCH"
+        public string? TipoMaterial { get; set; } // Ej: "PAI", "ABS", "BIO", "PP"
         public bool EsFazon { get; set; } = false;
         public bool EsScrap { get; set; } = false;
-
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal Largo { get; set; } // Ej: 1550
-
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal Ancho { get; set; } // Ej: 870
-
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal Espesor { get; set; } // Ej: 2,5
         public decimal? EspesorMinimo { get; set; }
         public decimal? EspesorMaximo { get; set; }
 
         [Column(TypeName = "decimal(18,4)")]
         public decimal PesoEspecifico { get; set; } = 1;
 
-        public int? ProductoPadreId { get; set; }
-
         [System.Text.Json.Serialization.JsonIgnore]
-        public Producto? ProductoPadre { get; set; }
-        // Inventario y Precios
-        [Column(TypeName = "decimal(18,2)")]
         public decimal StockActual { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
@@ -54,9 +33,11 @@ namespace EstruplastERP.Core
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal PrecioCosto { get; set; }
+        public int? ProveedorId { get; set; }
+        [ForeignKey("ProveedorId")]
+        public Proveedor? Proveedor { get; set; }
 
         // Datos Multimedia
-        public string? ImagenUrl { get; set; }
         public int? ClienteId { get; set; }
         public int? FamiliaId { get; set; }
 

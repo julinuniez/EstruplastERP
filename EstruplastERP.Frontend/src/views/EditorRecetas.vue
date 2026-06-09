@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
+import { Alertas } from '@/utils/alertas';
 
 // 1. DEFINIMOS LAS "PLANTILLAS" DE LOS DATOS (INTERFACES)
 interface Producto {
@@ -30,7 +31,7 @@ const formIngrediente = ref({
 const error = ref('')
 const cargando = ref(false)
 
-const apiUrl = 'https://localhost:7244/api' 
+const apiUrl = 'https://localhost:5122/api' 
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');
@@ -76,7 +77,7 @@ async function cargarReceta(id: any) {
 
 async function agregarIngrediente() {
   if (!formIngrediente.value.materiaPrimaId || formIngrediente.value.cantidad <= 0) {
-      alert("Datos inválidos.")
+      Alertas.advertencia("Datos inválidos.")
       return
   }
 
@@ -91,7 +92,7 @@ async function agregarIngrediente() {
     await cargarReceta(prodSeleccionado.value) 
     formIngrediente.value.cantidad = 0
   } catch (e: any) {
-    alert("Error: " + (e.response?.data || e.message))
+    Alertas.error("Error: " + (e.response?.data || e.message))
   }
 }
 
@@ -100,7 +101,7 @@ async function borrarIngrediente(id: number) {
   try {
       await axios.delete(`${apiUrl}/Formulas/${id}`, getAuthConfig())
       cargarReceta(prodSeleccionado.value)
-  } catch (e: any) { alert(e.message) }
+  } catch (e: any) { Alertas.error(e.message) }
 }
 </script>
 

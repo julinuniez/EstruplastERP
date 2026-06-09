@@ -60,9 +60,7 @@ namespace EstruplastERP.Controllers
                 Cantidad = dto.Kilos, // Positivo porque entra
                 TipoMovimiento = "INGRESO_SCRAP",
                 ClienteId = cliente.Id,
-                Observacion = $"Ingreso Scrap Sucio - Remito: {dto.Remito}",
-                PrecioUnitario = 0,
-                PrecioTotal = 0
+                Observacion = $"Ingreso Scrap Sucio - Remito: {dto.Remito}"
             };
             _context.Movimientos.Add(movimiento);
 

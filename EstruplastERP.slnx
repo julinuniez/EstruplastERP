@@ -2,4 +2,7 @@
   <Project Path="EstruplastERP.Api/EstruplastERP.Api.csproj" />
   <Project Path="EstruplastERP.Core/EstruplastERP.Core.csproj" />
   <Project Path="EstruplastERP.Data/EstruplastERP.Data.csproj" />
+  <Project Path="EstruplastERP.Tests/EstruplastERP.Tests.csproj" Id="eb2d8ddc-21c4-496b-8019-2f04d53b67c8">
+    <Build Solution="Debug|*" Project="false" />
+  </Project>
 </Solution>

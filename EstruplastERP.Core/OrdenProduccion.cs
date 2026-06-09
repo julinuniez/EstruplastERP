@@ -8,35 +8,68 @@ namespace EstruplastERP.Core
         Cancelada = -1,
         Pendiente = 0,
         EnProceso = 1,
-        Finalizada = 2
+        Finalizada = 2,
+        MaterialPreparado = 3 
     }
+
+    public enum EstadoHojaCarga
+    {
+        Cancelada = -1,
+        Pendiente = 0,             
+        ConsumosDeclarados = 1    
+    }
+
     public class OrdenProduccion
     {
-            public int Id { get; set; }
+        public int Id { get; set; }
 
-            public int ProductoId { get; set; }
-            public Producto Producto { get; set; }
-            public decimal Cantidad { get; set; }
+        public string NumeroPedidoCliente { get; set; }
+        public string? NotaPedido { get; set; }
 
-            // --- NUEVOS CAMPOS (Estos son los que te faltan) ---
-            public int? ClienteId { get; set; }
+        public int ProductoId { get; set; }
+        public Producto Producto { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Cantidad { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Largo { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Ancho { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Espesor { get; set; }
+
+        public string? Color { get; set; }
+
+        public int? ClienteId { get; set; }
         [ForeignKey("ClienteId")]
         public Cliente? Cliente { get; set; }
-        public int? EmpleadoId { get; set; } // Puede ser nulo si nadie la tomó aún
-        [ForeignKey("EmpleadoId")]
-        public virtual Empleado Empleado { get; set; }
-        public string Turno { get; set; }
-            public string Observacion { get; set; }
+        public string Observacion { get; set; }
 
-            [Column(TypeName = "decimal(18,4)")]
-            public decimal KilosEstimados { get; set; }
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal KilosEstimados { get; set; }
 
-            // ✅ ESTA ES LA PROPIEDAD QUE TE DA ERROR:
-            public EstadoOrden Estado { get; set; } = EstadoOrden.Pendiente;
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Desperdicio { get; set; } = 8;
+        public EstadoOrden Estado { get; set; } = EstadoOrden.Pendiente;
+        public bool EsBobina { get; set; } = false;
+        public bool ConBrillo { get; set; }
+        public bool LlevaFilm { get; set; }
+        public bool EsGofrado { get; set; }
+        public bool AditivoUV { get; set; }
+        public string? TipoCorona { get; set; } = "Ninguno";
+        public bool EsImpreso { get; set; } = false;
+        public DateTime FechaCreacion { get; set; } = DateTime.Now;
+        public DateTime? FechaFin { get; set; }
 
-            public DateTime FechaCreacion { get; set; } = DateTime.Now;
-            public DateTime? FechaFin { get; set; }
+        // 🚀 NUEVA RELACIÓN: Conexión opcional a un pastón/mezcla
+        public int? HojaCargaId { get; set; }
+        [ForeignKey("HojaCargaId")]
+        public HojaCarga? HojaCarga { get; set; }
+        public ICollection<PalletProduccion> Pallets { get; set; } = new List<PalletProduccion>();
 
-            public List<ConsumoOrden> Consumos { get; set; } = new List<ConsumoOrden>();
+        public List<ConsumoOrden> Consumos { get; set; } = new List<ConsumoOrden>();
     }
 }

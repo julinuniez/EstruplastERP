@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import axios from 'axios';
+import { ref, onMounted } from 'vue';
+import axios from 'axios'
+import { Alertas } from '@/utils/alertas';
 
 // --- 1. INTERFACES (Tipado Estricto) ---
 interface Producto {
@@ -31,7 +32,7 @@ const carrito = ref<ItemCarrito[]>([]);
 const cargando = ref(false);
 
 const datosRemito = ref({
-    clienteId: '' as number | '', // Usamos ID para vincular correctamente
+    clienteId: '' as number | '', 
     numero: '',
     fecha: new Date().toISOString().split('T')[0] // Por defecto Hoy
 });
@@ -40,10 +41,14 @@ const datosRemito = ref({
 const itemTemporal = ref({
     productoId: null as number | null,
     cantidad: '' as number | '',
-    detalle: '' // Aquí escribes "Rojo", "40 micrones", etc.
+    detalle: '' 
 });
 
+<<<<<<< HEAD
+const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
+=======
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
+>>>>>>> master
 
 // --- HELPER TOKEN ---
 const getAuthConfig = () => {
@@ -61,11 +66,10 @@ async function cargarProductos() {
     try {
         const res = await axios.get(`${apiUrl}/Productos`, getAuthConfig());
         const todos: Producto[] = res.data;
-        // Filtramos solo productos terminados (Bobinas, Bolsas, Materiales para venta)
         listaProductosTerminados.value = todos.filter(p => p.esProductoTerminado);
     } catch (e: any) { 
         console.error("Error productos:", e);
-        if (e.response?.status === 401) alert("Sesión expirada");
+        if (e.response?.status === 401) Alertas.error("Sesión expirada");
     }
 }
 
@@ -90,16 +94,31 @@ async function crearClienteRapido() {
         const res = await axios.post(`${apiUrl}/Clientes`, payload, getAuthConfig());
         
         await cargarClientes(); 
-        // Auto-seleccionar el cliente recién creado
         if(res.data && res.data.id) {
             datosRemito.value.clienteId = res.data.id;
         }
-        alert("✅ Cliente agregado.");
+        Alertas.exito("✅ Cliente agregado.");
 
     } catch (e: any) { 
-        alert("Error al crear cliente: " + (e.response?.data?.mensaje || e.message)); 
+        Alertas.error("Error al crear cliente: " + (e.response?.data?.mensaje || e.message)); 
     }
 }
+
+// --- 🔥 NUEVO: AUTO-FORMATEO DE REMITO (0000-00000000) ---
+const formatearRemito = (evento: Event) => {
+    const input = evento.target as HTMLInputElement;
+    let valor = input.value.replace(/\D/g, ''); // Borrar todo lo que no sea número
+
+    // Limitar a 12 dígitos (4 + 8)
+    if (valor.length > 12) valor = valor.slice(0, 12);
+
+    // Aplicar máscara 0000-00000000
+    if (valor.length > 4) {
+        valor = valor.slice(0, 4) + '-' + valor.slice(4);
+    }
+
+    datosRemito.value.numero = valor; // Actualizar modelo
+};
 
 // --- LÓGICA CARRITO ---
 const agregarItem = () => {
@@ -108,24 +127,21 @@ const agregarItem = () => {
     const detalleTexto = itemTemporal.value.detalle.trim();
     
     if (!pid || cant <= 0) {
-        alert("Selecciona producto y cantidad válida.");
+        Alertas.advertencia("Selecciona producto y cantidad válida.");
         return;
     }
 
     const prod = listaProductosTerminados.value.find(p => p.id === pid);
     if (!prod) return;
     
-    // Agregamos al carrito con el detalle específico (NO sumamos si es distinto detalle)
-    // Ejemplo: 100kg PAI (Rojo) es distinto de 100kg PAI (Azul)
     carrito.value.push({
         productoId: pid,
         nombre: prod.nombre,
         sku: prod.codigoSku,
         cantidad: cant,
-        detalle: detalleTexto // ✅ Guardamos "Rojo" o "40 micrones"
+        detalle: detalleTexto 
     });
     
-    // Resetear input
     itemTemporal.value = { productoId: null, cantidad: '', detalle: '' };
 };
 
@@ -134,24 +150,22 @@ const quitarDelCarrito = (index: number) => {
 };
 
 const procesarRemito = async () => {
-    // 1. Validaciones básicas
-    if (carrito.value.length === 0) return alert("El remito está vacío.");
-    if (!datosRemito.value.clienteId) return alert("Seleccione un Cliente.");
+    if (carrito.value.length === 0) return Alertas.advertencia("El remito está vacío.");
+    if (!datosRemito.value.clienteId) return Alertas.advertencia("Seleccione un Cliente.");
 
-    // ✅ CORRECCIÓN: Ahora el Número de Remito es OBLIGATORIO
-    if (!datosRemito.value.numero) {
-        return alert("⚠️ Error: Debe ingresar el Número de Remito obligatoriamente.");
+    // Validación de formato estricta antes de enviar
+    const regex = /^\d{4}-\d{8}$/;
+    if (!datosRemito.value.numero || !regex.test(datosRemito.value.numero)) {
+        return Alertas.error("⚠️ Error: El N° de Remito debe tener el formato 0000-00000000 (4 dígitos, guion, 8 dígitos).");
     }
 
     cargando.value = true;
     try {
         const payload = {
             clienteId: datosRemito.value.clienteId, 
-            numeroRemito: datosRemito.value.numero, // Ahora sí se enviará siempre
+            numeroRemito: datosRemito.value.numero, 
             fecha: datosRemito.value.fecha,
             observacion: `Generado desde Despacho.`,
-            
-            // Mapeo de items (Producto, Cantidad y Detalle/Color)
             items: carrito.value.map(i => ({
                 productoId: i.productoId,
                 cantidad: i.cantidad,
@@ -159,25 +173,20 @@ const procesarRemito = async () => {
             }))
         };
 
-        // ✅ PETICIÓN AL BACKEND
-        // Asegúrate de que tu Controller tenga [Route("api/[controller]")] y la clase se llame RemitosController
         await axios.post(`${apiUrl}/Remitos`, payload, getAuthConfig());
 
-        alert("🚚 Despacho Exitoso! Stock descontado.");
+        Alertas.exito("🚚 Despacho Exitoso! Stock descontado.");
         
-        // --- Limpieza del formulario ---
         carrito.value = [];
         datosRemito.value.numero = '';
-        datosRemito.value.clienteId = ''; // Reseteamos el selector
+        datosRemito.value.clienteId = ''; 
         
-        // Actualizamos el stock visualmente para que se refleje el descuento
         await cargarProductos(); 
 
     } catch (e: any) {
         console.error(e);
-        // Manejo de errores detallado
-        const mensaje = e.response?.data?.mensaje || e.message || "Error desconocido";
-        alert("❌ Error al procesar: " + mensaje);
+        const mensaje = e.response?.data || e.message || "Error desconocido";
+        Alertas.error("❌ Error al procesar: " + mensaje);
     } finally {
         cargando.value = false;
     }
@@ -205,10 +214,22 @@ const procesarRemito = async () => {
                     <button @click="crearClienteRapido" class="btn-small" title="Nuevo Cliente">➕</button>
                 </div>
             </div>
+            
             <div>
-    <label>N° Remito <span style="color:red">*</span>:</label>
-    <input v-model="datosRemito.numero" type="text" placeholder="Ej: 0001-00005544">
-</div>
+                <label>N° Remito <span style="color:red">*</span>:</label>
+                <input 
+                    type="text" 
+                    :value="datosRemito.numero"
+                    @input="formatearRemito"
+                    placeholder="0001-00001234" 
+                    maxlength="13"
+                    class="input-remito"
+                />
+                <small v-if="datosRemito.numero && !/^\d{4}-\d{8}$/.test(datosRemito.numero)" style="color: #e74c3c; font-size: 0.8em; display: block; margin-top: 2px;">
+                    Formato requerido: 0000-00000000
+                </small>
+            </div>
+
             <div>
                 <label>Fecha:</label>
                 <input v-model="datosRemito.fecha" type="date">
@@ -294,6 +315,17 @@ const procesarRemito = async () => {
 .btn-small { background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 35px; }
 label { display: block; font-weight: bold; font-size: 0.9em; margin-bottom: 5px; }
 input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+
+/* Estilo especial para el input de remito */
+.input-remito {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    letter-spacing: 1px;
+    font-size: 1.1rem;
+    text-align: center;
+    border: 2px solid #3498db; /* Borde azul para destacar */
+}
+
 .fila-agregar { display: flex; gap: 10px; align-items: center; }
 .select-prod { flex-grow: 2; }
 .input-cant { width: 100px; }

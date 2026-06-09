@@ -8,6 +8,7 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 1. CONFIGURACIÓN DE CORS (Global y permisiva para desarrollo local)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("PermitirVue", policy =>
@@ -39,20 +40,33 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.CustomSchemaIds(type => type.ToString());
+});
 
 System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// 2. CONFIGURACIÓN DEL PIPELINE DE SOLICITUDES (El orden acá importa muchísimo)
+app.UseDeveloperExceptionPage();
+app.UseSwagger();
+app.UseSwaggerUI();
+
+// 🚀 LA CLAVE: Comentamos la redirección forzada a HTTPS para que no rompa las llamadas HTTP locales (puerto 5122)
+// app.UseHttpsRedirection();
+
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    ServeUnknownFileTypes = true,
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store");
+    }
+});
 
-app.UseHttpsRedirection();
-app.UseStaticFiles();
-
+// 🚀 CORS debe ir OBLIGATORIAMENTE antes de la Autenticación y los Controladores
 app.UseCors("PermitirVue");
 
 app.UseAuthentication();

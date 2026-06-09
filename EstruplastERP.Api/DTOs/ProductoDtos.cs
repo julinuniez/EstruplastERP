@@ -13,22 +13,22 @@ namespace EstruplastERP.Api.Dtos
         public decimal PrecioCosto { get; set; }
         public bool EsProductoTerminado { get; set; }
         public bool EsMateriaPrima { get; set; }
-
-        // ✅ AGREGADO: Necesario para que el Frontend sepa si bloquear medidas
         public bool EsGenerico { get; set; }
+        public bool EsPremezcla { get; set; }
+        public bool EsCritico { get; set; }
     }
 
     // 2. PARA EDICIÓN O DETALLE (GET /id)
-    // Hereda de ProductoListaDto, así que ya tiene 'EsGenerico'
     public class ProductoDetalleDto : ProductoListaDto
     {
         public decimal Largo { get; set; }
         public decimal Ancho { get; set; }
         public decimal Espesor { get; set; }
+        public decimal EspesorMinimo { get; set; }
+        public decimal EspesorMaximo { get; set; }
         public decimal PesoEspecifico { get; set; }
         public decimal StockMinimo { get; set; }
-        public string? Color { get; set; }
-
+        public string? Rubro { get; set; }
         public List<IngredienteDto> Receta { get; set; } = new List<IngredienteDto>();
     }
 
@@ -37,31 +37,30 @@ namespace EstruplastERP.Api.Dtos
     {
         public string Nombre { get; set; } = string.Empty;
         public string CodigoSku { get; set; } = string.Empty;
-        public string? Color { get; set; }
         public decimal PrecioCosto { get; set; }
         public decimal StockMinimo { get; set; }
-
-        // Opcional: Si quieres poder definir si es Genérico desde el Front
-        // public bool EsGenerico { get; set; } 
-
+        public bool EsCritico { get; set; }
+        public int? ProveedorId { get; set; }
         public List<IngredienteDto>? Receta { get; set; }
     }
 
     // 4. PARA EDITAR (PUT)
     public class ProductoEditarDto
     {
-        public string Nombre { get; set; }
-        public string CodigoSku { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string CodigoSku { get; set; } = string.Empty;
 
-        [JsonPropertyName("stockMinimo")] 
+        [JsonPropertyName("stockMinimo")]
         public decimal StockMinimo { get; set; }
+
+        public bool EsCritico { get; set; }
 
         public string? Color { get; set; }
 
-        [JsonPropertyName("stockActual")] 
+        [JsonPropertyName("stockActual")]
         public decimal StockActual { get; set; }
 
-        [JsonPropertyName("precioCosto")] 
+        [JsonPropertyName("precioCosto")]
         public decimal PrecioCosto { get; set; }
     }
 
@@ -81,6 +80,12 @@ namespace EstruplastERP.Api.Dtos
         public bool EsMateriaPrima { get; set; }
         public bool EsProductoTerminado { get; set; }
         public bool EsFazon { get; set; }
+        public bool EsPremezcla { get; set; }
+        public bool EsCritico { get; set; }
+        public decimal PrecioCosto { get; set; }
+        public string? Rubro { get; set; }
+
+        // Propiedad recuperada para solucionar el error:
         public decimal StockActual { get; set; }
 
         public List<IngredienteDto>? Receta { get; set; }

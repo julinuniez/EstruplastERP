@@ -22,7 +22,8 @@ namespace EstruplastERP.Api.Controllers
         {
             return await _context.Clientes
                 .Where(c => c.Activo)
-                .OrderBy(c => c.RazonSocial) 
+                .OrderBy(c => c.RazonSocial)
+                .AsNoTracking()
                 .ToListAsync();
         }
 
@@ -30,13 +31,14 @@ namespace EstruplastERP.Api.Controllers
         [HttpPost]
         public async Task<ActionResult<Cliente>> PostCliente(Cliente cliente)
         {
-            
             if (string.IsNullOrWhiteSpace(cliente.RazonSocial))
             {
                 return BadRequest("La Razón Social es obligatoria.");
             }
 
+            // Aseguramos valores por defecto
             cliente.Activo = true;
+            // cliente.EsFazon ya viene del body o es false por defecto (bool)
 
             _context.Clientes.Add(cliente);
             await _context.SaveChangesAsync();
@@ -44,97 +46,165 @@ namespace EstruplastERP.Api.Controllers
             return Ok(cliente);
         }
 
+        // PUT: api/Clientes/5
+        // Agregamos método PUT para poder editar la propiedad EsFazon desde el frontend si lo necesitas
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutCliente(int id, Cliente cliente)
+        {
+            if (id != cliente.Id)
+            {
+                return BadRequest();
+            }
+
+            // Marcamos el estado como modificado para que EF actualice los campos
+            _context.Entry(cliente).State = EntityState.Modified;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!_context.Clientes.Any(e => e.Id == id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            return NoContent();
+        }
+
         [HttpPost("habilitar-fazon/{id}")]
         public async Task<IActionResult> HabilitarFazon(int id)
         {
-            var cliente = await _context.Clientes.FindAsync(id);
-            if (cliente == null) return NotFound("Cliente no encontrado.");
-
-            // ==========================================
-            // 1. LISTA DE MATERIAS PRIMAS (Vírgenes)
-            // ==========================================
-            var materialesFazon = new[]
+            try
             {
-        new { Codigo = "AI-FIN", Nombre = "A.I. FINO (FAZÓN)", FamiliaId = 11 },
-        new { Codigo = "AI-GRU", Nombre = "A.I. GRUESO (FAZÓN)", FamiliaId = 12 },
-        new { Codigo = "AI-BIC", Nombre = "A.I. BICAPA (FAZÓN)", FamiliaId = 13 },
-        new { Codigo = "ABS-GRU", Nombre = "ABS GRUESO (FAZÓN)", FamiliaId = 21 },
-        new { Codigo = "POLI-FIN", Nombre = "PEAD/PP/BIO FINO (FAZÓN)", FamiliaId = 31 },
-        new { Codigo = "POLI-GRU", Nombre = "PEAD/PP/BIO GRUESO (FAZÓN)", FamiliaId = 32 },
-        new { Codigo = "PEAD-BIC", Nombre = "PEAD BICAPA (FAZÓN)", FamiliaId = 41 }
-    };
+                var cliente = await _context.Clientes.FindAsync(id);
+                if (cliente == null) return NotFound("Cliente no encontrado.");
 
-            // ==========================================
-            // 2. LISTA DE SCRAP (Molido/Recuperado)
-            // ==========================================
-            var materialesScrap = new[]
-            {
-        // El Scrap suele mantener la familia base (10, 20, 30) o la específica si prefieres
-        new { Codigo = "SCRAP-AI", Nombre = "SCRAP A.I. (MOLIDO)", FamiliaId = 10 },
-        new { Codigo = "SCRAP-ABS", Nombre = "SCRAP ABS (MOLIDO)", FamiliaId = 20 },
-        new { Codigo = "SCRAP-POLI", Nombre = "SCRAP POLIETILENO (MOLIDO)", FamiliaId = 30 },
-        new { Codigo = "SCRAP-PEAD", Nombre = "SCRAP PEAD (MOLIDO)", FamiliaId = 40 }
-    };
-
-            int creados = 0;
-
-            // --- BUCLE 1: CREAR MP VIRGEN ---
-            foreach (var mat in materialesFazon)
-            {
-                string sku = $"MP-CLI-{cliente.Id}-{mat.Codigo}";
-                if (!await _context.Productos.AnyAsync(p => p.CodigoSku == sku))
+                if (cliente.EsFazon)
                 {
-                    _context.Productos.Add(new Producto
-                    {
-                        Nombre = $"MP {mat.Nombre} - PROPIEDAD DE {cliente.RazonSocial.ToUpper()}",
-                        CodigoSku = sku,
-                        FamiliaId = mat.FamiliaId,
-                        ClienteId = cliente.Id,
-                        Rubro = "MATERIA PRIMA",
-                        EsMateriaPrima = true,
-                        EsFazon = true,   // ✅ Importante
-                        EsScrap = false,  // ❌ No es scrap
-                        Activo = true,
-                        FechaCreacion = DateTime.Now
-                    });
-                    creados++;
+                    return Ok(new { nuevo = false, mensaje = "ℹ️ Este cliente ya estaba habilitado para Fazón." });
                 }
-            }
 
-            // --- BUCLE 2: CREAR SCRAP ---
-            foreach (var scrap in materialesScrap)
+                cliente.EsFazon = true;
+                await _context.SaveChangesAsync();
+
+                return StatusCode(200, new { nuevo = true, mensaje = $"✅ Fazón habilitado correctamente para {cliente.RazonSocial}." });
+            }
+            catch (Exception ex)
             {
-                // SKU: SCRAP-CLI-15-AI
-                string sku = $"SCRAP-CLI-{cliente.Id}-{scrap.Codigo}";
+                // 🔥 EL CHIVATO: Capturamos el error profundo de SQL o C#
+                string errorReal = ex.Message;
+                string errorProfundo = ex.InnerException?.Message ?? "No hay detalle extra.";
 
-                if (!await _context.Productos.AnyAsync(p => p.CodigoSku == sku))
+                return StatusCode(500, new
                 {
-                    _context.Productos.Add(new Producto
-                    {
-                        Nombre = $"{scrap.Nombre} - PROPIEDAD DE {cliente.RazonSocial.ToUpper()}",
-                        CodigoSku = sku,
-                        FamiliaId = scrap.FamiliaId,
-                        ClienteId = cliente.Id,
-
-                        Rubro = "SCRAP",
-                        EsMateriaPrima = true, // El scrap TAMBIÉN se usa para fabricar
-                        EsProductoTerminado = false,
-                        EsFazon = true,        // Es de terceros
-
-                        // 🔥 LA BANDERA NUEVA
-                        EsScrap = true,
-
-                        StockActual = 0,
-                        Activo = true,
-                        FechaCreacion = DateTime.Now
-                    });
-                    creados++;
-                }
+                    mensaje = "Explotó el servidor. Mirá el detalle:",
+                    error = errorReal,
+                    detalle = errorProfundo
+                });
             }
+        }
 
-            if (creados > 0) await _context.SaveChangesAsync();
+        // --- AGREGAR ESTO DENTRO DE ClientesController ---
 
-            return Ok(new { mensaje = $"✅ Proceso finalizado. Se agregaron {creados} ítems (MP y Scrap)." });
+        [HttpGet("reporte-fazon/{clienteId}")]
+        public async Task<IActionResult> GetReporteFazon(int clienteId)
+        {
+            var cliente = await _context.Clientes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == clienteId);
+            if (cliente == null) return NotFound("Cliente no encontrado");
+
+            // 1. Obtener el Inventario Actual del cliente
+            // 1. Obtener el Inventario Actual del cliente
+            var inventario = await _context.Productos
+                .AsNoTracking()
+                .Where(p => p.ClienteId == clienteId && p.Activo)
+                .Select(p => new ItemInventarioFazonDto
+                {
+                    Sku = p.CodigoSku,
+                    Nombre = p.Nombre,
+                    Stock = Math.Round(p.StockActual, 2)
+                })
+                .ToListAsync();
+
+            // 2. Obtener Movimientos (Vamos a ampliar el rango a 180 días para probar)
+            var fechaLimite = DateTime.Today.AddDays(-180);
+
+            var movimientos = await _context.Movimientos
+                .AsNoTracking()
+                .Include(m => m.Producto)
+                // Usamos el ID directamente para evitar problemas de navegación si Producto es nulo
+                .Where(m => m.Producto.ClienteId == clienteId && m.Fecha >= fechaLimite)
+                .ToListAsync();
+
+            // 🚀 CHIVATO PARA VISUAL STUDIO: 
+            // Poné un punto de interrupción (F9) acá abajo y mira cuánto vale 'movimientos.Count'
+            var totalEncontrados = movimientos.Count;
+
+            // 3. Clasificar Ingresos y Egresos (Hacemos el filtro más flexible)
+            var ingresos = movimientos
+                .Where(m => m.Cantidad > 0 ||
+                            m.TipoMovimiento.ToUpper().Contains("ING") ||
+                            m.TipoMovimiento.ToUpper().Contains("ENTRADA"))
+                .Select(m => new MovimientoFazonDto
+                {
+                    Fecha = m.Fecha.ToString("dd/MM/yyyy"),
+                    Sku = m.Producto?.CodigoSku ?? "S/D",
+                    Material = m.Producto?.Nombre ?? "S/D",
+                    Kilos = Math.Round(Math.Abs(m.Cantidad), 2),
+                    Tipo = m.TipoMovimiento
+                }).ToList();
+
+            var egresos = movimientos
+                .Where(m => m.Cantidad < 0 ||
+                            m.TipoMovimiento.ToUpper().Contains("EGR") ||
+                            m.TipoMovimiento.ToUpper().Contains("SAL") ||
+                            m.TipoMovimiento.ToUpper().Contains("CON"))
+                .Select(m => new MovimientoFazonDto
+                {
+                    Fecha = m.Fecha.ToString("dd/MM/yyyy"),
+                    Sku = m.Producto?.CodigoSku ?? "S/D",
+                    Material = m.Producto?.Nombre ?? "S/D",
+                    Kilos = Math.Round(Math.Abs(m.Cantidad), 2),
+                    Tipo = m.TipoMovimiento
+                }).ToList();
+
+            return Ok(new ReporteFazonDto
+            {
+                ClienteNombre = cliente.RazonSocial,
+                Inventario = inventario,
+                Ingresos = ingresos,
+                Egresos = egresos
+            });
         }
     }
+    public class ReporteFazonDto
+    {
+        public string ClienteNombre { get; set; } = string.Empty;
+        public List<ItemInventarioFazonDto> Inventario { get; set; } = new();
+        public List<MovimientoFazonDto> Ingresos { get; set; } = new();
+        public List<MovimientoFazonDto> Egresos { get; set; } = new();
+    }
+
+    public class ItemInventarioFazonDto
+    {
+        public string Sku { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public decimal Stock { get; set; }
+    }
+
+    public class MovimientoFazonDto
+    {
+        public string Fecha { get; set; } = string.Empty;
+        public string Sku { get; set; } = string.Empty;
+        public string Material { get; set; } = string.Empty;
+        public decimal Kilos { get; set; }
+        public string Tipo { get; set; } = string.Empty;
+    }
+
 }
