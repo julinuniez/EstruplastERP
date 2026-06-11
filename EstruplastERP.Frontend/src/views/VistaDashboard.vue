@@ -19,7 +19,7 @@ const cargando = ref(true);
 const descargandoExcel = ref(false);
 const error = ref('');
 
-<<<<<<< HEAD
+
 const cotizacionDolar = ref({ compra: 0, venta: 0, fecha: '' });
 const alertasCriticas = ref<any[]>([]);
 
@@ -50,10 +50,8 @@ const topMateriales = ref<any[]>([]);
 const topClientes = ref<any[]>([]);
 const stockMateriales = ref<any[]>([]); 
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
-=======
-const apiUrl = import.meta.env.VITE_API_URL || '/api'; 
->>>>>>> master
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
+
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
 
 async function cargarDolarBNA() {

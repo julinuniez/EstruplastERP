@@ -44,11 +44,9 @@ const itemTemporal = ref({
     detalle: '' 
 });
 
-<<<<<<< HEAD
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
-=======
+
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
->>>>>>> master
+
 
 // --- HELPER TOKEN ---
 const getAuthConfig = () => {

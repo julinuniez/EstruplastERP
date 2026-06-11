@@ -1,20 +1,15 @@
 <script setup lang="ts">
-<<<<<<< HEAD
 import { ref, onMounted, computed, watch } from 'vue'
 import api from '@/services/axiosInstance' 
-=======
-import { ref, onMounted, computed } from 'vue'
-// Asegúrate de que este archivo exista en la misma carpeta o ajusta la ruta
->>>>>>> master
 import ModalCierreOrden from './ModalCierreOrden.vue' 
 import ModalEdicionRapida from './ModalEdicionRapida.vue'
 import ModalDetalleGrupo from './ModalDetalleGrupo.vue'
 import ModalDesglosePallets from './ModalDesglosePallets.vue'
 import { useConsolidacion } from '@/composables/useConsolidacion'
-import { Alertas } from '@/utils/alertas';
-import Swal from 'sweetalert2'; // 🚀 Importado para usar el input del desglose
+import { Alertas } from '@/utils/alertas'
+import Swal from 'sweetalert2'
 
-const emit = defineEmits(['imprimir-historial', 'imprimir-carga-consolidada', 'imprimir-lote-op']);
+const emit = defineEmits(['imprimir-historial', 'imprimir-carga-consolidada', 'imprimir-lote-op'])
 
 export interface ProduccionItem {
     id: number;
@@ -44,17 +39,18 @@ export interface ProduccionItem {
     observacion?: string;
     hojaCargaId?: number | null;
     pallets?: any[]; 
+    imprimirEnPaquetes?: boolean; // Propiedad añadida dinámicamente para el PDF
 }
 
 const producciones = ref<ProduccionItem[]>([])
 const cargando = ref(false)
 const error = ref('')
 
-<<<<<<< HEAD
-const filtroEstado = ref('Pendientes'); 
-const filtroLibre = ref(''); 
+const filtroEstado = ref('Pendientes')
+const filtroLibre = ref('')
+const filtroFecha = ref('')
 
-const categoriaActiva = ref('TODOS');
+const categoriaActiva = ref('TODOS')
 const categoriasFiltro = [
   { id: 'TODOS', label: 'Todas las Órdenes' },
   { id: 'PAI', label: 'PAI' },
@@ -64,221 +60,169 @@ const categoriasFiltro = [
   { id: 'ABS', label: 'ABS' },
   { id: 'PEAD', label: 'PEAD' },
   { id: 'PP', label: 'PP' }
-];
-=======
-// FILTROS
-const filtroFecha = ref(''); // Formato YYYY-MM-DD
-const filtroEstado = ref('todos'); // 'todos', 'pendiente', 'finalizada'
+]
 
-
-// MODAL
 const mostrarModalCierre = ref(false)
-const ordenSeleccionada = ref<ProduccionItem | null>(null)
-const listaMateriasPrimas = ref<any[]>([]) 
+const ordenParaCerrar = ref<ProduccionItem | null>(null)
+const materiasPrimas = ref<any[]>([]) 
 
-const apiUrl = import.meta.env.VITE_API_URL || '/api';
-
-// --- COMPUTED PARA FILTRAR ---
-const produccionesFiltradas = computed(() => {
-  let items = producciones.value;
-
-  // 1. Filtrar por estado
-  if (filtroEstado.value !== 'todos') {
-    const esFinalizada = filtroEstado.value === 'finalizada';
-    items = items.filter(p => p.esFinalizada === esFinalizada);
-  }
-
-  // 2. Filtrar por fecha
-  if (filtroFecha.value) {
-    // Comparamos solo la parte de la fecha (YYYY-MM-DD)
-    items = items.filter(p => p.fecha.startsWith(filtroFecha.value));
-  }
-
-  return items;
-});
-
->>>>>>> master
-
-const fechaActual = new Date();
-const mesSeleccionado = ref(fechaActual.getMonth() + 1);
-const anioSeleccionado = ref(fechaActual.getFullYear());
+const fechaActual = new Date()
+const mesSeleccionado = ref(fechaActual.getMonth() + 1)
+const anioSeleccionado = ref(fechaActual.getFullYear())
 
 const listaMeses = [
     { id: 1, nombre: 'Enero' }, { id: 2, nombre: 'Febrero' }, { id: 3, nombre: 'Marzo' },
     { id: 4, nombre: 'Abril' }, { id: 5, nombre: 'Mayo' }, { id: 6, nombre: 'Junio' },
     { id: 7, nombre: 'Julio' }, { id: 8, nombre: 'Agosto' }, { id: 9, nombre: 'Septiembre' },
     { id: 10, nombre: 'Octubre' }, { id: 11, nombre: 'Noviembre' }, { id: 12, nombre: 'Diciembre' }
-];
+]
 
 const nombreMesActual = computed(() => {
-    return listaMeses.find(m => m.id === mesSeleccionado.value)?.nombre || '';
-});
+    return listaMeses.find(m => m.id === mesSeleccionado.value)?.nombre || ''
+})
 
 const listaAnios = computed(() => {
-    const anios = [];
-    const anioBase = 2025; 
-    const anioTope = fechaActual.getFullYear() + 2;
+    const anios = []
+    const anioBase = 2025 
+    const anioTope = fechaActual.getFullYear() + 2
     for (let i = anioBase; i <= anioTope; i++) {
-        anios.push(i);
+        anios.push(i)
     }
-    return anios;
-});
+    return anios
+})
 
-const ordenesSeleccionadas = ref<number[]>([]);
+const ordenesSeleccionadas = ref<number[]>([])
 
-const mostrarModalEdicion = ref(false);
-const ordenEditando = ref<ProduccionItem | null>(null);
+const mostrarModalEdicion = ref(false)
+const ordenEditando = ref<ProduccionItem | null>(null)
 
-const mostrarModalCierre = ref(false);
-const ordenParaCerrar = ref<ProduccionItem | null>(null);
-const materiasPrimas = ref<any[]>([]); 
+const mostrarModalGrupo = ref(false)
+const codigoGrupoSeleccionado = ref('')
 
-const mostrarModalGrupo = ref(false);
-const codigoGrupoSeleccionado = ref('');
+const mostrarModalDesglose = ref(false)
+const ordenParaDesglose = ref<ProduccionItem | null>(null)
+const cantidadPalletsSugerida = ref<number>(1) 
 
-const mostrarModalDesglose = ref(false);
-const ordenParaDesglose = ref<ProduccionItem | null>(null);
-const cantidadPalletsSugerida = ref<number>(1); 
+const filasExpandidas = ref<number[]>([])
 
-const filasExpandidas = ref<number[]>([]);
+const { procesarConsolidacion } = useConsolidacion()
 
 const toggleExpandir = (id: number) => {
-    const index = filasExpandidas.value.indexOf(id);
-    if (index === -1) filasExpandidas.value.push(id);
-    else filasExpandidas.value.splice(index, 1);
-};
-
-const { procesarConsolidacion } = useConsolidacion();
+    const index = filasExpandidas.value.indexOf(id)
+    if (index === -1) filasExpandidas.value.push(id)
+    else filasExpandidas.value.splice(index, 1)
+}
 
 const ordenesDelGrupo = computed(() => {
-    if (!codigoGrupoSeleccionado.value) return [];
-    return producciones.value.filter(p => (p.observacion || '').includes(codigoGrupoSeleccionado.value));
-});
+    if (!codigoGrupoSeleccionado.value) return []
+    return producciones.value.filter(p => (p.observacion || '').includes(codigoGrupoSeleccionado.value))
+})
 
 const abrirModalGrupo = (codigo: string | null | undefined) => {
-    if (!codigo) return;
-    codigoGrupoSeleccionado.value = codigo;
-    mostrarModalGrupo.value = true;
-};
+    if (!codigo) return
+    codigoGrupoSeleccionado.value = codigo
+    mostrarModalGrupo.value = true
+}
 
 const getObservacionLimpia = (obs: string | undefined) => {
-    if (!obs) return '';
-    let limpia = obs.replace(/\[Grupo: HC-[^\]]+\]/g, '')
-                    .replace(/\[LOTE: HC-[^\]]+\]/g, '')
-                    .trim();
-    return limpia;
-};
+    if (!obs) return ''
+    return obs.replace(/\[Grupo: HC-[^\]]+\]/g, '').replace(/\[LOTE: HC-[^\]]+\]/g, '').trim()
+}
 
 function extraerCodigoHC(obs: string | undefined) {
-    if (!obs) return null;
-    const match = obs.match(/\[Grupo: (HC-[^\]]+)\]/);
-    return match ? match[1] : null;
+    if (!obs) return null
+    const match = obs.match(/\[Grupo: (HC-[^\]]+)\]/)
+    return match ? match[1] : null
 }
 
 const produccionesFiltradas = computed(() => {
     return producciones.value.filter(item => {
-        let pasaEstado = true;
-        if (filtroEstado.value === 'Pendientes') pasaEstado = item.estado === 'Pendiente' || item.estado === 'EnProceso' || item.estado === 'MaterialPreparado';
-        else if (filtroEstado.value === 'Finalizadas') pasaEstado = item.estado === 'Finalizada';
-        else if (filtroEstado.value === 'Canceladas') pasaEstado = item.estado === 'Cancelada';
-        else if (filtroEstado.value === 'Todos') pasaEstado = true;
+        let pasaEstado = true
+        if (filtroEstado.value === 'Pendientes') pasaEstado = item.estado === 'Pendiente' || item.estado === 'EnProceso' || item.estado === 'MaterialPreparado'
+        else if (filtroEstado.value === 'Finalizadas') pasaEstado = item.estado === 'Finalizada'
+        else if (filtroEstado.value === 'Canceladas') pasaEstado = item.estado === 'Cancelada'
+        else if (filtroEstado.value === 'Todos' || filtroEstado.value === 'todos') pasaEstado = true
 
-        let pasaFiltroLibre = true;
+        if (filtroFecha.value && !item.fecha.startsWith(filtroFecha.value)) {
+            return false
+        }
+
+        let pasaFiltroLibre = true
         if (filtroLibre.value.trim() !== '') {
-            const busqueda = filtroLibre.value.toLowerCase().trim();
-            const nomCliente = (item.clienteNombre || 'interno stock').toLowerCase();
-            const notaPed = (item.notaPedido || '').toLowerCase();
-            const ocCli = (item.numeroPedidoCliente || '').toLowerCase();
-            const color = (item.color || '').toLowerCase();
-            const prod = (item.producto || '').toLowerCase();
-            const obs = (item.observacion || '').toLowerCase();
+            const busqueda = filtroLibre.value.toLowerCase().trim()
+            const nomCliente = (item.clienteNombre || 'interno stock').toLowerCase()
+            const notaPed = (item.notaPedido || '').toLowerCase()
+            const ocCli = (item.numeroPedidoCliente || '').toLowerCase()
+            const color = (item.color || '').toLowerCase()
+            const prod = (item.producto || '').toLowerCase()
+            const obs = (item.observacion || '').toLowerCase()
             
             pasaFiltroLibre = nomCliente.includes(busqueda) || notaPed.includes(busqueda) || 
                               ocCli.includes(busqueda) || color.includes(busqueda) || 
-                              prod.includes(busqueda) || obs.includes(busqueda);
+                              prod.includes(busqueda) || obs.includes(busqueda)
         }
 
-        let pasaCategoria = true;
+        let pasaCategoria = true
         if (categoriaActiva.value !== 'TODOS') {
-            const nombreProd = (item.producto || '').toUpperCase();
+            const nombreProd = (item.producto || '').toUpperCase()
             switch (categoriaActiva.value) {
-                case 'PAI':
-                    pasaCategoria = nombreProd.includes('A.I.') && (nombreProd.includes('FINO') || nombreProd.includes('GRUESO'));
-                    break;
-                case 'A.I. BICAPA':
-                    pasaCategoria = nombreProd.includes('A.I.') && nombreProd.includes('BICAPA');
-                    break;
-                case 'TRICAPA':
-                    pasaCategoria = nombreProd.includes('TRICAPA');
-                    break;
-                case 'FREON':
-                    pasaCategoria = nombreProd.includes('FREON') || nombreProd.includes('FREÓN');
-                    break;
-                case 'ABS':
-                    pasaCategoria = nombreProd.includes('ABS');
-                    break;
-                case 'PEAD':
-                    pasaCategoria = nombreProd.includes('PEAD');
-                    break;
-                case 'PP':
-                    pasaCategoria = nombreProd.includes('PP') || nombreProd.includes('POLIPROPILENO');
-                    break;
+                case 'PAI': pasaCategoria = nombreProd.includes('A.I.') && (nombreProd.includes('FINO') || nombreProd.includes('GRUESO')); break;
+                case 'A.I. BICAPA': pasaCategoria = nombreProd.includes('A.I.') && nombreProd.includes('BICAPA'); break;
+                case 'TRICAPA': pasaCategoria = nombreProd.includes('TRICAPA'); break;
+                case 'FREON': pasaCategoria = nombreProd.includes('FREON') || nombreProd.includes('FREÓN'); break;
+                case 'ABS': pasaCategoria = nombreProd.includes('ABS'); break;
+                case 'PEAD': pasaCategoria = nombreProd.includes('PEAD'); break;
+                case 'PP': pasaCategoria = nombreProd.includes('PP') || nombreProd.includes('POLIPROPILENO'); break;
             }
         }
 
-        return pasaEstado && pasaFiltroLibre && pasaCategoria;
-    });
-});
-
-watch([mesSeleccionado, anioSeleccionado], () => {
-    cargarHistorial();
-});
+        return pasaEstado && pasaFiltroLibre && pasaCategoria
+    })
+})
 
 async function cargarHistorial() {
-    cargando.value = true;
-    error.value = '';
-    ordenesSeleccionadas.value = [];
+    cargando.value = true
+    error.value = ''
+    ordenesSeleccionadas.value = []
     try {
-        const res = await api.get(`/Ordenes/recientes?mes=${mesSeleccionado.value}&anio=${anioSeleccionado.value}`);
+        const res = await api.get(`/Ordenes/recientes?mes=${mesSeleccionado.value}&anio=${anioSeleccionado.value}`)
         if (Array.isArray(res.data)) {
-            producciones.value = res.data.sort((a: any, b: any) => b.id - a.id);
+            producciones.value = res.data.sort((a: any, b: any) => b.id - a.id)
         } else {
-            error.value = "Error de conexión con el servidor.";
+            error.value = "Error de conexión con el servidor."
         }
     } catch (e: any) {
-        error.value = "No se pudieron cargar las órdenes.";
+        error.value = "No se pudieron cargar las órdenes."
     } finally {
-        cargando.value = false;
+        cargando.value = false
     }
 }
 
 async function cargarMateriasPrimas() {
     try {
-        const res = await api.get('/Productos/materias-primas');
-        materiasPrimas.value = res.data;
+        const res = await api.get('/Productos/materias-primas')
+        materiasPrimas.value = res.data
     } catch (e) {
-        console.error("Error al cargar materias primas", e);
+        console.error("Error al cargar materias primas", e)
     }
 }
 
-// 🚀 Modificado con Alertas
 async function revertirOrden(item: ProduccionItem) {
-    const mensaje = `Esto devolverá los materiales al stock y restará el producto terminado del inventario.`;
-    const confirmado = await Alertas.confirmar(`⚠️ ¿Revertir orden #${item.id}?`, mensaje);
+    const mensaje = `Esto devolverá los materiales al stock y restará el producto terminado del inventario.`
+    const confirmado = await Alertas.confirmar(`⚠️ ¿Revertir orden #${item.id}?`, mensaje)
     
-    if (!confirmado) return;
+    if (!confirmado) return
 
     try {
-        await api.post(`/Ordenes/revertir/${item.id}`);
-        await cargarHistorial();
+        await api.post(`/Ordenes/revertir/${item.id}`)
+        await cargarHistorial()
     } catch (e: any) {
-        Alertas.error("Error al revertir: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("Error al revertir: " + (e.response?.data?.mensaje || e.message))
     }
 }
 
-// 🚀 Modificado para usar Swal tipo Input
 const abrirModalDesglose = async (orden: ProduccionItem) => {
-    let sugerencia = 1;
+    let sugerencia = 1
 
     if (orden.kilos >= 1100) {
         const result = await Swal.fire({
@@ -291,197 +235,216 @@ const abrirModalDesglose = async (orden: ProduccionItem) => {
             cancelButtonText: 'Cancelar',
             inputValidator: (value) => {
                 if (!value || parseInt(value) <= 0) {
-                    return 'Debes ingresar un número válido mayor a 0';
+                    return 'Debes ingresar un número válido mayor a 0'
                 }
             }
-        });
+        })
 
-        if (!result.isConfirmed) return;
-        sugerencia = parseInt(result.value);
+        if (!result.isConfirmed) return
+        sugerencia = parseInt(result.value)
     }
 
-    cantidadPalletsSugerida.value = sugerencia;
-    ordenParaDesglose.value = orden;
-    mostrarModalDesglose.value = true;
-};
+    cantidadPalletsSugerida.value = sugerencia
+    ordenParaDesglose.value = orden
+    mostrarModalDesglose.value = true
+}
 
 const cerrarModalDesglose = () => {
-    mostrarModalDesglose.value = false;
-    ordenParaDesglose.value = null;
-    cantidadPalletsSugerida.value = 1;
-};
+    mostrarModalDesglose.value = false
+    ordenParaDesglose.value = null
+    cantidadPalletsSugerida.value = 1
+}
 
 const onDesgloseConfirmado = async (palletsCalculados: any[]) => {
-    if (!ordenParaDesglose.value) return;
+    if (!ordenParaDesglose.value) return
     
     try {
-        const idOrden = ordenParaDesglose.value.id;
+        const idOrden = ordenParaDesglose.value.id
         const payload = palletsCalculados.map(p => ({
             numero: p.numero,
             kilos: p.kilos
-        }));
+        }))
 
-        await api.post(`/Ordenes/${idOrden}/desglose`, payload);
-        
-        Alertas.exito("¡Desglose guardado con éxito!");
-        cerrarModalDesglose();
-        await cargarHistorial(); 
+        await api.post(`/Ordenes/${idOrden}/desglose`, payload)
+        Alertas.exito("¡Desglose guardado con éxito!")
+        cerrarModalDesglose()
+        await cargarHistorial() 
         
     } catch (e: any) {
-        console.error("Error en desglose:", e);
-        Alertas.error("Error al guardar el desglose: " + (e.response?.data?.mensaje || e.message));
+        console.error("Error en desglose:", e)
+        Alertas.error("Error al guardar el desglose: " + (e.response?.data?.mensaje || e.message))
     }
-};
+}
 
-// 🚀 Modificado con Alertas
 const finalizarPalletAcordeon = async (palletId: number, numero: number) => {
     const confirmado = await Alertas.confirmar(
         "Confirmar Ingreso", 
         `¿Confirmás el ingreso a stock del Pallet N° ${numero}?\nSe descontará la materia prima proporcional y se sumará el producto terminado.`
-    );
+    )
     
-    if (!confirmado) return;
+    if (!confirmado) return
     
     try {
-        await api.post(`/Ordenes/finalizar-pallet/${palletId}`);
-        await cargarHistorial(); 
+        await api.post(`/Ordenes/finalizar-pallet/${palletId}`)
+        await cargarHistorial() 
     } catch (e: any) {
-        Alertas.error("Error al confirmar pallet: " + (e.response?.data?.mensaje || e.message));
+        Alertas.error("Error al confirmar pallet: " + (e.response?.data?.mensaje || e.message))
     }
-};
+}
 
 const abrirModalCierre = (orden: ProduccionItem) => {
-    const ordenCorregida = { ...orden };
-    
+    const ordenCorregida = { ...orden }
     if (ordenCorregida.fecha && ordenCorregida.fecha.length <= 12) {
-        const partes = ordenCorregida.fecha.split(' '); 
-        const diaMes = partes[0] || '';
-        const hora = partes[1] || '00:00';
+        const partes = ordenCorregida.fecha.split(' ') 
+        const diaMes = partes[0] || ''
+        const hora = partes[1] || '00:00'
         
         if (diaMes && diaMes.includes('/')) {
-            const [dia, mes] = diaMes.split('/');
-            const anioFijo = anioSeleccionado.value; 
-            ordenCorregida.fecha = `${anioFijo}-${mes}-${dia}T${hora}`;
+            const [dia, mes] = diaMes.split('/')
+            const anioFijo = anioSeleccionado.value 
+            ordenCorregida.fecha = `${anioFijo}-${mes}-${dia}T${hora}`
         }
     }
-
-    ordenParaCerrar.value = ordenCorregida;
-    mostrarModalCierre.value = true;
+    ordenParaCerrar.value = ordenCorregida
+    mostrarModalCierre.value = true
 }
 
 const cerrarModalCierre = () => {
-    mostrarModalCierre.value = false;
-    ordenParaCerrar.value = null;
+    mostrarModalCierre.value = false
+    ordenParaCerrar.value = null
 }
 
 const onCierreConfirmado = () => {
-    cargarHistorial();
+    cargarHistorial()
 }
 
-// 🚀 Modificado con Alertas
 async function cancelarOrden(item: ProduccionItem) {
-    let titulo = `¿Cancelar Orden #${item.id}?`;
-    let mensaje = `Esto devolverá el material al inventario.`;
+    let titulo = `¿Cancelar Orden #${item.id}?`
+    let mensaje = `Esto devolverá el material al inventario.`
     
-    const tienePalletsFinalizados = item.pallets && item.pallets.some(p => p.estado === 'Finalizada');
-    
+    const tienePalletsFinalizados = item.pallets && item.pallets.some(p => p.estado === 'Finalizada')
     if (tienePalletsFinalizados) {
-        titulo = "🚨 ATENCIÓN: Orden Parcialmente Ingresada";
-        mensaje = `Esta orden tiene pallets ya ingresados a stock.\nAl cancelar, se RESTARÁ el producto terminado y se DEVOLVERÁ la materia prima al inventario.\n¿Confirmas la cancelación total?`;
+        titulo = "🚨 ATENCIÓN: Orden Parcialmente Ingresada"
+        mensaje = `Esta orden tiene pallets ya ingresados a stock.\nAl cancelar, se RESTARÁ el producto terminado y se DEVOLVERÁ la materia prima al inventario.\n¿Confirmas la cancelación total?`
     }
 
-    const confirmado = await Alertas.confirmar(titulo, mensaje);
-    if (!confirmado) return;
+    const confirmado = await Alertas.confirmar(titulo, mensaje)
+    if (!confirmado) return
 
     try {
-        await api.post(`/Ordenes/cancelar/${item.id}`);
-        Alertas.exito("Orden cancelada y stock restaurado correctamente.");
-        await cargarHistorial();
+        await api.post(`/Ordenes/cancelar/${item.id}`)
+        Alertas.exito("Orden cancelada y stock restaurado correctamente.")
+        await cargarHistorial()
     } catch (e: any) {
-        Alertas.error("Error: " + (e.response?.data?.mensaje || "No se pudo cancelar"));
+        Alertas.error("Error: " + (e.response?.data?.mensaje || "No se pudo cancelar"))
     }
 }
 
-// 🚀 Modificado con Alertas
 const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
     if (tipo === 'orden' && orden.esImpreso) {
         const confirmado = await Alertas.confirmar(
             "Orden ya impresa", 
             `La orden #${orden.id} ya fue impresa. ¿Seguro quieres reimprimirla?`
-        );
-        if (!confirmado) return;
+        )
+        if (!confirmado) return
     }
-    emit('imprimir-historial', { orden, tipo, materiasPrimasBase: materiasPrimas.value });
-};
+
+    let enPaquetes = false;
+    // NUEVO: Pregunta si quiere dividir la OP en paquetes de 10
+    if (tipo === 'orden' && orden.cantidad >= 10) {
+        const resp = await Swal.fire({
+            title: '¿Imprimir en Paquetes?',
+            text: `¿Deseas imprimir las etiquetas de OP divididas en paquetes de 10?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: '📦 Sí, en paquetes',
+            cancelButtonText: '📄 No, impresión normal',
+            confirmButtonColor: '#3498db',
+            cancelButtonColor: '#7f8c8d'
+        });
+        enPaquetes = resp.isConfirmed;
+    }
+
+    // Le pasamos la elección directamente a la orden ANTES de emitirla
+    orden.imprimirEnPaquetes = enPaquetes;
+
+    emit('imprimir-historial', { 
+        orden, 
+        tipo, 
+        materiasPrimasBase: materiasPrimas.value,
+        imprimirEnPaquetes: enPaquetes // También lo enviamos como propiedad suelta por si acaso
+    })
+}
 
 function toggleSeleccionMultiple(id: number) {
-    const index = ordenesSeleccionadas.value.indexOf(id);
+    const index = ordenesSeleccionadas.value.indexOf(id)
     if (index === -1) {
-        ordenesSeleccionadas.value.push(id);
+        ordenesSeleccionadas.value.push(id)
     } else {
-        ordenesSeleccionadas.value.splice(index, 1);
+        ordenesSeleccionadas.value.splice(index, 1)
     }
 }
 
-// 🚀 Modificado con Alertas
 async function imprimirLoteOP() {
-    if (ordenesSeleccionadas.value.length === 0) return;
-    const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id));
+    if (ordenesSeleccionadas.value.length === 0) return
+    const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id))
     
-    const yaImpresas = ordenesAImprimir.filter(o => o.esImpreso).length;
+    const yaImpresas = ordenesAImprimir.filter(o => o.esImpreso).length
     if (yaImpresas > 0) {
         const msj = yaImpresas === 1 
             ? "Hay 1 orden seleccionada que ya fue impresa. ¿Seguro quieres reimprimirla?" 
-            : `Hay ${yaImpresas} órdenes seleccionadas que ya fueron impresas. ¿Seguro quieres reimprimirlas?`;
+            : `Hay ${yaImpresas} órdenes seleccionadas que ya fueron impresas. ¿Seguro quieres reimprimirlas?`
         
-        const confirmado = await Alertas.confirmar("Órdenes ya impresas", msj);
-        if (!confirmado) return;
+        const confirmado = await Alertas.confirmar("Órdenes ya impresas", msj)
+        if (!confirmado) return
     }
 
-    emit('imprimir-lote-op', ordenesAImprimir);
-    ordenesSeleccionadas.value = [];
+    emit('imprimir-lote-op', ordenesAImprimir)
+    ordenesSeleccionadas.value = []
 }
 
 async function ejecutarCargaConsolidada() {
-    if (ordenesSeleccionadas.value.length < 2) return;
-    const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id));
+    if (ordenesSeleccionadas.value.length < 2) return
+    const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id))
     
-    const payload = await procesarConsolidacion(ordenesAImprimir);
+    const payload = await procesarConsolidacion(ordenesAImprimir)
     
     if (payload) {
-        const nombresUnicos = [...new Set(ordenesAImprimir.map(o => o.producto))];
-        const formObj = (payload as any).form ? (payload as any).form : payload;
+        const nombresUnicos = [...new Set(ordenesAImprimir.map(o => o.producto))]
+        const formObj = (payload as any).form ? (payload as any).form : payload
 
         if (nombresUnicos.length === 1) {
-            formObj.productoNombre = nombresUnicos[0];
+            formObj.productoNombre = nombresUnicos[0]
         } else {
-            formObj.productoNombre = "MEZCLA CONSOLIDADA";
+            formObj.productoNombre = "MEZCLA CONSOLIDADA"
         }
 
-        formObj.esConsolidado = true;
-        formObj.observacion = '[MEZCLA CONSOLIDADA] ' + (formObj.observacion || '');
+        formObj.esConsolidado = true
+        formObj.observacion = '[MEZCLA CONSOLIDADA] ' + (formObj.observacion || '')
 
-        (payload as any).materiasPrimasBase = materiasPrimas.value;
-        emit('imprimir-carga-consolidada', payload);
+        ;(payload as any).materiasPrimasBase = materiasPrimas.value
+        emit('imprimir-carga-consolidada', payload)
         
-        ordenesSeleccionadas.value = [];
-        await cargarHistorial();
+        ordenesSeleccionadas.value = []
+        await cargarHistorial()
     }
 }
 
 const abrirModalEdicion = (orden: ProduccionItem) => {
-    ordenEditando.value = orden;
-    mostrarModalEdicion.value = true;
-};
+    ordenEditando.value = orden
+    mostrarModalEdicion.value = true
+}
 
 const onEdicionGuardada = () => {
-    mostrarModalEdicion.value = false;
-    cargarHistorial();
-};
+    mostrarModalEdicion.value = false
+    cargarHistorial()
+}
+
+watch([mesSeleccionado, anioSeleccionado], () => { cargarHistorial() })
 
 onMounted(() => {
-    cargarHistorial();
-    cargarMateriasPrimas(); 
+    cargarHistorial()
+    cargarMateriasPrimas() 
 })
 
 defineExpose({ cargarHistorial })
@@ -500,6 +463,7 @@ defineExpose({ cargarHistorial })
                 class="input-filtro input-buscador" 
                 placeholder="🔍 Buscar Cliente, Nota, Producto..."
             >
+            <input type="date" v-model="filtroFecha" class="input-filtro">
             <select v-model="filtroEstado" class="input-filtro">
                 <option value="Pendientes">🔥 En Producción</option>
                 <option value="Finalizadas">✅ Finalizadas</option>
@@ -523,7 +487,6 @@ defineExpose({ cargarHistorial })
         </div>
     </div>
 
-<<<<<<< HEAD
     <div class="filtros-produccion">
         <button 
             v-for="cat in categoriasFiltro" 
@@ -534,28 +497,9 @@ defineExpose({ cargarHistorial })
             {{ cat.label }}
         </button>
     </div>
-=======
-    <!-- SECCIÓN DE FILTROS -->
-    <div class="filtros-container">
-        <div class="filtro-item">
-            <label for="filtro-fecha">Filtrar por Fecha:</label>
-            <input type="date" id="filtro-fecha" v-model="filtroFecha" class="input-filtro">
-        </div>
-        <div class="filtro-item">
-            <label for="filtro-estado">Filtrar por Estado:</label>
-            <select id="filtro-estado" v-model="filtroEstado" class="input-filtro">
-                <option value="todos">Todos</option>
-                <option value="pendiente">Pendiente</option>
-                <option value="finalizada">Finalizada</option>
-            </select>
-        </div>
-    </div>
 
     <div v-if="cargando" class="loading">Cargando...</div>
     <div v-else-if="error" class="error-msg">{{ error }}</div>
->>>>>>> master
-
-    <div v-if="error" class="error-msg">{{ error }}</div>
 
     <div class="tabla-scroll">
         <table class="tabla-custom">
@@ -573,7 +517,6 @@ defineExpose({ cargarHistorial })
                 </tr>
             </thead>
             <tbody>
-<<<<<<< HEAD
                 <template v-for="p in produccionesFiltradas" :key="p.id">
                     <tr :class="{'fila-impresa': p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-no-impresa': !p.esImpreso && p.estado !== 'Finalizada' && p.estado !== 'Cancelada', 'fila-ok': p.estado === 'Finalizada', 'fila-cancel': p.estado === 'Cancelada', 'fila-seleccionada': ordenesSeleccionadas.includes(p.id)}">
                         
@@ -681,39 +624,8 @@ defineExpose({ cargarHistorial })
                     </tr>
                 </template>
                 
-                <tr v-if="produccionesFiltradas.length === 0 && !cargando">
-                    <td colspan="9" class="vacio">No hay órdenes en esta bandeja para los filtros seleccionados.</td>
-=======
-                <tr v-for="p in produccionesFiltradas" :key="p.id" :class="{'fila-ok': p.esFinalizada}">
-                    <td>{{ p.fecha }}</td>
-                    <td class="td-prod">{{ p.producto }}</td>
-                    <td style="text-align: center;">{{ p.cantidad }}</td>
-                    <td style="text-align: right; font-weight: bold;">{{ p.kilos }}</td>
-                    <td>{{ p.operario }}</td>
-                    <td>
-                        <span :class="p.esFinalizada ? 'badge-ok' : 'badge-pend'">
-                            {{ p.esFinalizada ? 'FINALIZADA' : 'PENDIENTE' }}
-                        </span>
-                    </td>
-                    <td class="td-acciones">
-                        <button 
-                            v-if="!p.esFinalizada" 
-                            @click="confirmarOrdenRapida(p)" 
-                            class="btn-action btn-check" 
-                            title="Confirmar Producción y Stock">
-                            ✅
-                        </button>
-                        
-                        <button @click="imprimirEtiqueta(p)" class="btn-action btn-print" title="Imprimir Etiqueta">
-                            🖨️
-                        </button>
-                    </td>
-                </tr>
                 <tr v-if="produccionesFiltradas.length === 0">
-                    <td colspan="7" class="vacio">
-                        No hay órdenes que coincidan con los filtros seleccionados.
-                    </td>
->>>>>>> master
+                    <td colspan="9" class="vacio">No hay órdenes que coincidan con los filtros seleccionados.</td>
                 </tr>
             </tbody>
         </table>
@@ -788,50 +700,10 @@ defineExpose({ cargarHistorial })
 .btn-filtro:hover { background-color: #e2e8f0; color: #334155; }
 .btn-filtro.activo { background-color: #3b82f6; color: white; border-color: #3b82f6; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3); }
 
-<<<<<<< HEAD
 .tabla-scroll { overflow-y: auto; flex: 1; margin-bottom: 55px; border-radius: 6px; border: 1px solid #e2e8f0; }
 .tabla-custom { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; }
 .tabla-custom th { background: #f8fafc; color: #475569; padding: 12px 10px; text-align: left; position: sticky; top: 0; z-index: 5; font-weight: 700; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
 .tabla-custom td { padding: 10px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; transition: background-color 0.2s; }
-=======
-/* Estilos para los filtros */
-.filtros-container {
-    display: flex;
-    gap: 20px;
-    padding: 10px 5px;
-    margin-bottom: 10px;
-    background-color: #f9f9f9;
-    border-radius: 6px;
-    border: 1px solid #eee;
-}
-.filtro-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.filtro-item label {
-    font-size: 0.85rem;
-    color: #555;
-    font-weight: 600;
-}
-.input-filtro {
-    padding: 5px 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 0.85rem;
-}
-.input-filtro:focus {
-    outline: none;
-    border-color: #3498db;
-    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
-}
-
-
-.tabla-scroll { overflow-y: auto; flex: 1; }
-.tabla-custom { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-.tabla-custom th { background: #2c3e50; color: white; padding: 8px; text-align: left; position: sticky; top: 0; z-index: 5; }
-.tabla-custom td { padding: 8px; border-bottom: 1px solid #eee; color: #333; }
->>>>>>> master
 
 tr.fila-impresa td { background-color: #d4edda; }
 tr.fila-no-impresa td { background-color: #f8d7da; }
@@ -861,7 +733,6 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .badge-cancel { background: #fef2f2; color: #ef4444; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #fecaca; white-space: nowrap;}
 .badge-prep { background: #eff6ff; color: #3b82f6; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #93c5fd; white-space: nowrap;}
 
-/* 🚀 NUEVOS ESTILOS PARA LOS BOTONES FLUIDOS Y PROPORCIONALES */
 .td-acciones { vertical-align: middle; padding: 6px 10px !important; }
 .acciones-wrapper { display: flex; gap: 6px; justify-content: center; align-items: center; width: 100%; max-width: 230px; margin: 0 auto; }
 .btn-action { flex: 1; max-width: 38px; min-width: 30px; height: 32px; border: 1px solid #cbd5e1; background: white; border-radius: 6px; cursor: pointer; font-size: 1.05rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); padding: 0; }
@@ -871,7 +742,6 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .btn-desglose:hover { background: #f8fafc; border-color: #94a3b8; }
 .btn-cancel { color: #ef4444; }
 .btn-cancel:hover { background: #fef2f2; border-color: #fca5a5; }
-/* ----------------------------------------------------------- */
 
 .vacio { text-align: center; padding: 40px; color: #94a3b8; font-style: italic; font-size: 0.9rem; }
 .loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; background: rgba(255,255,255,0.9); z-index: 10; color: #3498db; font-weight: bold; font-size: 1.2rem; }

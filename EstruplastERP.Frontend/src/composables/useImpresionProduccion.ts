@@ -3,7 +3,7 @@ import type { Ref } from 'vue';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 import { ProduccionAPI } from '@/services/produccionService';
-import Swal from 'sweetalert2'; // 🚀 Importado para reemplazar el prompt
+import Swal from 'sweetalert2'; 
 
 export function useImpresionProduccion(
     form: Ref<any>,
@@ -121,8 +121,8 @@ export function useImpresionProduccion(
         imprimiendoHistorial.value = bloqueoOriginal;
     }
 
-    const imprimirDesdeHistorial = async (payload: { orden: any, tipo: string }) => {
-        const { orden, tipo } = payload;
+    const imprimirDesdeHistorial = async (payload: { orden: any, tipo: string, imprimirEnPaquetes?: boolean }) => {
+        const { orden, tipo, imprimirEnPaquetes } = payload;
         const isConsolidado = tipo === 'carga-consolidada';
         
         try {
@@ -155,6 +155,9 @@ export function useImpresionProduccion(
             form.value.merma = desp;
             form.value.kilosTotales = orden.kilos;
 
+            // 🚀 FIX CRUCIAL: Pasamos la variable de los paquetes hacia el form que lee el PDF
+            form.value.imprimirEnPaquetes = imprimirEnPaquetes || false;
+
             const pesoBrutoTotal = orden.kilos * (1 + (desp / 100));
 
             // ARMADO DE RECETA CON INVENTARIO COMPLETO
@@ -165,13 +168,12 @@ export function useImpresionProduccion(
                     materiaPrimaId: idBuscado,
                     nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo,
                     cantidad: isConsolidado ? c.cantidadKilos : Number(((c.cantidadKilos / pesoBrutoTotal) * 100).toFixed(2)),
-                    clienteId: determinarDuenioMaterial(idBuscado, c) // 👈 ACÁ MUERE FULANITO
+                    clienteId: determinarDuenioMaterial(idBuscado, c)
                 };
             });
 
             if (!form.value.esConsolidado && typeof balancearBase === 'function') balancearBase();
 
-            // 🚀 ESTE ES EL CARTEL REEMPLAZADO
             if (tipo === 'orden' && form.value.kilosTotales > 1000) {
                 const palletsSugeridos = Math.ceil(form.value.kilosTotales / 1000);
                 
@@ -253,6 +255,9 @@ export function useImpresionProduccion(
                 form.value.color = orden.color || orden.colorTexto || '';
                 form.value.colorTexto = orden.colorTexto || orden.color || '';
                 form.value.Color = orden.color || '';
+
+                // Desactivar paquetes en lote masivo por seguridad
+                form.value.imprimirEnPaquetes = false;
                 
                 const desp = Number(orden.desperdicio || 0);
                 const pesoBrutoTotal = orden.kilos * (1 + (desp / 100));

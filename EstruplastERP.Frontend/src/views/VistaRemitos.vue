@@ -36,11 +36,9 @@ const cargando = ref(false)
 const error = ref('')
 const remitoParaImprimir = ref<Remito | null>(null)
 
-<<<<<<< HEAD
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api';
-=======
-const apiUrl = '/api'; 
->>>>>>> master
+
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
+
 
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');
@@ -213,9 +211,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* =================================================================
+/* ==
    ESTILOS DE PANTALLA (Tu diseño actual)
-   ================================================================= */
+   == */
 .contenedor-historial { padding: 25px; background: #f8f9fa; border-radius: 8px; min-height: 500px; font-family: 'Segoe UI', sans-serif; }
 .header-seccion { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid #e9ecef; padding-bottom: 15px; }
 h2 { margin: 0; color: #2c3e50; font-size: 1.5rem; }
@@ -240,9 +238,9 @@ tr:hover { background-color: #f8f9fa; }
 .error-msg { color: #721c24; background: #f8d7da; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
 
 
-/* =================================================================
+/* ==
    ESTILOS DEL PDF (DISEÑO A4)
-   ================================================================= */
+   == */
 /* 1. Ocultar el contenedor del PDF para que no se vea en la pantalla normal */
 .contenedor-impresion {
     position: fixed;

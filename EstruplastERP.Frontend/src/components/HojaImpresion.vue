@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import JsBarcode from 'jsbarcode';
+// @ts-ignore
+import JsBarcode from 'jsbarcode/dist/JsBarcode.all.min.js';
 
 const logoImg = new URL('../assets/estruplast-logo.png', import.meta.url).href;
 
@@ -51,7 +52,8 @@ const generarCodigoDirecto = (texto: string) => {
     if (!texto || texto.includes('undefined')) return '';
     try {
         const canvas = document.createElement("canvas");
-        JsBarcode(canvas, texto, {
+        
+        (window as any).JsBarcode(canvas, texto, {
             format: "CODE128",
             displayValue: true, 
             fontSize: 14,
@@ -59,6 +61,7 @@ const generarCodigoDirecto = (texto: string) => {
             width: 1.5, 
             margin: 0
         });
+        
         return canvas.toDataURL("image/png");
     } catch (error) {
         return '';
@@ -113,7 +116,6 @@ const obtenerEtiquetaOrigen = (itemReceta: any) => {
     return '';
 };
 
-// 🚀 HELPER DEFINITIVO: Atrapa aditivos, brillos y cristales
 const esInsumoFijo = (r: any) => {
     if (!r) return false;
     if (r.esEstearato) return true;
@@ -121,7 +123,6 @@ const esInsumoFijo = (r: any) => {
     
     const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
     
-    // Agregamos CRISTAL, 777 y 555 a la lista de exclusión
     if (n.includes('ESTEARATO') || 
         n.includes('BRILLO') || 
         n.includes('CRISTAL') || 
@@ -186,7 +187,6 @@ const recetaVisual = computed(() => {
         });
 
         if (listaLimpia.length > 0 && kilosRemovidos > 0) {
-            // Ordenamiento temporal solo para encontrar la base
             listaLimpia.sort((a: any, b: any) => Number(b.cantidadKilos || b.CantidadKilos || 0) - Number(a.cantidadKilos || a.CantidadKilos || 0));
             const materialPrincipal = listaLimpia.find((i: any) => i.esBase) || listaLimpia[0];
 
@@ -203,17 +203,14 @@ const recetaVisual = computed(() => {
         lista = listaLimpia;
     }
 
-    // 🚀 ORDENAMIENTO INTELIGENTE: Primero los estructurales (por Kilos/%), luego los extras (por Kilos/%)
     return lista.sort((a: any, b: any) => {
         const aEsFijo = esInsumoFijo(a) ? 1 : 0;
         const bEsFijo = esInsumoFijo(b) ? 1 : 0;
 
-        // 1. Si uno es Extra y el otro no, mandamos el Extra al fondo
         if (aEsFijo !== bEsFijo) {
             return aEsFijo - bEsFijo;
         }
 
-        // 2. Si ambos son del mismo tipo (ej: ambos estructurales o ambos extras), ordenamos por cantidad (mayor a menor)
         const cantidadA = Number(a.cantidadKilos || a.CantidadKilos || a.cantidad || 0);
         const cantidadB = Number(b.cantidadKilos || b.CantidadKilos || b.cantidad || 0);
         
@@ -515,7 +512,13 @@ const tipoCorona = computed(() => {
         <div class="fila-lotes-pdf">
             <div class="mitad-pdf" v-if="!esConsolidadoReal">
                 <strong>CANTIDAD (UNIDADES):</strong>
-                <div class="recuadro-gigante-pdf">{{ form.cantidad }}</div>
+                
+                <div class="recuadro-gigante-pdf" style="font-size: 16px;">
+                    {{ form.cantidad }}
+                    <span v-if="form.cantidad >= 10 && form.imprimirEnPaquetes" style="font-size: 13px; color: #333; margin-left: 6px; font-weight: bold;">
+                        | {{ Math.floor(form.cantidad / 10) }} paq. de 10<span v-if="form.cantidad % 10 > 0"> y 1 de {{ form.cantidad % 10 }}</span>
+                    </span>
+                </div>
             </div>
             <div class="mitad-pdf" :style="esConsolidadoReal ? 'width: 100%;' : ''">
                 <strong>OBSERVACIONES / DETALLES DE LOTE:</strong>

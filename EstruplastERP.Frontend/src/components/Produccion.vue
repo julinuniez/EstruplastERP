@@ -6,12 +6,8 @@ import { Alertas } from '@/utils/alertas';
 // 1. IMPORTAMOS TU COMPONENTE GIGANTE
 // Asegúrate de que la ruta sea correcta según dónde lo guardaste
 import FormularioProduccion from './FormularioProduccion.vue' 
-
-<<<<<<< HEAD
-const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:5122/api'; 
-=======
 const apiUrl = import.meta.env.VITE_API_URL || '/api'; 
->>>>>>> master
+
 const getAuthConfig = () => {
     const token = localStorage.getItem('token');
     return { headers: { Authorization: `Bearer ${token}` } };
