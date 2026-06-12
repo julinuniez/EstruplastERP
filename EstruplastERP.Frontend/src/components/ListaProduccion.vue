@@ -39,7 +39,7 @@ export interface ProduccionItem {
     observacion?: string;
     hojaCargaId?: number | null;
     pallets?: any[]; 
-    imprimirEnPaquetes?: boolean; // Propiedad añadida dinámicamente para el PDF
+    imprimirEnPaquetes?: boolean;
 }
 
 const producciones = ref<ProduccionItem[]>([])
@@ -341,7 +341,20 @@ async function cancelarOrden(item: ProduccionItem) {
 }
 
 const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
-    if (tipo === 'orden' && orden.esImpreso) {
+    // 🚀 CABALLO DE TROYA: Le inyectamos una marca de agua secreta para que el Padre no pueda arruinar la impresión
+    if (tipo === 'carga') {
+        orden.observacion = (orden.observacion ? orden.observacion + ' ' : '') + '[FORZAR_CARGA]';
+        emit('imprimir-historial', { 
+            orden, 
+            tipo: 'carga', 
+            materiasPrimasBase: materiasPrimas.value,
+            imprimirEnPaquetes: false
+        });
+        return; 
+    }
+
+    // SI LLEGÓ ACÁ, ES UNA ORDEN DE PRODUCCIÓN (📄)
+    if (orden.esImpreso) {
         const confirmado = await Alertas.confirmar(
             "Orden ya impresa", 
             `La orden #${orden.id} ya fue impresa. ¿Seguro quieres reimprimirla?`
@@ -350,8 +363,7 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
     }
 
     let enPaquetes = false;
-    // NUEVO: Pregunta si quiere dividir la OP en paquetes de 10
-    if (tipo === 'orden' && orden.cantidad >= 10) {
+    if (orden.cantidad >= 10) {
         const resp = await Swal.fire({
             title: '¿Imprimir en Paquetes?',
             text: `¿Deseas imprimir las etiquetas de OP divididas en paquetes de 10?`,
@@ -365,15 +377,14 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
         enPaquetes = resp.isConfirmed;
     }
 
-    // Le pasamos la elección directamente a la orden ANTES de emitirla
     orden.imprimirEnPaquetes = enPaquetes;
 
     emit('imprimir-historial', { 
         orden, 
-        tipo, 
+        tipo: 'orden', 
         materiasPrimasBase: materiasPrimas.value,
-        imprimirEnPaquetes: enPaquetes // También lo enviamos como propiedad suelta por si acaso
-    })
+        imprimirEnPaquetes: enPaquetes 
+    });
 }
 
 function toggleSeleccionMultiple(id: number) {
@@ -403,6 +414,7 @@ async function imprimirLoteOP() {
     ordenesSeleccionadas.value = []
 }
 
+// 🚀 SI ES MEZCLA CONSOLIDADA (🧪 MULTIPLE)
 async function ejecutarCargaConsolidada() {
     if (ordenesSeleccionadas.value.length < 2) return
     const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id))
@@ -420,7 +432,8 @@ async function ejecutarCargaConsolidada() {
         }
 
         formObj.esConsolidado = true
-        formObj.observacion = '[MEZCLA CONSOLIDADA] ' + (formObj.observacion || '')
+        // 🚀 CABALLO DE TROYA PARA LA MEZCLA
+        formObj.observacion = '[MEZCLA CONSOLIDADA] ' + (formObj.observacion || '') + ' [FORZAR_CARGA]'
 
         ;(payload as any).materiasPrimasBase = materiasPrimas.value
         emit('imprimir-carga-consolidada', payload)

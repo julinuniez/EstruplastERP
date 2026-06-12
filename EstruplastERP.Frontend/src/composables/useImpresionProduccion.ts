@@ -25,7 +25,6 @@ export function useImpresionProduccion(
         const mpMaestra = inventarioCompleto.value?.find(m => Number(m.id) === idInsumo);
         
         if (mpMaestra) {
-            // 🛡️ REGLA DICTATORIAL: Si existe en la base, pero NO tiene el tilde de Fazon, es 100% tuyo (0)
             const esFazon = mpMaestra.esFazon === true || mpMaestra.EsFazon === true;
             return esFazon ? Number(mpMaestra.clienteId || mpMaestra.ClienteId || 0) : 0;
         } else {
@@ -51,7 +50,9 @@ export function useImpresionProduccion(
     }
 
     async function generarPDF(tipo: 'orden' | 'carga' | 'carga-consolidada') {
-        ocultarFormula.value = (tipo === 'orden');
+        const tipoLimpio = String(tipo).trim().toLowerCase();
+        ocultarFormula.value = (tipoLimpio === 'orden');
+        
         const bloqueoOriginal = imprimiendoHistorial.value;
         imprimiendoHistorial.value = true;
 
@@ -68,7 +69,7 @@ export function useImpresionProduccion(
             jsPDF: { unit: 'mm', format: 'a4' }
         };
 
-        if (tipo === 'orden' && form.value.kilosTotales > 1000 && cantidadPalletsUsuario.value > 1) {
+        if (tipoLimpio === 'orden' && form.value.kilosTotales > 1000 && cantidadPalletsUsuario.value > 1) {
             const tickets = calcularEtiquetasPallets(form.value.kilosTotales, form.value.cantidad, cantidadPalletsUsuario.value);
             const originalKilos = form.value.kilosTotales;
             const originalCantidad = form.value.cantidad;
@@ -84,7 +85,7 @@ export function useImpresionProduccion(
                     : `[PALLET ${ticket.palletNumero} DE ${ticket.palletTotal}]`;
 
                 await nextTick();
-                await new Promise(r => setTimeout(r, 60)); // Renderizado ultra-rápido
+                await new Promise(r => setTimeout(r, 60));
 
                 const clon = elementoTarget.cloneNode(true) as HTMLElement;
                 clon.style.display = 'block';
@@ -123,13 +124,23 @@ export function useImpresionProduccion(
 
     const imprimirDesdeHistorial = async (payload: { orden: any, tipo: string, imprimirEnPaquetes?: boolean }) => {
         const { orden, tipo, imprimirEnPaquetes } = payload;
-        const isConsolidado = tipo === 'carga-consolidada';
+        
+        let obsCruda = String(orden?.observacion || '');
+        let forzarModoCarga = false;
+        
+        if (obsCruda.includes('[FORZAR_CARGA]')) {
+            forzarModoCarga = true;
+            obsCruda = obsCruda.replace('[FORZAR_CARGA]', '').trim();
+            if (orden) orden.observacion = obsCruda; 
+        }
+
+        let tipoLimpio = String(tipo).trim().toLowerCase();
         
         try {
             loading.value = true;
             imprimiendoHistorial.value = true;
             
-            form.value.esConsolidado = isConsolidado;
+            form.value.esConsolidado = orden?.esConsolidado || tipoLimpio.includes('consolidada');
             form.value.productoTerminadoId = orden.productoId;
             form.value.clienteId = orden.clienteId;
             form.value.notaPedido = String(orden.notaPedido || orden.id);
@@ -141,7 +152,7 @@ export function useImpresionProduccion(
             form.value.espesor = orden.espesor;
             form.value.esBobina = !!orden.esBobina;
             form.value.cantidad = orden.cantidad;
-            form.value.observacion = orden.observacion || '';
+            form.value.observacion = obsCruda;
             form.value.conBrillo = orden.conBrillo || false;
             form.value.llevaFilm = orden.llevaFilm || false;
             form.value.tipoCorona = orden.tipoCorona || 'Ninguno';
@@ -154,32 +165,50 @@ export function useImpresionProduccion(
             const desp = Number(orden.desperdicio || 0);
             form.value.merma = desp;
             form.value.kilosTotales = orden.kilos;
-
-            // 🚀 FIX CRUCIAL: Pasamos la variable de los paquetes hacia el form que lee el PDF
             form.value.imprimirEnPaquetes = imprimirEnPaquetes || false;
 
             const pesoBrutoTotal = orden.kilos * (1 + (desp / 100));
 
-            // ARMADO DE RECETA CON INVENTARIO COMPLETO
+            // 🚀 ESCUDO ABSOLUTO: Detectamos si es Hoja de Carga, Mezcla o Consolidación por contenido de texto
+            const esHojaCargaOMezlca = 
+                tipoLimpio.includes('carga') || 
+                tipoLimpio.includes('consolidada') || 
+                forzarModoCarga ||
+                form.value.esConsolidado ||
+                String(orden?.producto || '').toUpperCase().includes('CONSOLIDADA') ||
+                String(orden?.producto || '').toUpperCase().includes('MEZCLA') ||
+                String(orden?.observacion || '').toUpperCase().includes('CONSOLIDADA') ||
+                String(orden?.observacion || '').toUpperCase().includes('MEZCLA') ||
+                String(form.value?.productoNombre || '').toUpperCase().includes('CONSOLIDADA') ||
+                String(form.value?.productoNombre || '').toUpperCase().includes('MEZCLA');
+
+            if (esHojaCargaOMezlca) {
+                tipoLimpio = (form.value.esConsolidado || String(orden?.producto || '').toUpperCase().includes('CONSOLIDADA')) ? 'carga-consolidada' : 'carga';
+                ocultarFormula.value = false; 
+            }
+
             recetaDinamica.value = orden.consumos.map((c: any) => {
                 const idBuscado = Number(c.materiaPrimaId || c.id);
                 return {
                     id: Math.random(),
                     materiaPrimaId: idBuscado,
                     nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo,
-                    cantidad: isConsolidado ? c.cantidadKilos : Number(((c.cantidadKilos / pesoBrutoTotal) * 100).toFixed(2)),
+                    cantidad: (tipoLimpio === 'carga-consolidada') ? c.cantidadKilos : Number(((c.cantidadKilos / pesoBrutoTotal) * 100).toFixed(2)),
                     clienteId: determinarDuenioMaterial(idBuscado, c)
                 };
             });
 
             if (!form.value.esConsolidado && typeof balancearBase === 'function') balancearBase();
 
-            if (tipo === 'orden' && form.value.kilosTotales > 1000) {
-                const palletsSugeridos = Math.ceil(form.value.kilosTotales / 1000);
+            // 🚀 VALIDACIÓN ESTRICTA: Solo pregunta pallets si NO es mezcla/carga, es orden y la orden específica supera los 1000 kg
+            const debaPreguntarPallets = !esHojaCargaOMezlca && tipoLimpio === 'orden' && Number(orden?.kilos || 0) >= 1000;
+
+            if (debaPreguntarPallets) {
+                const palletsSugeridos = Math.ceil(Number(orden.kilos) / 1000);
                 
                 const result = await Swal.fire({
                     title: 'Dividir Impresión',
-                    text: `⚠️ Pedido grande (${form.value.kilosTotales} kg).\n¿En cuántos pallets querés dividir la impresión de las OP?`,
+                    text: `⚠️ Pedido grande (${orden.kilos} kg).\n¿En cuántos pallets querés dividir la impresión de las OP?`,
                     input: 'number',
                     inputValue: palletsSugeridos,
                     showCancelButton: true,
@@ -194,7 +223,6 @@ export function useImpresionProduccion(
                 });
 
                 if (!result.isConfirmed) {
-                    // Si cancela, abortamos la impresión
                     loading.value = false;
                     imprimiendoHistorial.value = false;
                     return;
@@ -205,9 +233,9 @@ export function useImpresionProduccion(
                 cantidadPalletsUsuario.value = 1;
             }
 
-            await generarPDF(tipo as any);
+            await generarPDF(tipoLimpio as any);
 
-            if (tipo === 'orden') {
+            if (tipoLimpio === 'orden') {
                 await ProduccionAPI.marcarOrdenImpresa(orden.id);
                 if (listaProduccionRef.value) await listaProduccionRef.value.cargarHistorial();
             }
@@ -256,7 +284,6 @@ export function useImpresionProduccion(
                 form.value.colorTexto = orden.colorTexto || orden.color || '';
                 form.value.Color = orden.color || '';
 
-                // Desactivar paquetes en lote masivo por seguridad
                 form.value.imprimirEnPaquetes = false;
                 
                 const desp = Number(orden.desperdicio || 0);
@@ -278,7 +305,7 @@ export function useImpresionProduccion(
                 if (typeof balancearBase === 'function') balancearBase();
                 
                 await nextTick();
-                await new Promise(r => setTimeout(r, 60)); // Renderizado ultra-rápido
+                await new Promise(r => setTimeout(r, 60));
 
                 const clon = elementoTarget.cloneNode(true) as HTMLElement;
                 clon.style.display = 'block';

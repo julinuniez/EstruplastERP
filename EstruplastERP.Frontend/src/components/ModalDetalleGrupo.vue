@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['close', 'actualizar-lista'])
 
-const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5122/api';
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
 
 const procesando = ref(false);
 const consumosMezcla = ref<{ materiaPrimaId: number, nombre: string, teorico: number, real: number }[]>([])
@@ -23,6 +23,12 @@ const insumoExtraSeleccionado = ref<number | ''>('');
 const yaEstaDeclarado = computed(() => {
     if (props.ordenes.length === 0) return false;
     return props.ordenes.some(o => o.estado === 'MaterialPreparado' || o.estado === 'Finalizada');
+});
+
+// Condición para revertir: Debe estar declarado y NINGUNA orden debe estar Finalizada
+const puedeRevertir = computed(() => {
+    if (!yaEstaDeclarado.value) return false;
+    return !props.ordenes.some(o => o.estado === 'Finalizada');
 });
 
 const hojaCargaId = computed(() => {
@@ -63,7 +69,6 @@ const materiasPrimasAgrupadas = computed(() => {
             if (esPropio) {
                 grupos.estruplast.items.push(p);
             } else if (esDelCliente) {
-                // Capturamos la razón social real desde la orden o el producto
                 if (!grupos.cliente.label) {
                     const orden = props.ordenes.find(o => (o.clienteId || o.ClienteId) === p.clienteId);
                     let nombreCliente = orden?.clienteNombre || orden?.ClienteNombre || p.cliente?.razonSocial || p.clienteNombre || `CLIENTE #${p.clienteId}`;
@@ -74,7 +79,6 @@ const materiasPrimasAgrupadas = computed(() => {
         }
     });
 
-    // Ordenamos alfabéticamente dentro de cada grupo
     grupos.estruplast.items.sort((a, b) => a.nombre.localeCompare(b.nombre));
     grupos.cliente.items.sort((a, b) => a.nombre.localeCompare(b.nombre));
 
@@ -130,7 +134,6 @@ watch(() => props.visible, (isOpen) => {
 const agregarFilaExtra = () => {
     if (!insumoExtraSeleccionado.value) return;
 
-    // Buscamos en la lista completa
     const mp = todasMateriasPrimas.value.find(m => m.id === insumoExtraSeleccionado.value);
     if (!mp) return;
 
@@ -186,7 +189,36 @@ const declararConsumos = async () => {
     } finally {
         procesando.value = false;
     }
-}
+};
+
+const revertirDeclaracion = async () => {
+    const confirmado = await Alertas.confirmar(
+        "⏪ Revertir Declaración",
+        "Se devolverán los insumos de esta mezcla al stock y las órdenes regresarán a estado 'En Producción'.\n\n¿Estás seguro?"
+    );
+
+    if (!confirmado) return;
+    
+    if (!hojaCargaId.value) {
+        Alertas.error("❌ No se encontró el ID de la Hoja de Carga para revertir.");
+        return;
+    }
+
+    procesando.value = true;
+
+    try {
+        // 🚀 CAMBIO CLAVE: Llamamos a un único endpoint de la Hoja de Carga
+        await axios.post(`${apiUrl}/HojasCarga/${hojaCargaId.value}/revertir`);
+        
+        Alertas.exito("✅ Declaración revertida y stock devuelto correctamente.");
+        emit('actualizar-lista');
+        emit('close');
+    } catch (e: any) {
+        Alertas.error("❌ Error al revertir: " + (e.response?.data?.mensaje || e.message));
+    } finally {
+        procesando.value = false;
+    }
+};
 </script>
 
 <template>
@@ -200,7 +232,7 @@ const declararConsumos = async () => {
             <div class="modal-body">
                 <div v-if="yaEstaDeclarado" class="alerta-ok">
                     ✅ <strong>El material de este grupo ya fue descontado del inventario.</strong><br>
-                    Las órdenes están listas para cerrarse a medida que salgan de la máquina.
+                    Abajo podés ver el detalle de lo que se consumió. Las órdenes están listas para cerrarse.
                 </div>
                 
                 <div v-else class="alerta-info">
@@ -208,34 +240,36 @@ const declararConsumos = async () => {
                     Cargue los kilos exactos del papel del maquinista. Si usaron algo que no estaba previsto, agréguelo abajo.
                 </div>
 
-                <div class="seccion" v-if="!yaEstaDeclarado">
-                    <h4>⚖️ Consumos del Grupo Completo</h4>
+                <div class="seccion" v-if="consumosMezcla.length > 0">
+                    <h4>{{ yaEstaDeclarado ? '✅ Materiales Descontados del Stock' : '⚖️ Consumos del Grupo Completo' }}</h4>
                     <div class="tabla-container">
                         <table>
                             <thead>
                                 <tr>
                                     <th>Insumo</th>
-                                    <th class="text-center">Suma Teórica (Kg)</th>
-                                    <th>Consumo Real (Kg)</th>
-                                    <th style="width: 40px; text-align: center;"></th> </tr>
+                                    <th class="text-center" v-if="!yaEstaDeclarado">Suma Teórica (Kg)</th>
+                                    <th :class="{'text-center': yaEstaDeclarado}">{{ yaEstaDeclarado ? 'Cantidad Descontada (Kg)' : 'Consumo Real (Kg)' }}</th>
+                                    <th style="width: 40px; text-align: center;" v-if="!yaEstaDeclarado"></th> 
+                                </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="(item, idx) in consumosMezcla" :key="idx">
                                     <td>{{ item.nombre }}</td>
-                                    <td class="text-center" style="color: #7f8c8d;">
+                                    <td class="text-center" style="color: #7f8c8d;" v-if="!yaEstaDeclarado">
                                         {{ item.teorico > 0 ? item.teorico.toFixed(2) : '---' }}
                                     </td>
-                                    <td>
-                                        <input type="number" v-model="item.real" style="width: 100px; padding: 5px; font-weight: bold;" step="0.1" min="0">
+                                    <td :class="{'text-center': yaEstaDeclarado}">
+                                        <input v-if="!yaEstaDeclarado" type="number" v-model="item.real" style="width: 100px; padding: 5px; font-weight: bold;" step="0.1" min="0">
+                                        <span v-else style="font-weight: 800; color: #27ae60;">{{ item.teorico.toFixed(2) }} kg</span>
                                     </td>
-                                    <td style="text-align: center;">
+                                    <td style="text-align: center;" v-if="!yaEstaDeclarado">
                                         <button class="btn-quitar" @click="quitarInsumo(idx)" title="Quitar insumo">❌</button>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                         
-                        <div class="barra-agregar-extra" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                        <div v-if="!yaEstaDeclarado" class="barra-agregar-extra" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
                             <label style="font-weight: bold; color: #34495e;">➕ Agregar Extra:</label>
                             
                             <select v-model="insumoExtraSeleccionado" class="select-lindo-agrupado">
@@ -258,8 +292,8 @@ const declararConsumos = async () => {
                     <h4>📄 Órdenes incluidas en este grupo ({{ ordenes.length }})</h4>
                     <ul class="lista-ordenes">
                         <li v-for="o in ordenes" :key="o.id">
-                            <strong>OP #{{ o.id }}</strong> - {{ o.producto }} ({{ o.kilos }} Kg) 
-                            <span :class="['badge', 'badge-' + o.estado.toLowerCase()]">{{ o.estado }}</span>
+                            <strong>Nota Pedido #{{ o.notaPedido || o.id }}</strong> - {{ o.producto }} ({{ o.kilos }} Kg) 
+                            <span :class="['badge', 'badge-' + o.estado.toLowerCase()]">{{ o.estado === 'MaterialPreparado' ? 'MATERIAL LISTO' : (o.estado === 'Pendiente' ? 'EN MÁQUINA' : o.estado.toUpperCase()) }}</span>
                         </li>
                     </ul>
                 </div>
@@ -267,6 +301,9 @@ const declararConsumos = async () => {
             
             <div class="modal-footer">
                 <button class="btn-cancelar" @click="$emit('close')">Cerrar</button>
+                <button v-if="puedeRevertir" class="btn-revertir" @click="revertirDeclaracion" :disabled="procesando">
+                    {{ procesando ? '⏳ Procesando...' : '⏪ Revertir Declaración' }}
+                </button>
                 <button v-if="!yaEstaDeclarado" class="btn-confirmar" @click="declararConsumos" :disabled="procesando">
                     {{ procesando ? '⏳ Procesando...' : '✅ Declarar Consumos de Mezcla' }}
                 </button>
@@ -297,13 +334,23 @@ td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
 .lista-ordenes { list-style: none; padding: 0; margin: 0; }
 .lista-ordenes li { background: #f8fafc; padding: 8px 12px; margin-bottom: 5px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center;}
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #ecf0f1; padding-top: 15px; }
-.btn-cancelar { background: #95a5a6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-.btn-confirmar { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+.btn-cancelar { background: #95a5a6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s;}
+.btn-cancelar:hover { background: #7f8c8d; }
+
+.btn-confirmar { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s;}
+.btn-confirmar:hover:not(:disabled) { background: #2ecc71; }
 .btn-confirmar:disabled { background: #bdc3c7; cursor: not-allowed; }
+
+.btn-revertir { background: #e67e22; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s;}
+.btn-revertir:hover:not(:disabled) { background: #d35400; }
+.btn-revertir:disabled { background: #f39c12; cursor: not-allowed; opacity: 0.7;}
+
 .badge { padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
-.badge-pendiente { background: #fff7ed; color: #d97706; border: 1px solid #fcd34d; }
+.badge-pendiente, .badge-enproceso { background: #fff7ed; color: #d97706; border: 1px solid #fcd34d; }
 .badge-materialpreparado { background: #eff6ff; color: #3b82f6; border: 1px solid #93c5fd; }
 .badge-finalizada { background: #ecfdf5; color: #10b981; border: 1px solid #a7f3d0; }
+
 .btn-orden { background: #34495e; border: 1px solid #7f8c8d; color: white; cursor: pointer; border-radius: 4px; font-weight: bold; } 
 .btn-orden:hover:not(:disabled) { background: #2980b9; }
 .btn-orden:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -783,7 +783,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                         </div>
                     </div>
                     <div style="flex:1">
-                        <label style="color:#2980b9;">🧪 Estearato</label>
+                        <label style="color:#2980b9;">Estearato</label>
                         <div style="padding: 8px; background: #ebf5fb; border: 1px solid #3498db; border-radius: 4px; color:#2980b9; font-weight:bold; text-align: center;">
                             {{ Number(kilosEstearato).toFixed(3) }} Kg
                         </div>
