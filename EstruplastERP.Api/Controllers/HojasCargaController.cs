@@ -211,5 +211,21 @@ namespace EstruplastERP.Controllers
 
             return Ok(consumos);
         }
+
+        [HttpGet("{id}/consumos")]
+        public async Task<IActionResult> GetConsumosHoja(int id)
+        {
+            var consumos = await _context.ConsumosHojasCarga
+                .Include(c => c.MateriaPrima)
+                .Where(c => c.HojaCargaId == id)
+                .Select(c => new {
+                    materiaPrimaId = c.MateriaPrimaId,
+                    nombre = c.MateriaPrima != null ? c.MateriaPrima.Nombre : "Insumo",
+                    real = c.CantidadRealKg
+                })
+                .ToListAsync();
+
+            return Ok(consumos);
+        }
     }
 }

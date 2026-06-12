@@ -31,9 +31,20 @@ const puedeRevertir = computed(() => {
     return !props.ordenes.some(o => o.estado === 'Finalizada');
 });
 
+// 🚀 EXTRACCIÓN INFALIBLE DEL ID
 const hojaCargaId = computed(() => {
-    if (props.ordenes.length === 0) return null;
-    return props.ordenes[0].hojaCargaId;
+    // 1. Buscamos si alguna orden tiene el ID explícito (por las dudas)
+    const ordenConId = props.ordenes.find(o => o.hojaCargaId);
+    if (ordenConId) return ordenConId.hojaCargaId;
+    
+    // 2. Método Infalible: Extraer numéricamente desde el string "HC-123"
+    if (props.codigo) {
+        const match = props.codigo.match(/HC-(\d+)/i);
+        if (match && match[1]) {
+            return parseInt(match[1], 10);
+        }
+    }
+    return null;
 });
 
 const idClienteUnico = computed(() => {
@@ -102,10 +113,12 @@ onMounted(() => {
     cargarCatálogoMateriales();
 });
 
-watch(() => props.visible, (isOpen) => {
+// 🚀 ACÁ SUCEDE LA MAGIA DE LA CARGA REAL
+watch(() => props.visible, async (isOpen) => {
     if (isOpen && props.ordenes.length > 0) {
         const map = new Map<number, any>();
         
+        // 1. Armamos el consumo teórico siempre como base
         props.ordenes.forEach(o => {
             if (o.consumos) {
                 o.consumos.forEach((c: any) => {
@@ -122,11 +135,29 @@ watch(() => props.visible, (isOpen) => {
             }
         });
         
-        consumosMezcla.value = Array.from(map.values()).map(c => {
+        let consumosList = Array.from(map.values()).map(c => {
             c.real = Number(c.teorico.toFixed(2));
             return c;
         });
 
+        // 2. Si ya está declarado, pedimos los datos REALES al backend usando el ID extraído
+        if (yaEstaDeclarado.value && hojaCargaId.value) {
+            try {
+                const { data } = await axios.get(`${apiUrl}/HojasCarga/${hojaCargaId.value}/consumos`);
+                if (data && data.length > 0) {
+                    consumosList = data.map((d: any) => ({
+                        materiaPrimaId: d.materiaPrimaId,
+                        nombre: d.nombre + (map.has(d.materiaPrimaId) ? '' : ' (Extra)'),
+                        teorico: map.get(d.materiaPrimaId)?.teorico || 0,
+                        real: d.real
+                    }));
+                }
+            } catch (error) {
+                console.error("Error obteniendo consumos reales", error);
+            }
+        }
+
+        consumosMezcla.value = consumosList;
         insumoExtraSeleccionado.value = ''; 
     }
 });
@@ -160,7 +191,7 @@ const quitarInsumo = (index: number) => {
 
 const declararConsumos = async () => {
     if (!hojaCargaId.value) {
-        Alertas.error("Error crítico: La orden no tiene un HojaCargaId válido.");
+        Alertas.error("Error crítico: No se pudo determinar el ID de la Hoja de Carga.");
         return;
     }
 
@@ -200,14 +231,13 @@ const revertirDeclaracion = async () => {
     if (!confirmado) return;
     
     if (!hojaCargaId.value) {
-        Alertas.error("❌ No se encontró el ID de la Hoja de Carga para revertir.");
+        Alertas.error("❌ No se pudo determinar el ID de la Hoja de Carga para revertir.");
         return;
     }
 
     procesando.value = true;
 
     try {
-        // 🚀 CAMBIO CLAVE: Llamamos a un único endpoint de la Hoja de Carga
         await axios.post(`${apiUrl}/HojasCarga/${hojaCargaId.value}/revertir`);
         
         Alertas.exito("✅ Declaración revertida y stock devuelto correctamente.");
@@ -260,7 +290,7 @@ const revertirDeclaracion = async () => {
                                     </td>
                                     <td :class="{'text-center': yaEstaDeclarado}">
                                         <input v-if="!yaEstaDeclarado" type="number" v-model="item.real" style="width: 100px; padding: 5px; font-weight: bold;" step="0.1" min="0">
-                                        <span v-else style="font-weight: 800; color: #27ae60;">{{ item.teorico.toFixed(2) }} kg</span>
+                                        <span v-else style="font-weight: 800; color: #27ae60;">{{ item.real.toFixed(2) }} kg</span>
                                     </td>
                                     <td style="text-align: center;" v-if="!yaEstaDeclarado">
                                         <button class="btn-quitar" @click="quitarInsumo(idx)" title="Quitar insumo">❌</button>
