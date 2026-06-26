@@ -116,7 +116,7 @@ namespace EstruplastERP.Controllers
             }
         }
 
-        // 🚀 NUEVO ENDPOINT: Revertir la declaración de la Hoja de Carga completa
+        // NUEVO ENDPOINT: Revertir la declaración de la Hoja de Carga completa
         [HttpPost("{id}/revertir")]
         public async Task<IActionResult> RevertirDeclaracion(int id)
         {

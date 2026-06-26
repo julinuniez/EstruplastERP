@@ -8,7 +8,6 @@ import {
 import { Bar, Doughnut, Line } from 'vue-chartjs';
 import packageInfo from '../../package.json';
 import { Alertas } from '@/utils/alertas';
-// 🚀 Importamos ExcelJS y FileSaver para generar el reporte premium con filtros dinámicos
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
@@ -18,7 +17,6 @@ const version = packageInfo.version || '1.0.0';
 const cargando = ref(true);
 const descargandoExcel = ref(false);
 const error = ref('');
-
 
 const cotizacionDolar = ref({ compra: 0, venta: 0, fecha: '' });
 const alertasCriticas = ref<any[]>([]);
@@ -58,8 +56,8 @@ async function cargarDolarBNA() {
     try {
         const res = await axios.get('https://dolarapi.com/v1/dolares/oficial');
         cotizacionDolar.value = {
-            compra: res.data.compra,
-            venta: res.data.venta,
+            compra: Math.round(res.data.compra),
+            venta: Math.round(res.data.venta),  
             fecha: new Date(res.data.fechaActualizacion).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
         };
     } catch (e) {
@@ -83,7 +81,7 @@ async function cargarDatos() {
             axios.get(`${apiUrl}/Estadisticas/top-productos${query}`, getAuthConfig()),
             axios.get(`${apiUrl}/Estadisticas/top-materiales${query}`, getAuthConfig()),
             axios.get(`${apiUrl}/Estadisticas/top-clientes${query}`, getAuthConfig()),
-            axios.get(`${apiUrl}/Productos`, getAuthConfig()) 
+            axios.get(`${apiUrl}/Productos`, getAuthConfig())
         ]);
 
         resumenMensual.value = Array.isArray(resMes.data) ? resMes.data : [];
@@ -154,7 +152,6 @@ async function exportarProduccionAExcel() {
     const anio = fechaFiltro.value.getFullYear();
 
     try {
-        // 🚀 Ahora leemos SOLO del Kardex (Movimientos), que tiene la verdad absoluta y filtrada
         const resMovimientos = await axios.get(`${apiUrl}/Movimientos/auditoria?mes=${mes}&anio=${anio}`, getAuthConfig());
         const datosMovimientos = Array.isArray(resMovimientos.data) ? resMovimientos.data : [];
 
@@ -166,7 +163,6 @@ async function exportarProduccionAExcel() {
 
         const workbook = new ExcelJS.Workbook();
         
-        // --- HOJA 1: TABLA MAESTRA INTERACTIVA ---
         const wsMaestra = workbook.addWorksheet('Auditoría de Consumos');
         wsMaestra.views = [{ showGridLines: true }];
 
@@ -201,7 +197,6 @@ async function exportarProduccionAExcel() {
 
         let filaActual = 5;
 
-        // Inyectamos la data sin duplicaciones
         datosMovimientos.forEach(m => {
             const row = wsMaestra.addRow({
                 fecha: m.fecha ? new Date(m.fecha).toLocaleDateString('es-AR') : '-',
@@ -235,7 +230,6 @@ async function exportarProduccionAExcel() {
             bottom: { style: 'double', color: { argb: 'FF27AE60' } }
         };
 
-        // --- HOJA 2: RESUMEN DE KILOS ACUMULADOS POR CLIENTE ---
         const wsClientes = workbook.addWorksheet('Resumen por Cliente');
         wsClientes.views = [{ showGridLines: true }];
         
@@ -421,6 +415,7 @@ onMounted(() => {
         <div v-else-if="error" class="error-msg">{{ error }}</div>
 
         <div v-else class="contenido-dashboard">
+            
             <div class="fila-kpis">
                 <div class="card-kpi azul">
                     <div class="icono">⚖️</div>
@@ -450,7 +445,6 @@ onMounted(() => {
             </div>
 
             <div class="grid-principal">
-                
                 <div class="card">
                     <h3>📦 Stock Disponible (MP Virgen - Top 7)</h3>
                     <div class="area-grafico" v-if="stockMateriales.length > 0">
@@ -496,7 +490,6 @@ onMounted(() => {
                     </div>
                     <p class="sin-datos" v-else>Sin producción este mes.</p>
                 </div>
-
             </div>
         </div>
     </div>

@@ -28,6 +28,7 @@ const apiUrl = import.meta.env.VITE_API_URL || '/api';
 const busqueda = ref('');
 const error = ref('');
 const fileInputFlexxus = ref<HTMLInputElement | null>(null);
+const fileInputExcelCliente = ref<HTMLInputElement | null>(null); // 🚀 Ref para Excel Cliente
 
 // Pestañas
 const tabActual = ref('MP');
@@ -78,19 +79,15 @@ const esMpCliente = (p: any) => getSku(p).startsWith('MP-CLI');
 const esServicioFazon = (p: any) => getSku(p).startsWith('FAZ-');
 const esScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP-CLI');
 
-// 🚀 SOLUCIÓN: Hacemos que vistaFazonFiltrada arranque leyendo TODOS los productos de clientes.
 const vistaFazonFiltrada = computed(() => {
-    // 1. Traemos TODO lo que pertenece a un cliente o sea Scrap/Fazon
     let lista = listaProductos.value.filter(p => 
         getClienteId(p) > 0 || esMpCliente(p) || esServicioFazon(p) || esScrap(p)
     );
     
-    // 2. Si eligió un cliente, filtramos
     if (clienteFiltro.value) {
         lista = lista.filter(p => getClienteId(p) === Number(clienteFiltro.value));
     }
     
-    // 3. Filtrar por el tipo de material seleccionado
     if (materialFiltro.value && materialFiltro.value !== 'Todos los Materiales') {
         lista = lista.filter(p => {
             const tipo = detectarTipo(p) || '';
@@ -98,7 +95,6 @@ const vistaFazonFiltrada = computed(() => {
         });
     }
     
-    // 4. Filtrar por búsqueda de texto
     if (busqueda.value) {
         const b = busqueda.value.toUpperCase();
         lista = lista.filter(p => getNombre(p).includes(b) || getSku(p).includes(b));
@@ -120,6 +116,15 @@ const {
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
 
 const clickImportarFlexxus = () => { fileInputFlexxus.value?.click(); };
+
+// 🚀 DISPARADOR DE LA IMPORTACIÓN DE CLIENTES EN EXCEL
+const clickImportarClienteExcel = () => {
+    if (!clienteFiltro.value) {
+        Alertas.advertencia("Por favor seleccione un cliente en el filtro antes de importar su inventario.");
+        return;
+    }
+    fileInputExcelCliente.value?.click();
+};
 
 const abrirKardex = (producto: any) => {
     productoIdSeleccionado.value = producto.id;
@@ -194,6 +199,41 @@ const procesarArchivoFlexxus = async (event: Event) => {
     } finally {
         cargando.value = false;
         target.value = ''; 
+    }
+};
+
+// 🚀 PROCESADOR EXCEL CLIENTE MEDIANTE TU ENDPOINT MULTICLIENTE EXISTENTE
+const procesarExcelCliente = async (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    if (!target.files || target.files.length === 0) return;
+    const file = target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+        Alertas.advertencia('Por favor selecciona una planilla Excel (.xlsx o .xls) válida.');
+        target.value = '';
+        return;
+    }
+
+    try {
+        cargando.value = true;
+        const formData = new FormData();
+        formData.append('archivo', file);
+        if (clienteFiltro.value) {
+            formData.append('clienteIdFiltro', String(clienteFiltro.value));
+        }
+
+        const response = await axios.post(`${apiUrl}/Flexxus/importar-excel-multicliente`, formData, {
+            headers: { ...getAuthConfig().headers, 'Content-Type': 'multipart/form-data' }
+        });
+
+        Alertas.exito(response.data?.mensaje || 'Importación completada correctamente.');
+        await recargarDatos();
+    } catch (e: any) {
+        Alertas.error(`Error al importar inventario: ${e.response?.data || e.message || 'Estructura incorrecta.'}`);
+    } finally {
+        cargando.value = false;
+        target.value = '';
     }
 };
 
@@ -323,18 +363,13 @@ onMounted(() => {
 
 <template>
     <div class="contenedor-stock">
-        <!-- HEADER PRINCIPAL -->
         <div class="header-stock">
             <div class="titulos-stock">
                 <h2>📦 Gestión de Stock</h2>
             </div>
             
             <div class="acciones-header">
-                <button 
-                    @click="descargarAuditoria" 
-                    :disabled="exportando || cargando"
-                    class="btn-header btn-excel"
-                >
+                <button @click="descargarAuditoria" :disabled="exportando || cargando" class="btn-header btn-excel">
                     <span v-if="exportando">⏳ Generando...</span>
                     <span v-else>📊 Planilla Conteo</span>
                 </button>
@@ -343,7 +378,12 @@ onMounted(() => {
                 <button class="btn-header btn-masterbatch" @click="mostrarModalMasterbatch = true">🎨 Alta Color</button>
                 <button class="btn-header btn-flexxus" @click="clickImportarFlexxus" :disabled="cargando">📄 Importar CSV</button>
 
+                <button v-if="tabActual === 'CLI'" class="btn-header btn-importar-cliente" @click="clickImportarClienteExcel" :disabled="cargando || !clienteFiltro">
+                    📥 Importar Excel Cliente
+                </button>
+
                 <input type="file" ref="fileInputFlexxus" style="display: none" accept=".csv, .xlsx, .xls" @change="procesarArchivoFlexxus"/>
+                <input type="file" ref="fileInputExcelCliente" style="display: none" accept=".xlsx, .xls" @change="procesarExcelCliente"/>
 
                 <div class="buscador">
                     <input type="text" v-model="busqueda" placeholder="🔍 Buscar SKU o Nombre...">
@@ -351,7 +391,6 @@ onMounted(() => {
             </div>
         </div>
 
-        <!-- TABS DE NAVEGACIÓN -->
         <div class="tabs-container">
             <button class="tab-btn" :class="{ active: tabActual === 'MP' }" @click="tabActual = 'MP'">
                 🧪 Materias Primas <span class="counter">{{ countMP }}</span>
@@ -364,7 +403,6 @@ onMounted(() => {
             </button>
         </div>
 
-        <!-- SUB-TABS MATERIA PRIMA -->
         <div v-if="tabActual === 'MP'" class="toolbar-clientes">
             <div class="sub-tabs">
                 <button :class="{ 'sub-active': subTabMP === 'VIRGEN' }" @click="subTabMP = 'VIRGEN'">🧪 Material Virgen</button>
@@ -374,7 +412,6 @@ onMounted(() => {
             </div>
         </div>
 
-        <!-- BARRA FAZON UNIFICADA -->
         <div v-if="tabActual === 'CLI'" class="toolbar-fazon">
             <div class="filtros-izquierda">
                 <div class="filtro-columna">
@@ -406,14 +443,11 @@ onMounted(() => {
             </div>
         </div>
 
-        <!-- SECCIÓN DE CARGANDO O ERROR -->
         <div v-if="cargando" class="loading">⏳ Cargando Inventario, por favor espere...</div>
         <div v-else-if="error" class="error">❌ {{ error }}</div>
 
-        <!-- CONTENEDOR DE TABLAS PRINCIPALES -->
         <div v-else class="tabla-wrapper">
             
-            <!-- VISTA 1: TABLA AGRUPADA POR COLOR -->
             <table v-if="tabActual === 'CLI' && verMolidoAgrupado">
                 <thead>
                     <tr>
@@ -461,7 +495,6 @@ onMounted(() => {
                 </tbody>
             </table>
 
-            <!-- VISTA 2: TABLA ESTÁNDAR PLANA -->
             <table v-else-if="(tabActual === 'CLI' && vistaFazonFiltrada.length > 0) || (tabActual !== 'CLI' && productosFiltrados.length > 0)">
                 <thead>
                     <tr>
@@ -540,7 +573,6 @@ onMounted(() => {
         </div>
     </div>
 
-    <!-- MODAL DE RESERVAS CON SCROLL LIMITADO -->
     <div v-if="mostrarModalReservas" class="modal-overlay" @click.self="mostrarModalReservas = false">
         <div class="modal-content modal-reserva">
             <div class="modal-header-reserva">
@@ -562,7 +594,7 @@ onMounted(() => {
                         <tr v-for="res in ordenesReserva" :key="res.id">
                             <td class="reserva-nota">{{ res.notaPedido || res.numeroPedidoCliente || 'S/N' }}</td>
                             <td class="reserva-cliente">{{ res.cliente }}</td>
-                            <td class="reserva-kilos">{{ res.cantidad }} kg</td>
+                            <td class="reserva-kilos">{{ res.amount || res.cantidad }} kg</td>
                         </tr>
                         <tr v-if="!ordenesReserva || ordenesReserva.length === 0">
                             <td colspan="3" style="text-align: center; color: #7f8c8d; padding: 20px;">No hay reservas activas.</td>
@@ -577,7 +609,6 @@ onMounted(() => {
         </div>
     </div>
 
-    <!-- MODAL DE IMPORTACIÓN FLEXXUS -->
     <div v-if="mostrarResumen" class="modal-overlay">
         <div class="modal-content">
             <h3>📊 Resumen de Importación</h3>
@@ -594,13 +625,12 @@ onMounted(() => {
                 </div>
             </div>
             <p v-if="resumenData.errores > 0" class="text-error">
-                ⚠️ Se ignoraron {{ resumenData.errores }} filas por errores.
+                ⚠️ Se ignoraron {{ resumenData.errores }} filas por inconsistencias.
             </p>
             <button class="btn-cerrar" @click="cerrarModal">Aceptar</button>
         </div>
     </div>
 
-    <!-- PANTALLAZO GLOBAL TUTI -->
     <div v-if="mostrarModalGlobal" class="modal-overlay" @click.self="mostrarModalGlobal = false">
         <div class="modal-content modal-lg">
             <div class="modal-header">
@@ -643,9 +673,14 @@ onMounted(() => {
 .btn-masterbatch { background: #8b5cf6; color: white; }
 .btn-flexxus { background-color: #34495e; color: white; }
 
+/* 🚀 ESTILO DEL NUEVO BOTÓN NARANJA EXCEL CLIENTE */
+.btn-importar-cliente { background-color: #e67e22; color: white; }
+.btn-importar-cliente:hover:not(:disabled) { background-color: #d35400; }
+.btn-importar-cliente:disabled { background-color: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
+
 .buscador input { padding: 8px 12px; width: 250px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; outline: none; }
 
-/* TABS ESTILO IMAGEN 2 */
+/* TABS NAVEGACIÓN */
 .tabs-container { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #eaeaea; padding-bottom: 0; }
 .tab-btn { background: none; border: none; padding: 12px 20px; font-size: 0.95rem; color: #7f8c8d; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 8px; border-bottom: 3px solid transparent; }
 .tab-btn:hover { color: #34495e; background-color: #f8f9fa; border-radius: 6px 6px 0 0; }
@@ -653,215 +688,73 @@ onMounted(() => {
 .counter { background: #e0e0e0; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; color: #555; }
 .tab-btn.active .counter { background: #d6eaf8; color: #2980b9; }
 
-/* SUB-TABS ESTILO IMAGEN 1 */
 .toolbar-clientes { background-color: #f4f6f7; padding: 12px 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #e5e8e8; }
 .sub-tabs { display: flex; gap: 4px; background: transparent; }
 .sub-tabs button { border: none; background: transparent; padding: 6px 14px; font-size: 0.85rem; color: #7f8c8d; cursor: pointer; border-radius: 4px; font-weight: bold; }
 .sub-tabs button.sub-active { background: white; color: #2c3e50; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 
-/* 🚀 BARRA FAZON UNIFICADA (IMAGEN 3) */
-.toolbar-fazon {
-    background-color: #ffffff;
-    padding: 15px 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    border: 1px solid #eaeaea;
-    display: flex;
-    justify-content: space-between; 
-    align-items: flex-end; 
-    flex-wrap: wrap;
-    gap: 15px;
-}
-.filtros-izquierda {
-    display: flex;
-    gap: 15px;
-    flex-wrap: wrap;
-}
-.filtro-columna {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-.filtro-columna label {
-    font-size: 0.85rem;
-    color: #555;
-    font-weight: bold;
-}
-.select-chico {
-    padding: 6px 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 0.9rem;
-    width: 200px;
-    color: #333;
-    background: #fff;
-    outline: none;
-}
-.select-chico:focus { border-color: #3498db; }
+.toolbar-fazon { background-color: #ffffff; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #eaeaea; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 15px; }
+.filtros-izquierda { display: flex; gap: 15px; flex-wrap: wrap; }
+.filtro-columna { display: flex; flex-direction: column; gap: 6px; }
+.filtro-columna label { font-size: 0.85rem; color: #555; font-weight: bold; }
+.select-chico { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; width: 200px; color: #333; background: #fff; outline: none; }
 
-.acciones-derecha-fazon {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-.btn-exportar-fazon {
-    background-color: #2980b9;
-    color: white;
-    border: none;
-    padding: 0 15px;
-    border-radius: 4px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background 0.2s;
-    height: 34px;
-    display: flex;
-    align-items: center;
-}
-.btn-exportar-fazon:hover { background-color: #1f618d; }
-.toggle-agrupado {
-    display: flex;
-    align-items: center;
-    background: #fff3e0;
-    padding: 0 15px;
-    border-radius: 6px;
-    border: 1px solid #f39c12;
-    color: #d35400;
-    font-weight: bold;
-    cursor: pointer;
-    height: 34px;
-    box-sizing: border-box;
-}
-.toggle-agrupado input { margin-right: 8px; cursor: pointer; }
+.acciones-derecha-fazon { display: flex; align-items: center; gap: 15px; }
+.btn-exportar-fazon { background-color: #2980b9; color: white; border: none; padding: 0 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: background 0.2s; height: 34px; display: flex; align-items: center; }
+.toggle-agrupado { display: flex; align-items: center; background: #fff3e0; padding: 0 15px; border-radius: 6px; border: 1px solid #f39c12; color: #d35400; font-weight: bold; cursor: pointer; height: 34px; }
+.toggle-agrupado input { margin-right: 8px; }
 
-/* TABLA PRINCIPAL ESTILO IMAGEN 1 */
+/* TABLA PRINCIPAL */
 .tabla-wrapper { overflow-x: auto; border-top: 1px solid #eee; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; text-align: left; }
 th { background: #ffffff; padding: 12px 10px; font-weight: bold; color: #555; border-bottom: 2px solid #eaeaea; font-size: 0.85rem; }
 td { padding: 12px 10px; border-bottom: 1px solid #f9f9f9; vertical-align: middle; color: #444; }
-
-.sku-cell { font-family: 'Courier New', monospace; font-weight: bold; color: #666; font-size: 0.85rem; letter-spacing: 0.5px;}
-
-/* 🚀 NOMBRE DEL PRODUCTO MÁS CHICO PERO SÓLIDO */
-.nombre-prod { 
-    font-weight: 700; 
-    color: #1e293b; 
-    font-size: 0.9rem; 
-}
-
-.text-center { text-align: center; }
-.text-muted { color: #95a5a6; font-size: 0.85rem; }
-.font-numero { font-size: 0.95rem; }
-.font-bold { font-weight: bold; color: #2c3e50; }
+.sku-cell { font-family: 'Courier New', monospace; font-weight: bold; color: #666; font-size: 0.85rem; }
+.nombre-prod { font-weight: 700; color: #1e293b; font-size: 0.9rem; }
 
 .badge-proveedor { background-color: #f5eef8; color: #8e44ad; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; border: 1px solid #ebdef0; }
 .btn-global { background: #8e44ad; color: white; border: none; padding: 2px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; cursor: pointer; margin-top: 4px; }
 
-/* ESTADO BAJO STOCK */
 tr.bajo-stock td { background-color: #fdedec !important; }
-tr.bajo-stock .sku-cell { color: #c0392b; }
-tr.bajo-stock .nombre-prod { color: #c0392b; }
-tr.bajo-stock .font-bold { color: #c0392b; }
+.btn-reservado { background: #fef5e7; border: 1px solid #f8c471; color: #d35400; padding: 4px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; cursor: pointer; line-height: 1.2; }
 
-/* BOTÓN RESERVADO ESTILO IMAGEN 1 */
-.btn-reservado { background: #fef5e7; border: 1px solid #f8c471; color: #d35400; padding: 4px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; cursor: pointer; line-height: 1.2; transition: background 0.2s; }
-.btn-reservado:hover { background: #fdebd0; }
-
-/* BOTONES DE ACCIÓN CIRCULARES ESTILO IMAGEN 1 */
 .celda-acciones { display: flex; gap: 8px; justify-content: center; }
-.btn-accion-tabla { border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; }
+.btn-accion-tabla { border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .btn-edit { background: #ebf5fb; color: #2980b9; }
 .btn-ajuste { background: #fef5e7; color: #e67e22; }
 .btn-kardex { background: #f4f6f7; color: #7f8c8d; }
 
-/* TAGS Y BADGES */
 .tags-fila { display: flex; gap: 5px; align-items: center; margin-top: 5px; }
 .tag-fazon { background: #7b1fa2; color: white; padding: 1px 5px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; }
 .tag-molido { color: #27ae60; font-weight: bold; font-size: 0.75rem; }
 .tag-scrap { color: #d35400; font-weight: bold; font-size: 0.75rem; }
 
-.badge-cliente-purple { background-color: #8e44ad; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px; text-transform: uppercase; }
+.badge-cliente-purple { background-color: #8e44ad; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; }
 .badge-propio { background: #e3f2fd; color: #0d47a1; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; border: 1px solid #bbdefb; }
-
 .badge-material { background: #64748b; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; }
-.badge-material.pai { background: #e67e22; }
-.badge-material.pead { background: #27ae60; }
-.badge-material.pp { background: #8e44ad; }
-.badge-material.abs { background: #c0392b; }
 
-/* VISTA AGRUPADA (MOLIDO) */
-.fila-grupo { background-color: #f8fafc; cursor: pointer; transition: background 0.2s; font-weight: bold; border-top: 1px solid #e2e8f0; }
-.fila-grupo:hover { background-color: #e2e8f0; }
+.fila-grupo { background-color: #f8fafc; cursor: pointer; font-weight: bold; }
 .fila-detalle-grupo td { background-color: #ffffff; font-size: 0.85rem; border-bottom: 1px dashed #e2e8f0; }
 
-/* 🚀 MODAL DE RESERVAS CON SCROLL Y PRODUCTO CONTUSO */
-.modal-overlay { 
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
-    background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; 
-    z-index: 2000; padding: 20px; box-sizing: border-box;
-}
-
-.modal-reserva { 
-    background: white; border-radius: 8px; width: 550px; max-width: 100%; 
-    max-height: 90vh; 
-    display: flex; flex-direction: column; 
-    padding: 25px 35px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); box-sizing: border-box; 
-}
-
-.modal-header-reserva { flex-shrink: 0; } 
-.modal-header-reserva h3 { margin: 0 0 15px 0; color: #2c3e50; font-size: 1.2rem; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #eee; padding-bottom: 15px;}
-
-.nombre-prod-modal {
-    color: #1e293b;
-    font-weight: 800; 
-    font-size: 1.1rem;
-    margin: 0 0 15px 0;
-    letter-spacing: -0.2px;
-    flex-shrink: 0;
-}
-
-.modal-body-reserva { 
-    overflow-y: auto; 
-    flex-grow: 1; 
-    padding-right: 5px; 
-}
-
-.modal-body-reserva::-webkit-scrollbar { width: 6px; }
-.modal-body-reserva::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
-.modal-body-reserva::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
-.modal-body-reserva::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
-
-.tabla-reservas-detalle { width: 100%; border-collapse: collapse; text-align: left; }
-.tabla-reservas-detalle th { 
-    background: #f9f9f9; padding: 10px; font-size: 0.8rem; color: #555; 
-    border-bottom: 2px solid #eaeaea; font-weight: bold;
-    position: sticky; top: 0; z-index: 10; 
-    box-shadow: 0 2px 2px -1px rgba(0,0,0,0.1);
-}
-.tabla-reservas-detalle td { padding: 12px 10px; border-bottom: 1px solid #f1f1f1; font-size: 0.9rem; }
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+.modal-reserva { background: white; border-radius: 8px; width: 550px; max-height: 90vh; display: flex; flex-direction: column; padding: 25px 35px; }
+.modal-body-reserva { overflow-y: auto; flex-grow: 1; }
+.tabla-reservas-detalle { width: 100%; border-collapse: collapse; }
+.tabla-reservas-detalle th { background: #f9f9f9; padding: 10px; font-size: 0.8rem; border-bottom: 2px solid #eaeaea; }
 .reserva-nota { color: #2980b9; font-weight: bold; }
-.reserva-cliente { color: #444; }
 .reserva-kilos { color: #d35400; font-weight: bold; text-align: right; }
 
-.modal-footer-reserva { flex-shrink: 0; text-align: right; margin-top: 25px; } 
-.btn-cerrar-reserva { background: #e74c3c; color: white; border: none; padding: 8px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
-.btn-cerrar-reserva:hover { background: #c0392b; }
-
-/* MODALES GENÉRICOS */
-.modal-content { background: white; padding: 25px; border-radius: 8px; width: 400px; max-width: 95vw; text-align: center; }
+.modal-content { background: white; padding: 25px; border-radius: 8px; width: 400px; text-align: center; }
 .modal-stats { display: flex; justify-content: space-around; margin: 25px 0; }
 .stat-item { display: flex; flex-direction: column; align-items: center; }
-.stat-item .emoji { font-size: 2rem; margin-bottom: 5px; }
-.stat-item .num { font-size: 1.8rem; font-weight: bold; color: #333; }
+.stat-item .num { font-size: 1.8rem; font-weight: bold; }
 .stat-item.creado .num { color: #27ae60; }
-.btn-cerrar { background: #34495e; color: white; border: none; padding: 10px 25px; border-radius: 25px; cursor: pointer; font-size: 1rem; }
-.vacio { text-align: center; padding: 40px; color: #7f8c8d; font-style: italic; }
-.loading { text-align: center; padding: 40px; color: #3498db; font-weight: bold; }
+.btn-cerrar { background: #34495e; color: white; border: none; padding: 10px 25px; border-radius: 25px; cursor: pointer; }
+.vacio, .loading { text-align: center; padding: 40px; color: #7f8c8d; font-weight: bold; }
 
 .modal-lg { max-width: 800px !important; width: 800px; text-align: left; }
 .tarjetas-resumen { display: flex; gap: 15px; margin: 15px 0; }
-.tarjeta-stock { flex: 1; padding: 16px; border-radius: 8px; text-align: center; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-.tarjeta-stock span { font-size: 0.7rem; font-weight: bold; opacity: 0.85; letter-spacing: 0.5px; }
-.tarjeta-stock h2 { margin: 6px 0 0 0; font-size: 1.6rem; font-weight: 800; }
+.tarjeta-stock { flex: 1; padding: 16px; border-radius: 8px; text-align: center; color: white; }
 .fisico { background: linear-gradient(135deg, #334155, #1e293b); }
 .reservado { background: linear-gradient(135deg, #ea580c, #c2410c); }
 .libre { background: linear-gradient(135deg, #16a34a, #15803d); }

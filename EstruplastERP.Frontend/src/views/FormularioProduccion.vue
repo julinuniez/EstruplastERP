@@ -108,6 +108,7 @@ const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Num
 const densidadPT = computed(() => productoSeleccionado.value?.pesoEspecifico || 1.1);
 
 // ✅ SOLUCIÓN REAL: Se suma leyendo el rubro original de la base de datos (SIN HARDCODEAR).
+// 🚀 CORRECCIÓN: Se incluyen explícitamente las "Cargas" dentro de la base principal que debe sumar 100%.
 const porcentajeSoloBase = computed(() => {
     let suma = 0;
     recetaDinamica.value.forEach((r: any) => {
@@ -115,9 +116,13 @@ const porcentajeSoloBase = computed(() => {
         const mpInfo = listaTodasMateriasPrimas.value.find(m => m.id === mpId) || listaInventarioCompleto.value.find(m => m.id === mpId);
         
         const rubro = mpInfo ? String(mpInfo.rubro || mpInfo.Rubro || '').toUpperCase() : '';
+        const nombreMaterial = mpInfo ? String(mpInfo.nombre || mpInfo.Nombre || '').toUpperCase() : '';
         
-        // Si el material ES un aditivo u "otros", no suma a la base de 100%.
-        if (rubro !== 'ADITIVO' && rubro !== 'OTROS') {
+        // EsCarga visual detectado por el nombre o flag del componente
+        const esCargaFisica = r.esCarga || nombreMaterial.includes('CARGA') || nombreMaterial.includes('CARBONATO') || nombreMaterial.includes('TIZA');
+
+        // Si el material ES un aditivo u "otros" Y NO ES UNA CARGA, no suma a la base de 100%.
+        if ((rubro !== 'ADITIVO' && rubro !== 'OTROS') || esCargaFisica) {
             suma += Number(r.cantidad || 0);
         }
     });
@@ -147,15 +152,12 @@ const kilosEstearato = computed(() => {
 });
 
 const recetaConExtrasParaVista = computed(() => {
-    // 1. Limpiamos la receta dinámica de los fijos temporales (para no duplicarlos en la vista)
     const recetaLimpia = recetaDinamica.value.filter(r => {
         const n = (r.nombreInsumo || '').toUpperCase();
         return !n.includes('ESTEARATO') && !n.includes('BRILLO') && !n.includes('UV') && !n.includes('CAUCHO');
     });
 
     const kilosBase = form.value.kilosTotales > 0 ? form.value.kilosTotales : 1;
-
-    // 2. Volvemos a inyectar el Estearato para que SE VEA
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
     if (est && kilosEstearato.value > 0) {
         const valorKilos = kilosEstearato.value.toFixed(2);
@@ -164,8 +166,6 @@ const recetaConExtrasParaVista = computed(() => {
             densidad: est.pesoEspecifico || 1, esEstearato: true, cantidad: valorKilos, kilosFijos: valorKilos
         });
     }
-
-    // 3. Volvemos a inyectar el Brillo para que SE VEA
     if (form.value.conBrillo && form.value.porcBrillo > 0) {
         const keywordBrillo = form.value.tipoBrillo === '555' ? '555' : '777';
         let mpBrillo = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes(`BRILLO ${keywordBrillo}`)) || listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('BRILLO'));
@@ -178,7 +178,6 @@ const recetaConExtrasParaVista = computed(() => {
         }
     }
 
-    // 4. Volvemos a inyectar el UV para que SE VEA
     if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
         const mpUV = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('UV'));
         if (mpUV) {
@@ -189,8 +188,6 @@ const recetaConExtrasParaVista = computed(() => {
             });
         }
     }
-
-    // 5. Volvemos a inyectar el Caucho para que SE VEA
     if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
         const mpCaucho = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('CAUCHO'));
         if (mpCaucho) {

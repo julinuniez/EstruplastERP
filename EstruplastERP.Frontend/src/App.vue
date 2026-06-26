@@ -66,11 +66,6 @@ function toggleMenu() {
           <span class="text" v-show="!menuReducido">Molienda</span>
         </router-link>
 
-        <router-link :to="{ name: 'remitos' }" class="nav-btn" active-class="activo" title="Despacho y Logística">
-          <span class="icon">🚚</span>
-          <span class="text" v-show="!menuReducido">Despacho</span>
-        </router-link>
-
         <router-link :to="{ name: 'configuracion' }" class="nav-btn" active-class="activo" title="Configuración del Sistema">
           <span class="icon">🔧</span>
           <span class="text" v-show="!menuReducido">Configuración</span>
@@ -130,7 +125,7 @@ body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; background-co
 }
 
 .sidebar.reducido {
-  width: 60px;
+  width: 65px;
 }
 
 .sidebar-header { height: 60px; display: flex; align-items: center; justify-content: center; background: #243444; border-bottom: 1px solid #3e5871; }

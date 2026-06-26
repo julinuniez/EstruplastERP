@@ -167,17 +167,25 @@ namespace EstruplastERP.Api.Controllers
                         foreach (var worksheet in package.Workbook.Worksheets)
                         {
                             string nombreHoja = worksheet.Name.Trim().ToUpper();
+                            Cliente cliente = null;
 
-                            var cliente = clientesDb.FirstOrDefault(c =>
-                                c.RazonSocial.ToUpper().Replace(".", "").Trim() == nombreHoja.Replace(".", "").Trim() ||
-                                c.RazonSocial.ToUpper().Contains(nombreHoja) ||
-                                nombreHoja.Contains(c.RazonSocial.ToUpper()));
-
-                            if (cliente == null) continue;
-
-                            if (clienteIdFiltro.HasValue && cliente.Id != clienteIdFiltro.Value)
+                            // 🚀 SOLUCIÓN 1: Si elegimos un cliente en el frontend, lo forzamos ignorando el nombre de la hoja
+                            if (clienteIdFiltro.HasValue && clienteIdFiltro.Value > 0)
                             {
-                                logs.Add($"⏭️ Hoja '{worksheet.Name}' ignorada por filtro.");
+                                cliente = clientesDb.FirstOrDefault(c => c.Id == clienteIdFiltro.Value);
+                            }
+                            else
+                            {
+                                // Modo Multicliente original: Busca cliente por nombre de pestaña
+                                cliente = clientesDb.FirstOrDefault(c =>
+                                    c.RazonSocial.ToUpper().Replace(".", "").Trim() == nombreHoja.Replace(".", "").Trim() ||
+                                    c.RazonSocial.ToUpper().Contains(nombreHoja) ||
+                                    nombreHoja.Contains(c.RazonSocial.ToUpper()));
+                            }
+
+                            if (cliente == null)
+                            {
+                                logs.Add($"⏭️ Hoja '{worksheet.Name}' ignorada: No se pudo asociar a ningún cliente.");
                                 continue;
                             }
 
@@ -185,7 +193,15 @@ namespace EstruplastERP.Api.Controllers
 
                             int colCodigo = 1;
                             int colDesc = 2;
-                            int colStockReal = 6;
+                            int colStockReal = 6; // Por defecto en tu código viejo
+
+                            // 🚀 SOLUCIÓN 2: Detección inteligente de la columna de Stock
+                            // Si la columna 3 dice "STOCK" o "CANTIDAD", usamos la columna 3.
+                            var headerCol3 = worksheet.Cells[1, 3].Text.ToUpper();
+                            if (headerCol3.Contains("STOCK") || headerCol3.Contains("CANT") || headerCol3.Contains("KG"))
+                            {
+                                colStockReal = 3;
+                            }
 
                             int fila = 2;
                             int filasVaciasConsecutivas = 0;
@@ -209,7 +225,14 @@ namespace EstruplastERP.Api.Controllers
 
                                 filasVaciasConsecutivas = 0;
 
+                                // Lee el stock de la columna detectada
                                 decimal stockFinal = LeerNumeroRobusto(worksheet.Cells[fila, colStockReal].Value, out bool stockEncontrado);
+
+                                // Si no encontró en la 6, busca en la 3 como respaldo
+                                if (!stockEncontrado && colStockReal == 6)
+                                {
+                                    stockFinal = LeerNumeroRobusto(worksheet.Cells[fila, 3].Value, out stockEncontrado);
+                                }
 
                                 if (stockFinal <= 0)
                                 {
@@ -227,7 +250,7 @@ namespace EstruplastERP.Api.Controllers
                         await _context.SaveChangesAsync();
                     }
                 }
-                return Ok(new { mensaje = $"✅ Importación: {hojas} hojas procesadas, {prods} productos con stock actualizados.", logs = logs });
+                return Ok(new { mensaje = $"✅ Importación finalizada: {prods} productos registrados/actualizados.", logs = logs });
             }
             catch (Exception ex) { return StatusCode(500, $"Error crítico: {ex.Message}"); }
         }

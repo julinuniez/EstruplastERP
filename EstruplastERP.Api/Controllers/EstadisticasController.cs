@@ -109,17 +109,15 @@ namespace EstruplastERP.Controllers
             var targetMes = mes ?? DateTime.Today.Month;
             var targetAnio = anio ?? DateTime.Today.Year;
 
-            // 🚀 LEEMOS LA ÚNICA FUENTE DE VERDAD ABSOLUTA: EL KARDEX (MOVIMIENTOS)
-            // Atrapamos cualquier movimiento que contenga la palabra "CONSUMO" (Mezcla, Orden, Extra, etc)
             var consumosKardex = await _context.Movimientos
                 .Include(m => m.Producto)
                     .ThenInclude(p => p.Cliente)
                 .Where(m => m.Fecha.Month == targetMes &&
                             m.Fecha.Year == targetAnio &&
                             m.TipoMovimiento != null &&
-                            m.TipoMovimiento.StartsWith("CONSUMO") && 
+                            m.TipoMovimiento.StartsWith("CONSUMO") &&
                             m.Producto != null &&
-                            (m.Producto.Id < 990 || m.Producto.Id > 999)) // Ignoramos genéricos
+                            (m.Producto.Id < 990 || m.Producto.Id > 999))
                 .GroupBy(m => new {
                     NombreMaterial = m.Producto.Nombre,
                     NombreCliente = m.Producto.Cliente != null ? m.Producto.Cliente.RazonSocial : null
@@ -130,7 +128,6 @@ namespace EstruplastERP.Controllers
                         ? $"{g.Key.NombreMaterial} ({g.Key.NombreCliente})"
                         : g.Key.NombreMaterial,
 
-                    // Convertimos todo a positivo para sumar correctamente la estadística
                     TotalKilos = Math.Round(g.Sum(m => Math.Abs(m.Cantidad)), 0)
                 })
                 .OrderByDescending(x => x.TotalKilos)
@@ -203,6 +200,34 @@ namespace EstruplastERP.Controllers
                 ProduccionMes = Math.Round(kilosMes, 0),
                 ProduccionMesAnterior = Math.Round(kilosMesAnt, 0),
                 KilosPendientes = Math.Round(kilosPendientes, 0)
+            });
+        }
+
+        // 🚀 NUEVO: Análisis de Materiales para Rentabilidad (Fazon vs Propio)
+        [HttpGet("analisis-materiales")]
+        public async Task<IActionResult> GetAnalisisMateriales([FromQuery] int? mes, [FromQuery] int? anio)
+        {
+            var targetMes = mes ?? DateTime.Today.Month;
+            var targetAnio = anio ?? DateTime.Today.Year;
+
+            var consumos = await _context.Movimientos
+                .Include(m => m.Producto)
+                .Where(m => m.Fecha.Month == targetMes &&
+                            m.Fecha.Year == targetAnio &&
+                            m.TipoMovimiento != null &&
+                            m.TipoMovimiento.StartsWith("CONSUMO") &&
+                            m.Producto != null &&
+                            (m.Producto.Id < 990 || m.Producto.Id > 999))
+                .ToListAsync();
+
+            var kilosFazon = consumos.Where(m => m.Producto.ClienteId != null && m.Producto.ClienteId > 1).Sum(m => Math.Abs(m.Cantidad));
+            var kilosPropio = consumos.Where(m => m.Producto.ClienteId == null || m.Producto.ClienteId <= 1).Sum(m => Math.Abs(m.Cantidad));
+
+            return Ok(new
+            {
+                KilosFazon = Math.Round(kilosFazon, 2),
+                KilosPropio = Math.Round(kilosPropio, 2),
+                TotalKilos = Math.Round(kilosFazon + kilosPropio, 2)
             });
         }
     }

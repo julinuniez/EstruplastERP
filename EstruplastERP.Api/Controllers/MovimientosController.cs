@@ -17,6 +17,30 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
+        [HttpGet("ingresos")]
+        public async Task<IActionResult> GetIngresosPorMes([FromQuery] int mes, [FromQuery] int anio)
+        {
+            var ingresos = await _context.Movimientos
+                .Include(m => m.Producto)
+                .Where(m => m.Fecha.Month == mes &&
+                            m.Fecha.Year == anio &&
+                            m.Cantidad > 0 &&
+                            m.TipoMovimiento != null &&
+                            // 🚀 FILTRO INTELIGENTE: Atrapa cualquier variante de Compra/Ingreso
+                            (m.TipoMovimiento.Contains("COMPRA") || m.TipoMovimiento == "INGRESO"))
+                .OrderByDescending(m => m.Id)
+                .Select(m => new {
+                    fecha = m.Fecha,
+                    tipoMovimiento = m.TipoMovimiento,
+                    cantidad = m.Cantidad,
+                    observacion = m.Observacion,
+                    productoNombre = m.Producto != null ? m.Producto.Nombre : "Producto eliminado"
+                })
+                .ToListAsync();
+
+            return Ok(ingresos);
+        }
+
         // --- MÉTODOS DE CONSULTA Y AJUSTE MANUAL ---
 
         [HttpGet]
@@ -31,7 +55,6 @@ namespace EstruplastERP.Api.Controllers
                 .Select(m => new
                 {
                     m.Id,
-                    // 🚨 CORRECCIÓN CLAVE: Formato ISO para que Vue / JavaScript lo entienda perfecto
                     Fecha = m.Fecha.ToString("yyyy-MM-ddTHH:mm:ss"),
                     Producto = m.Producto != null ? m.Producto.Nombre : "Producto eliminado",
                     Proveedor = m.Proveedor != null ? m.Proveedor.RazonSocial : "-",
@@ -54,7 +77,6 @@ namespace EstruplastERP.Api.Controllers
                 var producto = await _context.Productos.FindAsync(request.ProductoId);
                 if (producto == null) return NotFound("Producto no encontrado");
 
-                // Calculamos la cantidad real a impactar (resta si es egreso, suma si es ingreso)
                 decimal cantidadReal = request.TipoMovimiento == "EGRESO"
                     ? -Math.Abs(request.Cantidad)
                     : Math.Abs(request.Cantidad);
@@ -65,7 +87,7 @@ namespace EstruplastERP.Api.Controllers
                 {
                     Fecha = DateTime.Now,
                     ProductoId = request.ProductoId,
-                    Cantidad = Math.Abs(request.Cantidad), // El historial guarda en positivo
+                    Cantidad = Math.Abs(request.Cantidad),
                     TipoMovimiento = request.TipoMovimiento == "EGRESO" ? "SALIDA_AJUSTE" : "ENTRADA_AJUSTE",
                     Observacion = $"[AJUSTE MANUAL] {request.Observacion}"
                 };
@@ -226,7 +248,6 @@ namespace EstruplastERP.Api.Controllers
             }
         }
 
-
         [HttpPost("ingresar-molido")]
         public async Task<IActionResult> IngresarMolido([FromBody] IngresoMolidoRequest request)
         {
@@ -247,11 +268,9 @@ namespace EstruplastERP.Api.Controllers
 
                     string variedadLimpia = string.IsNullOrWhiteSpace(request.Variedad) ? "GRAL" : request.Variedad.Trim().ToUpper();
 
-                    // Nombre seguro homologado al Excel
                     string nombreMaterial = materialBase.Nombre?.ToUpper() ?? "MATERIAL";
                     string nombreScrap = $"[MOLIDO] {variedadLimpia} ({nombreMaterial})";
 
-                    // Tipo de material seguro para el SKU
                     string materialSeguro = materialBase.TipoMaterial ?? materialBase.Nombre ?? "BASE";
                     string tipoMatLimpio = new string(materialSeguro.Where(char.IsLetterOrDigit).ToArray()).ToUpper();
                     if (tipoMatLimpio.Length > 4) tipoMatLimpio = tipoMatLimpio.Substring(0, 4);
@@ -278,7 +297,6 @@ namespace EstruplastERP.Api.Controllers
                         }
                     }
 
-                    // Generador Autonumérico (si maxNumero es 0, arranca en "001")
                     string codigoAutonumerico = (maxNumero + 1).ToString("D3");
                     string sku = $"{prefixBusqueda}{codigoAutonumerico}{suffixBusqueda}";
 
@@ -349,11 +367,11 @@ namespace EstruplastERP.Api.Controllers
                 .Where(m => m.Fecha.Month == mes &&
                             m.Fecha.Year == anio &&
                             m.TipoMovimiento != null &&
-                            m.TipoMovimiento.StartsWith("CONSUMO")) // 👈 Filtramos solo los consumos reales
+                            m.TipoMovimiento.StartsWith("CONSUMO"))
                 .Select(m => new {
                     fecha = m.Fecha,
                     tipoMovimiento = m.TipoMovimiento,
-                    cantidad = Math.Abs(m.Cantidad), // Lo pasamos a positivo para la suma del Excel
+                    cantidad = Math.Abs(m.Cantidad),
                     observacion = m.Observacion,
                     productoNombre = m.Producto != null ? m.Producto.Nombre : "Insumo",
                     clienteNombre = (m.Producto != null && m.Producto.Cliente != null) ? m.Producto.Cliente.RazonSocial : null

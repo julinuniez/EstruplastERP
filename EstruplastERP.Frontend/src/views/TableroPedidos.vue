@@ -42,15 +42,20 @@ const cargarTablero = async () => {
 };
 
 const pedidosFiltrados = computed(() => {
-    // 1. Limpiamos las órdenes canceladas y pedidos vacíos
     const pedidosLimpios = listaPedidos.value.map(p => ({
         ...p,
         ordenes: p.ordenes.filter(o => o.estado !== 'Cancelada' && o.estado !== 'Cancelado')
-    })).filter(p => p.ordenes.length > 0);
+    })).filter(p => {
+        const tieneOrdenes = p.ordenes.length > 0;
+        
+        const esStock = (p.notaPedido && p.notaPedido.toLowerCase().trim() === 'stock') || 
+                        (p.pedido && p.pedido.toLowerCase().trim() === 'stock');
 
-    // 2. Aplicamos los filtros visuales (buscador y pendientes)
+        return tieneOrdenes && !esStock;
+    });
+
     return pedidosLimpios.filter(p => {
-        const busqueda = clienteFiltro.value.toLowerCase();
+        const busqueda = clienteFiltro.value.toLowerCase().trim();
         
         const matchCliente = p.cliente.toLowerCase().includes(busqueda) || 
                              (p.notaPedido && p.notaPedido.toLowerCase().includes(busqueda)) ||
