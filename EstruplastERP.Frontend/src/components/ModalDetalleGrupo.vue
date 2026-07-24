@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
-import axios from 'axios'
+// 🚀 ACÁ ESTABA EL ERROR: Ahora usamos TU instancia de API, no el axios crudo
+import api from '@/services/axiosInstance' 
 import { Alertas } from '@/utils/alertas';
 
 const props = defineProps<{
@@ -9,14 +10,11 @@ const props = defineProps<{
     ordenes: any[]
 }>()
 
-const emit = defineEmits(['close', 'actualizar-lista'])
-
-const apiUrl = import.meta.env.VITE_API_URL || '/api';
+const emit = defineEmits(['close', 'actualizar-lista', 'imprimir-carga'])
 
 const procesando = ref(false);
 const consumosMezcla = ref<{ materiaPrimaId: number, nombre: string, teorico: number, real: number }[]>([])
 
-// Variables para cargar insumos extras
 const todasMateriasPrimas = ref<any[]>([]);
 const insumoExtraSeleccionado = ref<number | ''>('');
 
@@ -25,19 +23,19 @@ const yaEstaDeclarado = computed(() => {
     return props.ordenes.some(o => o.estado === 'MaterialPreparado' || o.estado === 'Finalizada');
 });
 
-// Condición para revertir: Debe estar declarado y NINGUNA orden debe estar Finalizada
 const puedeRevertir = computed(() => {
     if (!yaEstaDeclarado.value) return false;
     return !props.ordenes.some(o => o.estado === 'Finalizada');
 });
 
-// 🚀 EXTRACCIÓN INFALIBLE DEL ID
+const esCargaSimple = computed(() => {
+    return props.codigo && props.codigo.includes('HC-S');
+});
+
 const hojaCargaId = computed(() => {
-    // 1. Buscamos si alguna orden tiene el ID explícito (por las dudas)
     const ordenConId = props.ordenes.find(o => o.hojaCargaId);
     if (ordenConId) return ordenConId.hojaCargaId;
     
-    // 2. Método Infalible: Extraer numéricamente desde el string "HC-123"
     if (props.codigo) {
         const match = props.codigo.match(/HC-(\d+)/i);
         if (match && match[1]) {
@@ -57,7 +55,6 @@ const idClienteUnico = computed(() => {
     return todosIguales ? primerId : null;
 });
 
-// 🚀 AGRUPACIÓN Y ORDENAMIENTO INTELIGENTE
 const materiasPrimasAgrupadas = computed(() => {
     const idClienteHabilitado = idClienteUnico.value;
     
@@ -102,7 +99,7 @@ const materiasPrimasAgrupadas = computed(() => {
 
 const cargarCatálogoMateriales = async () => {
     try {
-        const { data } = await axios.get(`${apiUrl}/Productos`);
+        const { data } = await api.get(`/Productos`);
         todasMateriasPrimas.value = data; 
     } catch (error) {
         console.error("Error cargando insumos", error);
@@ -113,52 +110,83 @@ onMounted(() => {
     cargarCatálogoMateriales();
 });
 
-// 🚀 ACÁ SUCEDE LA MAGIA DE LA CARGA REAL
 watch(() => props.visible, async (isOpen) => {
     if (isOpen && props.ordenes.length > 0) {
-        const map = new Map<number, any>();
+        consumosMezcla.value = [];
+        procesando.value = true;
         
-        // 1. Armamos el consumo teórico siempre como base
-        props.ordenes.forEach(o => {
-            if (o.consumos) {
-                o.consumos.forEach((c: any) => {
-                    if (!map.has(c.materiaPrimaId)) {
-                        map.set(c.materiaPrimaId, { 
-                            materiaPrimaId: c.materiaPrimaId, 
-                            nombre: c.nombreMateriaPrima, 
-                            teorico: 0, 
-                            real: 0 
-                        });
+        try {
+            const map = new Map<number, any>();
+
+            // 1. Pedimos el detalle completo de CADA orden a la API configurada
+            const peticiones = props.ordenes.map(async (o) => {
+                let insumosOrden: any[] = [];
+                try {
+                    const resFull = await api.get(`/Ordenes/${o.id}`);
+                    const ordenFull = resFull.data;
+                    
+                    if (ordenFull && ordenFull.consumos && ordenFull.consumos.length > 0) {
+                        insumosOrden = ordenFull.consumos;
+                    } 
+                    else if (ordenFull && (ordenFull.receta || ordenFull.recetaDinamica)) {
+                        insumosOrden = ordenFull.receta || ordenFull.recetaDinamica;
                     }
-                    map.get(c.materiaPrimaId).teorico += Number(c.cantidadKilos);
-                });
-            }
-        });
-        
-        let consumosList = Array.from(map.values()).map(c => {
-            c.real = Number(c.teorico.toFixed(2));
-            return c;
-        });
-
-        // 2. Si ya está declarado, pedimos los datos REALES al backend usando el ID extraído
-        if (yaEstaDeclarado.value && hojaCargaId.value) {
-            try {
-                const { data } = await axios.get(`${apiUrl}/HojasCarga/${hojaCargaId.value}/consumos`);
-                if (data && data.length > 0) {
-                    consumosList = data.map((d: any) => ({
-                        materiaPrimaId: d.materiaPrimaId,
-                        nombre: d.nombre + (map.has(d.materiaPrimaId) ? '' : ' (Extra)'),
-                        teorico: map.get(d.materiaPrimaId)?.teorico || 0,
-                        real: d.real
-                    }));
+                    
+                    if (yaEstaDeclarado.value && insumosOrden.length === 0) {
+                        try {
+                            const resCons = await api.get(`/Ordenes/${o.id}/consumos`);
+                            if (resCons.data && resCons.data.length > 0) {
+                                insumosOrden = resCons.data;
+                            }
+                        } catch (err) {}
+                    }
+                } catch (e) {
+                    console.warn(`No se pudo traer el detalle histórico de la OP ${o.id}`);
                 }
-            } catch (error) {
-                console.error("Error obteniendo consumos reales", error);
-            }
-        }
+                return insumosOrden;
+            });
 
-        consumosMezcla.value = consumosList;
-        insumoExtraSeleccionado.value = ''; 
+            const resultadosInsumos = await Promise.all(peticiones);
+
+            // 2. Sumamos todo en nuestra tablita local
+            resultadosInsumos.forEach(arrayInsumos => {
+                arrayInsumos.forEach((c: any) => {
+                    const mId = c.materiaPrimaId || c.MateriaPrimaId || c.insumoId || c.id;
+                    if (!mId) return;
+
+                    const nombre = c.nombreMateriaPrima || c.nombreInsumo || c.nombre || 'Insumo';
+                    const kilosReales = Number(c.real !== undefined ? c.real : (c.cantidadKilos || c.CantidadKilos || c.kilos || c.cantidad || 0));
+                    const kilosTeoricos = Number(c.teorico !== undefined ? c.teorico : kilosReales);
+
+                    if (!map.has(mId)) {
+                        map.set(mId, { materiaPrimaId: mId, nombre, teorico: 0, real: 0 });
+                    }
+
+                    if (yaEstaDeclarado.value) {
+                        map.get(mId).real += kilosReales;
+                        map.get(mId).teorico += kilosTeoricos;
+                    } else {
+                        map.get(mId).teorico += kilosReales;
+                    }
+                });
+            });
+
+            // 3. Convertimos a la lista final
+            const consumosList = Array.from(map.values()).map(c => {
+                if (c.real === 0 && !yaEstaDeclarado.value) {
+                    c.real = Number(c.teorico.toFixed(2));
+                }
+                return c;
+            });
+
+            consumosMezcla.value = consumosList;
+            
+        } catch (e) {
+            console.error("Error armando los consumos históricos", e);
+        } finally {
+            procesando.value = false;
+            insumoExtraSeleccionado.value = '';
+        }
     }
 });
 
@@ -210,7 +238,7 @@ const declararConsumos = async () => {
                 cantidadRealKg: Number(c.real)
             }));
 
-        await axios.post(`${apiUrl}/HojasCarga/${hojaCargaId.value}/declarar-consumos`, payload);
+        await api.post(`/HojasCarga/${hojaCargaId.value}/declarar-consumos`, payload);
         
         Alertas.exito("✅ Mezcla declarada correctamente.");
         emit('actualizar-lista'); 
@@ -238,7 +266,7 @@ const revertirDeclaracion = async () => {
     procesando.value = true;
 
     try {
-        await axios.post(`${apiUrl}/HojasCarga/${hojaCargaId.value}/revertir`);
+        await api.post(`/HojasCarga/${hojaCargaId.value}/revertir`);
         
         Alertas.exito("✅ Declaración revertida y stock devuelto correctamente.");
         emit('actualizar-lista');
@@ -260,9 +288,14 @@ const revertirDeclaracion = async () => {
             </div>
             
             <div class="modal-body">
-                <div v-if="yaEstaDeclarado" class="alerta-ok">
-                    ✅ <strong>El material de este grupo ya fue descontado del inventario.</strong><br>
-                    Abajo podés ver el detalle de lo que se consumió. Las órdenes están listas para cerrarse.
+                <div v-if="esCargaSimple && !yaEstaDeclarado" class="alerta-info" style="border-left-color: #94a3b8; color: #64748b; background: #f8fafc;">
+                    👁️ <strong>Modo Lectura Activo</strong><br>
+                    Esta es una Hoja de Carga Individual. El consumo final se declarará cuando cierres la OP.
+                </div>
+
+                <div v-else-if="yaEstaDeclarado" class="alerta-ok">
+                    ✅ <strong>El material de {{ esCargaSimple ? 'esta orden' : 'este grupo' }} ya fue descontado del inventario.</strong><br>
+                    Abajo podés ver el detalle exacto de lo que se consumió.
                 </div>
                 
                 <div v-else class="alerta-info">
@@ -270,8 +303,13 @@ const revertirDeclaracion = async () => {
                     Cargue los kilos exactos del papel del maquinista. Si usaron algo que no estaba previsto, agréguelo abajo.
                 </div>
 
-                <div class="seccion" v-if="consumosMezcla.length > 0">
-                    <h4>{{ yaEstaDeclarado ? '✅ Materiales Descontados del Stock' : '⚖️ Consumos del Grupo Completo' }}</h4>
+                <div v-if="procesando && consumosMezcla.length === 0" style="text-align: center; padding: 30px; font-weight: bold; color: #3498db;">
+                    <div class="spinner-mini"></div>
+                    ⏳ Recuperando datos históricos desde el servidor...
+                </div>
+
+                <div v-else-if="consumosMezcla.length > 0" class="seccion">
+                    <h4>{{ yaEstaDeclarado ? '✅ Materiales Descontados del Stock' : '⚖️ Receta Base (Solo lectura)' }}</h4>
                     <div class="tabla-container">
                         <table>
                             <thead>
@@ -289,17 +327,25 @@ const revertirDeclaracion = async () => {
                                         {{ item.teorico > 0 ? item.teorico.toFixed(2) : '---' }}
                                     </td>
                                     <td :class="{'text-center': yaEstaDeclarado}">
-                                        <input v-if="!yaEstaDeclarado" type="number" v-model="item.real" style="width: 100px; padding: 5px; font-weight: bold;" step="0.1" min="0">
+                                        <input 
+                                            v-if="!yaEstaDeclarado" 
+                                            type="number" 
+                                            v-model="item.real" 
+                                            style="width: 100px; padding: 5px; font-weight: bold;" 
+                                            step="0.1" 
+                                            min="0"
+                                            :disabled="esCargaSimple"
+                                        >
                                         <span v-else style="font-weight: 800; color: #27ae60;">{{ item.real.toFixed(2) }} kg</span>
                                     </td>
                                     <td style="text-align: center;" v-if="!yaEstaDeclarado">
-                                        <button class="btn-quitar" @click="quitarInsumo(idx)" title="Quitar insumo">❌</button>
+                                        <button v-if="!esCargaSimple" class="btn-quitar" @click="quitarInsumo(idx)" title="Quitar insumo">❌</button>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                         
-                        <div v-if="!yaEstaDeclarado" class="barra-agregar-extra" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                        <div v-if="!yaEstaDeclarado && !esCargaSimple" class="barra-agregar-extra" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
                             <label style="font-weight: bold; color: #34495e;">➕ Agregar Extra:</label>
                             
                             <select v-model="insumoExtraSeleccionado" class="select-lindo-agrupado">
@@ -319,22 +365,37 @@ const revertirDeclaracion = async () => {
                 </div>
 
                 <div class="seccion">
-                    <h4>📄 Órdenes incluidas en este grupo ({{ ordenes.length }})</h4>
+                    <h4>📄 Órdenes incluidas en {{ esCargaSimple ? 'la hoja' : 'este grupo' }} ({{ ordenes.length }})</h4>
                     <ul class="lista-ordenes">
                         <li v-for="o in ordenes" :key="o.id">
-                            <strong>Nota Pedido #{{ o.notaPedido || o.id }}</strong> - {{ o.producto }} ({{ o.kilos }} Kg) 
+                            <strong>Nota Pedido #{{ o.notaPedido || o.id }}</strong> - {{ o.producto }} 
+                            <span style="color:#7f8c8d; font-weight:bold; margin-left:5px;">({{ o.cantidad }} Unid. | {{ o.kilos }} Kg)</span>
                             <span :class="['badge', 'badge-' + o.estado.toLowerCase()]">{{ o.estado === 'MaterialPreparado' ? 'MATERIAL LISTO' : (o.estado === 'Pendiente' ? 'EN MÁQUINA' : o.estado.toUpperCase()) }}</span>
                         </li>
                     </ul>
+                    <div style="background: #e2e8f0; padding: 10px 15px; border-radius: 6px; margin-top: 5px; text-align: right; font-weight: 900; color: #1e293b;">
+                        TOTAL GRUPO: 
+                        <span style="color: #3b82f6; margin-left: 10px;">{{ ordenes.reduce((sum, o) => sum + (Number(o.cantidad) || 0), 0) }} Unidades</span>
+                        <span style="color: #10b981; margin-left: 10px;">{{ ordenes.reduce((sum, o) => sum + (Number(o.kilos) || 0), 0).toFixed(2) }} Kg</span>
+                    </div>
                 </div>
             </div>
             
             <div class="modal-footer">
+                <span v-if="esCargaSimple" style="color: #64748b; font-size: 0.85rem; font-style: italic; margin-right: auto; align-self: center;">
+                    👁️ Visor bloqueado. (Consumo individual vía ✅)
+                </span>
+                
+                <button class="btn-imprimir" @click="$emit('imprimir-carga', codigo, ordenes, consumosMezcla)" :disabled="procesando" title="Ver PDF de Carga">
+                    🖨️ Ver / Imprimir Hoja
+                </button>
+                
                 <button class="btn-cancelar" @click="$emit('close')">Cerrar</button>
-                <button v-if="puedeRevertir" class="btn-revertir" @click="revertirDeclaracion" :disabled="procesando">
+                
+                <button v-if="puedeRevertir && !esCargaSimple" class="btn-revertir" @click="revertirDeclaracion" :disabled="procesando">
                     {{ procesando ? '⏳ Procesando...' : '⏪ Revertir Declaración' }}
                 </button>
-                <button v-if="!yaEstaDeclarado" class="btn-confirmar" @click="declararConsumos" :disabled="procesando">
+                <button v-if="!yaEstaDeclarado && !esCargaSimple" class="btn-confirmar" @click="declararConsumos" :disabled="procesando">
                     {{ procesando ? '⏳ Procesando...' : '✅ Declarar Consumos de Mezcla' }}
                 </button>
             </div>
@@ -365,6 +426,10 @@ td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
 .lista-ordenes li { background: #f8fafc; padding: 8px 12px; margin-bottom: 5px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center;}
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #ecf0f1; padding-top: 15px; }
 
+.btn-imprimir { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s;}
+.btn-imprimir:hover:not(:disabled) { background: #2563eb; }
+.btn-imprimir:disabled { background: #93c5fd; cursor: not-allowed; }
+
 .btn-cancelar { background: #95a5a6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s;}
 .btn-cancelar:hover { background: #7f8c8d; }
 
@@ -385,7 +450,6 @@ td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
 .btn-orden:hover:not(:disabled) { background: #2980b9; }
 .btn-orden:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* 🚀 Estilos del nuevo select con marco lindo */
 .select-lindo-agrupado {
     flex: 1 1 200px;
     min-width: 150px;
@@ -417,5 +481,22 @@ td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
     color: #34495e;
     padding: 6px;
     background-color: #ffffff;
+}
+
+.spinner-mini {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 </style>

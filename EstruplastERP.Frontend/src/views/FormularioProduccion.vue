@@ -52,6 +52,7 @@ const limiteMinimo = ref(0);
 const limiteMaximo = ref(0);
 const mensaje = ref('');
 const error = ref('');
+const uiLlevaImpresion = ref(false);
 const idProduccionGenerada = ref(false);
 const ocultarFormula = ref(false);
 const cantidadPalletsUsuario = ref(1);
@@ -667,7 +668,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
             <select v-model="form.productoTerminadoId">
                 <option disabled value="">Seleccionar Producto...</option>
                 <option v-for="p in productosDropdownOrdenados" :key="p.id" :value="p.id">
-                    {{ p.esFazon ? '★ ' : '' }}{{ p.nombre }} {{ p.esGenerico ? '(A Medida)' : (p.esFazon ? '(Fazon)' : '(Estándar)') }}
+                    {{ p.esFazon ? '★ ' : '' }}{{ p.nombre }} {{ p.esGenerico ? '(A Medida)' : (p.esFazon ? '(Fazón)' : '(Estándar)') }}
                 </option>
             </select>
 
@@ -840,6 +841,34 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     </div>
                 </div>
 
+                <!-- 🖨️ NUEVO: IMPRESIÓN Y RECUADRO DE CARGA -->
+                <div style="margin-top: 5px; margin-bottom: 15px;">
+                    <div class="fila-control-aditivo">
+                        <label class="check-container">
+                            <input type="checkbox" v-model="uiLlevaImpresion" /> 🖨️ Impresión
+                        </label>
+                    </div>
+                    
+                    <!-- Recuadro anidado (Solo aparece si se tilda Impresión) -->
+                    <div v-if="uiLlevaImpresion" style="margin-top: 4px; margin-left: 28px; padding: 10px 15px; background: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.05);">
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <span style="color: #1e40af; font-weight: 800; font-size: 0.85rem;">🪨 Carga Mineral</span>
+                            <span style="color: #60a5fa; font-size: 0.75rem; font-weight: 600;">Proporción para impresión</span>
+                        </div>
+                        
+                        <div style="display: flex; align-items: center; background: white; border: 1px solid #93c5fd; border-radius: 6px; padding: 2px 10px;">
+                            <input 
+                                type="number" 
+                                v-model="form.aditivoCarga" 
+                                @wheel.prevent 
+                                placeholder="0"
+                                style="width: 45px; border: none; outline: none; font-weight: 900; color: #1e293b; text-align: right; background: transparent; padding: 4px; font-size: 1rem;"
+                            />
+                            <span style="color: #3b82f6; font-weight: 900; margin-left: 5px; font-size: 0.9rem;">%</span>
+                        </div>
+                    </div>
+                </div>
+
                 <label style="margin-top:10px; font-size:13px; color:#bdc3c7">⚡ Tratamiento Corona:</label>
                 <select v-model="form.tipoCorona">
                     <option value="Ninguno">Sin Tratamiento</option>
@@ -847,14 +876,17 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     <option value="Doble">Doble</option>
                 </select>
                 
-                <label class="lbl-sep">Cargas:</label>
-                <div class="fila-input">
-                    <div style="flex:1">
-                        <label>Carga Mineral (%)</label>
-                        <input type="number" v-model="form.aditivoCarga" @wheel.prevent />
+                <!-- 🪨 CARGAS ABAJO (Solo aparece si NO está tildada la impresión) -->
+                <template v-if="!uiLlevaImpresion">
+                    <label class="lbl-sep">Cargas:</label>
+                    <div class="fila-input">
+                        <div style="flex:1">
+                            <label>Carga Mineral (%)</label>
+                            <input type="number" v-model="form.aditivoCarga" @wheel.prevent />
+                        </div>
                     </div>
-                </div>
-                
+                </template>
+
             </div>
             
             <div class="fila-input" style="margin-top:10px">
@@ -934,7 +966,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
             :tipoSalidaVisual="tipoSalidaVisual"
         />
     </div>
-</div>
+  </div>
 </template>
 
 <style scoped>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 // @ts-ignore
 import JsBarcode from 'jsbarcode/dist/JsBarcode.all.min.js';
 
@@ -33,14 +33,22 @@ const esConsolidadoReal = computed(() => {
            props.form?.productoNombre === 'MEZCLA CONSOLIDADA';
 });
 
+// 🚀 NUEVA LÓGICA: Detecta si es una impresión simple para quitar la columna de %
+const esCargaSimple = computed(() => {
+    return (props.form?.observacion || '').includes('[Grupo: HC-S');
+});
+
+// Si es carga simple o consolidada, ocultamos columnas y controles extras
+const modoCargaLimpia = computed(() => esConsolidadoReal.value || esCargaSimple.value);
+
 const codigoLoteVisible = computed(() => {
     if (!props.form?.observacion) return props.form?.id;
-    const match = props.form.observacion.match(/\[LOTE: (HC-[^\]]+)\]/);
+    const match = props.form.observacion.match(/\[Grupo: (HC-[^\]]+)\]/);
     return match ? match[1] : props.form?.id;
 });
 
 const valorCodigoBarra = computed(() => {
-    if (esConsolidadoReal.value) {
+    if (modoCargaLimpia.value) {
         if (!codigoLoteVisible.value) return '';
         return `LOTE-${codigoLoteVisible.value}`;
     }
@@ -277,7 +285,13 @@ const solicitarModificarPorcentaje = (item: any, event: Event) => {
     }
 };
 
-const fechaHoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const fechaHoy = new Date().toLocaleString('es-AR', { 
+    day: '2-digit', 
+    month: '2-digit', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+});
 
 const tituloLimpioParaPDF = computed(() => {
     let crudo = props.form?.productoNombre || props.producto?.nombre || '';
@@ -304,7 +318,7 @@ const tituloLimpioParaPDF = computed(() => {
 
 const observacionLimpia = computed(() => {
     if (!props.form?.observacion) return '-';
-    return props.form.observacion.replace(/\[LOTE: HC-[^\]]+\]/g, '').trim();
+    return props.form.observacion.replace(/\[Grupo: HC-[^\]]+\]/g, '').replace(/\[LOTE: HC-[^\]]+\]/g, '').trim();
 });
 
 const esVerdadero = (valor: any) => {
@@ -358,9 +372,10 @@ const tipoCorona = computed(() => {
             <div class="logo-area"><img :src="logoImg" class="logo-central" /></div>
             
             <div class="datos-orden">
-                <h3>{{ esConsolidadoReal ? 'HOJA DE CARGA MÚLTIPLE' : (ocultarFormula ? 'ORDEN DE PRODUCCIÓN' : 'HOJA DE CARGA') }}</h3>
+                <!-- 🚀 TÍTULO INTELIGENTE QUE DETECTA QUÉ TIPO DE HOJA ES -->
+                <h3>{{ modoCargaLimpia ? (esConsolidadoReal ? 'HOJA DE CARGA MÚLTIPLE' : 'HOJA DE CARGA INDIVIDUAL') : (ocultarFormula ? 'ORDEN DE PRODUCCIÓN' : 'HOJA DE CARGA') }}</h3>
                 
-                <div v-if="esConsolidadoReal" class="lote-mezcla-resaltado">
+                <div v-if="modoCargaLimpia" class="lote-mezcla-resaltado">
                     LOTE N°: {{ codigoLoteVisible }} 
                 </div>
 
@@ -394,7 +409,11 @@ const tipoCorona = computed(() => {
             </div>
         </div>
 
-        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="tieneBrillo || llevaFilm || tipoCorona || esGofrado || tieneUV">
+        <div class="ficha-tecnica-pdf" style="margin-top: -4px;" v-if="tieneBrillo || llevaFilm || tipoCorona || esGofrado || tieneUV || form?.esImpresion">
+            <div class="dato-box-pdf" v-if="form?.esImpresion || form?.cargaImpresion > 0">
+                <span class="label-tech-pdf">CARGA (IMPRESIÓN)</span>
+                <span class="valor-tech-pdf">{{ form?.cargaImpresion || form?.aditivoCarga || 0 }} Kg/Porc</span>
+            </div>
             <div class="dato-box-pdf" v-if="tieneBrillo">
                 <span class="label-tech-pdf">BRILLO</span>
                 <span class="valor-tech-pdf">SÍ</span>
@@ -419,17 +438,18 @@ const tipoCorona = computed(() => {
 
         <div v-show="!ocultarFormula" class="seccion-receta-pdf">
             <div class="titulo-receta-pdf">
-                {{ esConsolidadoReal ? 'RESUMEN DE MEZCLA CONSOLIDADA' : (densidadReal > 0 ? `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(densidadReal.toFixed(3))})` : 'FÓRMULA DE MEZCLA') }}
-
-                <span style="float:right; font-size: 0.8em; color: #333" v-if="!esConsolidadoReal">Total: {{ Number(totalPorcentaje).toFixed(2) }}%</span>
+                {{ modoCargaLimpia ? (esConsolidadoReal ? 'RESUMEN DE MEZCLA CONSOLIDADA' : 'RECETA DE CARGA A BATEA') : (densidadReal > 0 ? `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(densidadReal.toFixed(3))})` : 'FÓRMULA DE MEZCLA') }}
+                
+                <span style="float:right; font-size: 0.8em; color: #333" v-if="!modoCargaLimpia" class="ocultar-en-impresion">Total: {{ Number(totalPorcentaje).toFixed(2) }}%</span>
             </div>
             <table class="tabla-receta-pdf">
                 <thead>
                     <tr>
                         <th>INSUMO / MATERIA PRIMA</th>
-                        <th style="width:100px; text-align:center;" v-if="!esConsolidadoReal">% MEZCLA</th>
+                        <!-- 🚀 SE OCULTA LA COLUMNA SI ES MODO CARGA (CONSOLIDADA O SIMPLE) -->
+                        <th style="width:100px; text-align:center;" v-if="!modoCargaLimpia" class="ocultar-en-impresion">% MEZCLA</th>
                         <th style="width:120px; text-align:right;">PESO A CARGAR</th>
-                        <th data-html2canvas-ignore="true" style="width:40px" v-if="!esConsolidadoReal"></th>
+                        <th data-html2canvas-ignore="true" style="width:40px" v-if="!modoCargaLimpia" class="ocultar-en-impresion"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -446,12 +466,13 @@ const tipoCorona = computed(() => {
                                     {{ obtenerEtiquetaOrigen(r) }}
                                 </span>
                             </td>
-                            <td style="text-align:center; vertical-align: middle;" v-if="!esConsolidadoReal">
+                            
+                            <td style="text-align:center; vertical-align: middle;" v-if="!modoCargaLimpia" class="ocultar-en-impresion">
                                 <div v-if="esInsumoFijo(r)" style="font-weight: bold; color: #2980b9; font-size: 11px; letter-spacing: 1px;">
                                     (EXTRA)
                                 </div>
                                 <div v-else>
-                                    <div class="ocultar-en-impresion" style="display:flex; justify-content:center; align-items:center;">
+                                    <div style="display:flex; justify-content:center; align-items:center;">
                                         <input
                                             type="number"
                                             step="0.01"
@@ -461,20 +482,18 @@ const tipoCorona = computed(() => {
                                             class="input-porc-edit"
                                         /> %
                                     </div>
-                                    <div class="mostrar-en-impresion">
-                                        {{ Number(r.cantidad).toFixed(2) }} %
-                                    </div>
                                 </div>
                             </td>
+                            
                             <td style="text-align:right; font-size: 1.1em;">
                                 <strong v-if="esInsumoFijo(r)" style="color: #2980b9;">
-    {{ esConsolidadoReal 
-        ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
-        : (r.kilosFijos 
-            ? parseFloat(r.kilosFijos).toFixed(2) 
-            : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2)) 
-    }} kg
-</strong>
+                                    {{ esConsolidadoReal 
+                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
+                                        : (r.kilosFijos 
+                                            ? parseFloat(r.kilosFijos).toFixed(2) 
+                                            : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2)) 
+                                    }} kg
+                                </strong>
                                 <strong v-else>
                                     {{ esConsolidadoReal 
                                         ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
@@ -482,7 +501,8 @@ const tipoCorona = computed(() => {
                                     }} kg
                                 </strong>
                             </td>
-                            <td data-html2canvas-ignore="true" v-if="!esConsolidadoReal" style="text-align:center;">
+                            
+                            <td data-html2canvas-ignore="true" v-if="!modoCargaLimpia" style="text-align:center;" class="ocultar-en-impresion">
                                 <button v-if="!esInsumoFijo(r)" @click="solicitarQuitar(r)" class="btn-borrar-insumo" title="Quitar insumo">❌</button>
                             </td>
                         </tr>
@@ -490,7 +510,7 @@ const tipoCorona = computed(() => {
                 </tbody>
             </table>
 
-            <div class="agregar-fila-pdf" data-html2canvas-ignore="true" v-if="!esConsolidadoReal">
+            <div class="agregar-fila-pdf ocultar-en-impresion" data-html2canvas-ignore="true" v-if="!modoCargaLimpia">
                 <div class="buscador-wrapper">
                     <input type="text" v-model="insumoBusquedaTexto" @focus="mostrarLista = true" @blur="cerrarListaConDelay" class="input-buscador" placeholder="Buscar materia prima..." />
                     <div class="lista-resultados" v-if="mostrarLista && sugerenciasFiltradas.length > 0">
@@ -522,7 +542,7 @@ const tipoCorona = computed(() => {
             </div>
             <div class="mitad-pdf" :style="esConsolidadoReal ? 'width: 100%;' : ''">
                 <strong>OBSERVACIONES / DETALLES DE LOTE:</strong>
-                <div class="recuadro-gigante-pdf texto-lote-pdf">{{ observacionLimpia }}</div>
+                <div class="recuadro-gigante-pdf observacion-wrap-pdf">{{ observacionLimpia }}</div>
             </div>
         </div>
 
@@ -579,10 +599,10 @@ const tipoCorona = computed(() => {
 .datos-orden p { margin: 2px 0; font-size: 12px; }
 .lote-mezcla-resaltado { font-size: 16px; font-weight: 900; border: 2px solid black; padding: 3px 6px; margin: 4px 0; display: inline-block; background-color: #f0f0f0; }
 .fila-pdf { margin-bottom: 10px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-.dato-relleno { font-family: 'Courier New', monospace; font-size: 16px; font-weight: bold; margin-left: 10px; text-transform: uppercase; }
+.dato-relleno { font-family: 'Courier New', monospace; font-size: 16px; font-weight: bold; margin-left: 10px; text-transform: uppercase; white-space: normal; word-break: break-word;}
 .caja-producto-pdf { border: 2px solid black; padding: 8px; margin-bottom: 8px; text-align: center; background: #f9f9f9; }
 .titulo-seccion-pdf { font-size: 10px; font-weight: bold; margin-bottom: 2px; letter-spacing: 1px; }
-.producto-nombre-pdf { font-size: 18px; font-weight: 900; }
+.producto-nombre-pdf { font-size: 18px; font-weight: 900; white-space: normal; word-break: break-word;}
 .producto-sku-pdf { font-size: 12px; margin-top: 2px; }
 .ficha-tecnica-pdf { display: flex; border: 2px solid black; margin-bottom: 8px; }
 .dato-box-pdf { flex: 1; border-right: 1px solid black; text-align: center; padding: 4px; }
@@ -597,7 +617,20 @@ const tipoCorona = computed(() => {
 .fila-lotes-pdf { display: flex; gap: 15px; margin-top: 5px; margin-bottom: 10px; }
 .mitad-pdf { flex: 1; }
 .recuadro-gigante-pdf { border: 2px solid black; height: 35px; font-size: 20px; display: flex; align-items: center; justify-content: center; margin-top: 2px; font-weight: 900; overflow: hidden; white-space: nowrap; }
-.texto-lote-pdf { font-size: 14px; }
+
+.observacion-wrap-pdf {
+    white-space: pre-wrap !important; 
+    height: auto !important;
+    min-height: 35px;
+    padding: 6px 12px;
+    font-size: 12px !important;
+    line-height: 1.3;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+}
 
 .pie-firma-pdf { margin-top: auto; padding-top: 15px; display: flex; justify-content: space-between; align-items: flex-end; }
 .caja-firmas-operarios { width: 33%; display: flex; flex-direction: column; gap: 8px; }
@@ -652,21 +685,9 @@ const tipoCorona = computed(() => {
     box-shadow: 0 0 3px rgba(52, 152, 219, 0.5);
 }
 
-@media screen {
-    .mostrar-en-impresion {
-        display: none !important;
-    }
-}
-
 @media print {
     .ocultar-en-impresion {
         display: none !important;
-    }
-    .mostrar-en-impresion {
-        display: block !important;
-        font-weight: bold;
-        font-size: 12px;
-        text-align: center;
     }
 }
 

@@ -27,7 +27,6 @@ const cargando = ref(false);
 const apiUrl = import.meta.env.VITE_API_URL || '/api';
 const busqueda = ref('');
 const error = ref('');
-const fileInputFlexxus = ref<HTMLInputElement | null>(null);
 const fileInputExcelCliente = ref<HTMLInputElement | null>(null);
 
 // Pestañas
@@ -103,19 +102,16 @@ const vistaFazonFiltrada = computed(() => {
     return lista;
 });
 
+const modales = useModalesInventario(cargarDatos);
+// Forzamos nuevaMP a "any" para que acepte cualquier propiedad
+const nuevaMP = modales.nuevaMP as any; 
 const { 
-    mostrarModalNuevaMP, nuevaMP, guardandoMP, 
+    mostrarModalNuevaMP, guardandoMP, 
     mostrarModalReservas, productoSeleccionado, ordenesReserva, cargandoReservas,
     verDetalleReserva, guardarNuevaMateriaPrima
-} = useModalesInventario(cargarDatos);
-
-const {
-    fileInput, importando, clickImportar, subirArchivoFlexxus
-} = useImportacionInventario(tabActual, clienteFiltro, importClienteFiltro, cargarDatos);
+} = modales;
 
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-
-const clickImportarFlexxus = () => { fileInputFlexxus.value?.click(); };
 
 const clickImportarClienteExcel = () => {
     if (!clienteFiltro.value) {
@@ -159,47 +155,6 @@ async function cargarDatos(forzar = false) {
 }
 
 const recargarDatos = async () => { await cargarDatos(true); };
-
-const procesarArchivoFlexxus = async (event: Event) => {
-    const target = event.target as HTMLInputElement;
-    if (!target.files || target.files.length === 0) return;
-    const file = target.files[0];
-    if (!file) return; 
-
-    if (!file.name.endsWith('.csv') && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-        Alertas.advertencia('Por favor selecciona un archivo CSV o Excel válido.');
-        return;
-    }
-
-    if (!confirm(`¿Procesar archivo "${file.name}"?`)) {
-        target.value = ''; 
-        return;
-    }
-
-    try {
-        cargando.value = true;
-        const formData = new FormData();
-        formData.append('archivo', file); 
-
-        const response = await axios.post(`${apiUrl}/Flexxus/importar-mp`, formData, {
-            headers: { ...getAuthConfig().headers, 'Content-Type': 'multipart/form-data' }
-        });
-
-        resumenData.value = {
-            creados: response.data.creados || 0,
-            actualizados: response.data.actualizados || 0,
-            errores: response.data.errores || 0
-        };
-        mostrarResumen.value = true;
-        await recargarDatos(); 
-    } catch (e: any) {
-        console.error(e);
-        Alertas.error(`Error al importar: ${e.response?.data?.message || 'Revisa el archivo.'}`);
-    } finally {
-        cargando.value = false;
-        target.value = ''; 
-    }
-};
 
 const procesarExcelCliente = async (event: Event) => {
     const target = event.target as HTMLInputElement;
@@ -374,13 +329,11 @@ onMounted(() => {
 
                 <button class="btn-header btn-nueva-mp" @click="mostrarModalNuevaMP = true">➕ Crear Insumo</button>
                 <button class="btn-header btn-masterbatch" @click="mostrarModalMasterbatch = true">🎨 Alta Color</button>
-                <button class="btn-header btn-flexxus" @click="clickImportarFlexxus" :disabled="cargando">📄 Importar CSV</button>
 
                 <button v-if="tabActual === 'CLI'" class="btn-header btn-importar-cliente" @click="clickImportarClienteExcel" :disabled="cargando || !clienteFiltro" :title="!clienteFiltro ? 'Seleccione un cliente primero' : 'Importar Excel para este cliente'">
                     📥 Importar Excel Cliente
                 </button>
 
-                <input type="file" ref="fileInputFlexxus" style="display: none" accept=".csv, .xlsx, .xls" @change="procesarArchivoFlexxus"/>
                 <input type="file" ref="fileInputExcelCliente" style="display: none" accept=".xlsx, .xls, .csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" @change="procesarExcelCliente"/>
 
                 <div class="buscador">
@@ -572,6 +525,46 @@ onMounted(() => {
         </div>
     </div>
 
+    <div v-if="mostrarModalNuevaMP" class="modal-overlay" @click.self="mostrarModalNuevaMP = false">
+        <div class="modal-content" style="text-align: left; width: 450px;">
+            <h3 style="margin-top: 0; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">➕ Crear Nuevo Insumo</h3>
+            
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px;">
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: #475569;">Nombre del Insumo <span style="color:red">*</span></label>
+                    <input type="text" v-model="nuevaMP.nombre" class="select-chico" style="width: 100%; box-sizing: border-box;" placeholder="Ej: PEAD INYECCIÓN" />
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                        <label style="font-size: 0.85rem; font-weight: 700; color: #475569;">Código SKU</label>
+                        <input type="text" v-model="nuevaMP.codigoSku" class="select-chico" style="width: 100%; box-sizing: border-box;" placeholder="Ej: MP-001" />
+                    </div>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                        <label style="font-size: 0.85rem; font-weight: 700; color: #475569;">Material</label>
+                        <select v-model="nuevaMP.tipoMaterial" class="select-chico" style="width: 100%; box-sizing: border-box;">
+                            <option value="">-- Seleccionar --</option>
+                            <option v-for="mat in TIPOS_MATERIALES" :key="mat" :value="mat">{{ mat }}</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: #475569;">Stock Físico Inicial (Kg)</label>
+                    <input type="number" v-model="nuevaMP.stockActual" class="select-chico" style="width: 100%; box-sizing: border-box;" placeholder="0.00" />
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 25px;">
+                <button class="btn-cerrar" @click="mostrarModalNuevaMP = false" style="background: #94a3b8; flex: 1; margin-top: 0;">Cancelar</button>
+                <button class="btn-cerrar" @click="guardarNuevaMateriaPrima" :disabled="guardandoMP || !nuevaMP.nombre" style="background: #10b981; flex: 1; margin-top: 0;">
+                    {{ guardandoMP ? '⏳ Guardando...' : '💾 Guardar Insumo' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div v-if="mostrarModalReservas" class="modal-overlay" @click.self="mostrarModalReservas = false">
         <div class="modal-content modal-reserva">
             <div class="modal-header-reserva">
@@ -656,7 +649,7 @@ onMounted(() => {
 
     <ModalHistorialStock :visible="mostrarModalHistorial" :productoId="productoIdSeleccionado" :productoNombre="productoNombreSeleccionado" @close="mostrarModalHistorial = false" />
     <ModalAjusteStock :visible="mostrarModalAjuste" :producto="productoParaAjustar" @close="mostrarModalAjuste = false" @confirmado="onAjusteConfirmado" />
-   <ModalNuevoMasterbatch :visible="mostrarModalMasterbatch" @close="mostrarModalMasterbatch = false" @creado="cargarDatos(true)" />
+    <ModalNuevoMasterbatch :visible="mostrarModalMasterbatch" @close="mostrarModalMasterbatch = false" @creado="cargarDatos(true)" />
 </template>
 
 <style scoped>
@@ -674,8 +667,6 @@ onMounted(() => {
 .btn-nueva-mp:hover { background: #2563eb; transform: translateY(-1px); }
 .btn-masterbatch { background: #6d28d9; color: white; }
 .btn-masterbatch:hover { background: #5b21b6; transform: translateY(-1px); }
-.btn-flexxus { background-color: #475569; color: white; }
-.btn-flexxus:hover { background-color: #334155; transform: translateY(-1px); }
 
 .btn-importar-cliente { background-color: #f97316; color: white; }
 .btn-importar-cliente:hover:not(:disabled) { background-color: #ea580c; transform: translateY(-1px); }
@@ -789,7 +780,7 @@ tr.bajo-stock .nombre-prod { color: #991b1b; }
 .btn-cerrar-reserva { background: #ef4444; color: white; border: none; padding: 10px 22px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
 .btn-cerrar-reserva:hover { background: #dc2626; }
 
-.modal-content { background: white; padding: 30px; border-radius: 12px; width: 440px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+.modal-content { background: white; padding: 30px; border-radius: 12px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
 .modal-stats { display: flex; justify-content: space-around; margin: 25px 0; gap: 15px; }
 .stat-item { display: flex; flex-direction: column; align-items: center; background: #f8fafc; padding: 15px; border-radius: 10px; flex: 1; border: 1px solid #e2e8f0; }
 .stat-item .num { font-size: 1.9rem; font-weight: 800; color: #1e293b; margin-top: 5px; }

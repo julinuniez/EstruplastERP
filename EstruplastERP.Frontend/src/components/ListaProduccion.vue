@@ -113,8 +113,26 @@ const toggleExpandir = (id: number) => {
     else filasExpandidas.value.splice(index, 1)
 }
 
+function extraerCodigoHC(obs: string | undefined) {
+    if (!obs) return null
+    const match = obs.match(/\[Grupo: (HC-[^\]]+)\]/)
+    return match ? match[1] : null
+}
+
+const getCodigoCarga = (p: ProduccionItem) => {
+    const consolidado = extraerCodigoHC(p.observacion);
+    if (consolidado) return consolidado;
+    return `HC-S${p.id}`; 
+}
+
 const ordenesDelGrupo = computed(() => {
     if (!codigoGrupoSeleccionado.value) return []
+    
+    if (codigoGrupoSeleccionado.value.startsWith('HC-S')) {
+        const idBuscado = parseInt(codigoGrupoSeleccionado.value.replace('HC-S', ''), 10);
+        return producciones.value.filter(p => p.id === idBuscado);
+    }
+    
     return producciones.value.filter(p => (p.observacion || '').includes(codigoGrupoSeleccionado.value))
 })
 
@@ -127,12 +145,6 @@ const abrirModalGrupo = (codigo: string | null | undefined) => {
 const getObservacionLimpia = (obs: string | undefined) => {
     if (!obs) return ''
     return obs.replace(/\[Grupo: HC-[^\]]+\]/g, '').replace(/\[LOTE: HC-[^\]]+\]/g, '').trim()
-}
-
-function extraerCodigoHC(obs: string | undefined) {
-    if (!obs) return null
-    const match = obs.match(/\[Grupo: (HC-[^\]]+)\]/)
-    return match ? match[1] : null
 }
 
 const produccionesFiltradas = computed(() => {
@@ -340,12 +352,80 @@ async function cancelarOrden(item: ProduccionItem) {
     }
 }
 
-const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
-    // 🚀 CABALLO DE TROYA: Le inyectamos una marca de agua secreta para que el Padre no pueda arruinar la impresión
-    if (tipo === 'carga') {
-        orden.observacion = (orden.observacion ? orden.observacion + ' ' : '') + '[FORZAR_CARGA]';
+// 🚀 IMPRESIÓN SÚPER ROBUSTA (Inyecta los consumos reales como Receta al PDF)
+const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], consumosMezcla: any[]) => {
+    if (!ordenesGrupo || ordenesGrupo.length === 0) return;
+
+    // Convertimos la lista de consumos del Modal en el formato exacto que espera el PDF
+    const recetaInyectada = consumosMezcla && consumosMezcla.length > 0 ? consumosMezcla.map(c => {
+        const kilosAImprimir = Number(c.real) > 0 ? Number(c.real) : Number(c.teorico);
+        return {
+            id: c.materiaPrimaId,
+            materiaPrimaId: c.materiaPrimaId,
+            MateriaPrimaId: c.materiaPrimaId,
+            nombreMateriaPrima: c.nombre,
+            nombreInsumo: c.nombre,
+            cantidadKilos: kilosAImprimir, 
+            CantidadKilos: kilosAImprimir, 
+            kilos: kilosAImprimir,
+            cantidad: kilosAImprimir,
+            kilosFijos: kilosAImprimir 
+        };
+    }) : [];
+
+    if (codigo.startsWith('HC-S')) {
+        const ordenCopia = { ...ordenesGrupo[0] };
+        ordenCopia.observacion = (ordenCopia.observacion ? ordenCopia.observacion + ' ' : '') + `[Grupo: HC-S${ordenCopia.id}] [FORZAR_CARGA]`;
+        
         emit('imprimir-historial', { 
-            orden, 
+            orden: ordenCopia, 
+            tipo: 'carga', 
+            receta: recetaInyectada, // 🚀 Acá inyectamos la receta real a la fuerza
+            materiasPrimasBase: materiasPrimas.value,
+            imprimirEnPaquetes: false
+        });
+    } else {
+        const nombresUnicos = [...new Set(ordenesGrupo.map(o => o.producto))];
+        const notas = ordenesGrupo.map(o => o.notaPedido || o.id).join(', ');
+        
+        const totalKilos = ordenesGrupo.reduce((acc, curr) => acc + (Number(curr.kilos) || 0), 0);
+        const totalUnidades = ordenesGrupo.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
+
+        const formObj = {
+            ...ordenesGrupo[0], 
+            productoNombre: nombresUnicos.length === 1 ? nombresUnicos[0] : "MEZCLA CONSOLIDADA",
+            esConsolidado: true,
+            cantidad: totalUnidades,
+            kilosTotales: totalKilos,
+            kilosEstimados: totalKilos,
+            kilos: totalKilos,
+            observacion: `[Grupo: ${codigo}] [MEZCLA CONSOLIDADA] Notas: ${notas} [FORZAR_CARGA]`,
+            producto: ordenesGrupo[0].producto || { id: ordenesGrupo[0].productoId || 9999, nombre: "MEZCLA", pesoEspecifico: 0, codigoSku: 'MEZCLA' },
+            cliente: ordenesGrupo[0].cliente || { id: ordenesGrupo[0].clienteId || 1, razonSocial: 'MÚLTIPLE' }
+        };
+
+        const payloadImpresion = {
+            form: formObj,
+            orden: formObj,
+            receta: recetaInyectada, // 🚀 Acá inyectamos la receta real a la fuerza
+            tipo: 'carga',
+            materiasPrimasBase: materiasPrimas.value,
+            imprimirEnPaquetes: false
+        };
+
+        emit('imprimir-carga-consolidada', payloadImpresion);
+    }
+    mostrarModalGrupo.value = false;
+}
+
+const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
+    const ordenCopia = { ...orden };
+
+    if (tipo === 'carga') {
+        ordenCopia.observacion = (ordenCopia.observacion ? ordenCopia.observacion + ' ' : '') + `[Grupo: HC-S${orden.id}] [FORZAR_CARGA]`;
+        
+        emit('imprimir-historial', { 
+            orden: ordenCopia, 
             tipo: 'carga', 
             materiasPrimasBase: materiasPrimas.value,
             imprimirEnPaquetes: false
@@ -353,17 +433,30 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
         return; 
     }
 
-    // SI LLEGÓ ACÁ, ES UNA ORDEN DE PRODUCCIÓN (📄)
-    if (orden.esImpreso) {
+    if (ordenCopia.tipoCorona && ordenCopia.tipoCorona !== 'Ninguno') {
+        const alertaPrueba = "PONER LÁMINA DE PRUEBA ARRIBA";
+        
+        if (ordenCopia.observacion && ordenCopia.observacion.trim() !== '') {
+            let obsText = ordenCopia.observacion.trim();
+            if (!obsText.endsWith('.')) {
+                obsText += '.';
+            }
+            ordenCopia.observacion = `${obsText}\n\n${alertaPrueba}`;
+        } else {
+            ordenCopia.observacion = alertaPrueba;
+        }
+    }
+
+    if (ordenCopia.esImpreso) {
         const confirmado = await Alertas.confirmar(
             "Orden ya impresa", 
-            `La orden #${orden.id} ya fue impresa. ¿Seguro quieres reimprimirla?`
+            `La orden #${ordenCopia.id} ya fue impresa. ¿Seguro quieres reimprimirla?`
         )
         if (!confirmado) return
     }
 
     let enPaquetes = false;
-    if (orden.cantidad >= 10) {
+    if (ordenCopia.cantidad >= 10) {
         const resp = await Swal.fire({
             title: '¿Imprimir en Paquetes?',
             text: `¿Deseas imprimir las etiquetas de OP divididas en paquetes de 10?`,
@@ -377,10 +470,10 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
         enPaquetes = resp.isConfirmed;
     }
 
-    orden.imprimirEnPaquetes = enPaquetes;
+    ordenCopia.imprimirEnPaquetes = enPaquetes;
 
     emit('imprimir-historial', { 
-        orden, 
+        orden: ordenCopia, 
         tipo: 'orden', 
         materiasPrimasBase: materiasPrimas.value,
         imprimirEnPaquetes: enPaquetes 
@@ -398,9 +491,10 @@ function toggleSeleccionMultiple(id: number) {
 
 async function imprimirLoteOP() {
     if (ordenesSeleccionadas.value.length === 0) return
-    const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id))
     
-    const yaImpresas = ordenesAImprimir.filter(o => o.esImpreso).length
+    const ordenesBase = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id))
+    
+    const yaImpresas = ordenesBase.filter(o => o.esImpreso).length
     if (yaImpresas > 0) {
         const msj = yaImpresas === 1 
             ? "Hay 1 orden seleccionada que ya fue impresa. ¿Seguro quieres reimprimirla?" 
@@ -410,11 +504,31 @@ async function imprimirLoteOP() {
         if (!confirmado) return
     }
 
+    const ordenesAImprimir = ordenesBase.map(orden => {
+        const copia = { ...orden };
+        
+        if (copia.tipoCorona && copia.tipoCorona !== 'Ninguno') {
+            const alertaPrueba = "COLOCAR LÁMINA DE PRUEBA ARRIBA";
+            
+            if (copia.observacion && copia.observacion.trim() !== '') {
+                let obsText = copia.observacion.trim();
+                if (!obsText.endsWith('.')) {
+                    obsText += '.';
+                }
+                copia.observacion = `${obsText}\n\n${alertaPrueba}`;
+            } else {
+                copia.observacion = alertaPrueba;
+            }
+        }
+        
+        copia.imprimirEnPaquetes = false; 
+        return copia;
+    });
+
     emit('imprimir-lote-op', ordenesAImprimir)
     ordenesSeleccionadas.value = []
 }
 
-// 🚀 SI ES MEZCLA CONSOLIDADA (🧪 MULTIPLE)
 async function ejecutarCargaConsolidada() {
     if (ordenesSeleccionadas.value.length < 2) return
     const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id))
@@ -432,11 +546,23 @@ async function ejecutarCargaConsolidada() {
         }
 
         formObj.esConsolidado = true
-        // 🚀 CABALLO DE TROYA PARA LA MEZCLA
         formObj.observacion = '[MEZCLA CONSOLIDADA] ' + (formObj.observacion || '') + ' [FORZAR_CARGA]'
+        
+        formObj.cantidad = ordenesAImprimir.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
+        formObj.kilosTotales = ordenesAImprimir.reduce((acc, curr) => acc + (Number(curr.kilos) || 0), 0);
+        formObj.kilosEstimados = formObj.kilosTotales;
+        formObj.kilos = formObj.kilosTotales;
 
-        ;(payload as any).materiasPrimasBase = materiasPrimas.value
-        emit('imprimir-carga-consolidada', payload)
+        const payloadImpresion = {
+            form: formObj, 
+            orden: formObj,
+            receta: (payload as any).receta || [],
+            tipo: 'carga',
+            materiasPrimasBase: materiasPrimas.value,
+            imprimirEnPaquetes: false
+        };
+
+        emit('imprimir-carga-consolidada', payloadImpresion)
         
         ordenesSeleccionadas.value = []
         await cargarHistorial()
@@ -546,8 +672,8 @@ defineExpose({ cargarHistorial })
                         <td>
                             <div class="texto-nota">{{ p.notaPedido || '-' }}</div>
                             <small v-if="p.numeroPedidoCliente" class="texto-oc">OC: {{ p.numeroPedidoCliente }}</small>
-                            <div v-if="extraerCodigoHC(p.observacion)" class="tag-hc clickeable" title="Ver todas las órdenes de esta hoja" @click.stop="abrirModalGrupo(extraerCodigoHC(p.observacion))">
-                                📦 {{ extraerCodigoHC(p.observacion) }}
+                            <div class="tag-hc clickeable" title="Ver detalle de hoja de carga" @click.stop="abrirModalGrupo(getCodigoCarga(p))">
+                                📦 {{ getCodigoCarga(p) }}
                             </div>
                         </td>
                         
@@ -592,11 +718,11 @@ defineExpose({ cargarHistorial })
                                     <button v-if="!p.pallets || p.pallets.length === 0" @click="abrirModalCierre(p)" class="btn-action btn-check" title="Declarar Consumos y Cerrar OP">✅</button>
                                     
                                     <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Imprimir OP">📄</button>
-                                    <button @click="solicitarImpresion(p, 'carga')" class="btn-action btn-ciencia" title="Imprimir Hoja de Carga">🧪</button>
+                                    <button @click="solicitarImpresion(p, 'carga')" class="btn-action btn-ciencia" title="Imprimir Hoja de Carga Individual">🧪</button>
                                     <button @click="cancelarOrden(p)" class="btn-action btn-cancel" title="Cancelar y Devolver Material">❌</button>
                                 </template>
                                 <template v-else-if="p.estado === 'Finalizada'">
-                                    <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Reimprimir Orden">📄</button>
+                                    <button @click="solicitarImpresion(p, 'orden')" class="btn-action" title="Reimprimir OP Finalizada">📄</button>
                                     <button @click="revertirOrden(p)" class="btn-action" style="color: #e67e22; border-color: #e67e22;" title="Revertir Cierre de Producción">⏪</button>
                                 </template>
                             </div>
@@ -673,6 +799,7 @@ defineExpose({ cargarHistorial })
         :ordenes="ordenesDelGrupo"
         @close="mostrarModalGrupo = false"
         @actualizar-lista="cargarHistorial"
+        @imprimir-carga="manejarImpresionDesdeModal"
     />
 
     <ModalEdicionRapida

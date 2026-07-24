@@ -6,8 +6,17 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
     
     // --- LÓGICA: MODAL DE ALTA DE MATERIA PRIMA MANUAL ---
     const mostrarModalNuevaMP = ref(false);
-    // 🚀 AGREGADO: proveedorId inicializado en null
-    const nuevaMP = ref({ nombre: '', codigoSku: '', proveedorId: null as number | null });
+    
+    // 🚀 CORRECCIÓN: Definimos la estructura completa aquí. 
+    // TypeScript ahora sabe que existen estas propiedades.
+    const nuevaMP = ref({ 
+        nombre: '', 
+        codigoSku: '', 
+        proveedorId: null as number | null,
+        tipoMaterial: '',
+        stockActual: 0 
+    });
+    
     const guardandoMP = ref(false);
 
     const guardarNuevaMateriaPrima = async () => {
@@ -16,15 +25,19 @@ export function useModalesInventario(cargarDatos: (forzar?: boolean) => Promise<
         }
         guardandoMP.value = true;
         try {
-            // 🚀 APUNTAMOS AL ENDPOINT NUEVO
+            // 🚀 ACTUALIZACIÓN: Enviamos también los campos nuevos a la API
             await api.post('/Productos/crear-materia-prima', {
                 nombre: nuevaMP.value.nombre,
                 codigoSku: nuevaMP.value.codigoSku,
-                proveedorId: nuevaMP.value.proveedorId
+                proveedorId: nuevaMP.value.proveedorId,
+                tipoMaterial: nuevaMP.value.tipoMaterial,
+                stockActual: nuevaMP.value.stockActual
             });
             
             Alertas.exito("✅ Insumo creado correctamente.");
-            nuevaMP.value = { nombre: '', codigoSku: '', proveedorId: null };
+            
+            // Reset del objeto con los nuevos campos
+            nuevaMP.value = { nombre: '', codigoSku: '', proveedorId: null, tipoMaterial: '', stockActual: 0 };
             mostrarModalNuevaMP.value = false;
             
             await cargarDatos(true);
