@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
-// 🚀 ACÁ ESTABA EL ERROR: Ahora usamos TU instancia de API, no el axios crudo
 import api from '@/services/axiosInstance' 
 import { Alertas } from '@/utils/alertas';
+// 🚀 IMPORTAMOS EL CEREBRO MATEMÁTICO AL MODAL
+import { useConsolidacion } from '@/composables/useConsolidacion'; 
 
 const props = defineProps<{
     visible: boolean,
@@ -12,6 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['close', 'actualizar-lista', 'imprimir-carga'])
 
+const { procesarConsolidacion } = useConsolidacion(); // 🚀 LO INICIALIZAMOS
 const procesando = ref(false);
 const consumosMezcla = ref<{ materiaPrimaId: number, nombre: string, teorico: number, real: number }[]>([])
 
@@ -29,20 +31,11 @@ const puedeRevertir = computed(() => {
 });
 
 const esCargaSimple = computed(() => {
-    return props.codigo && props.codigo.includes('HC-S');
+    return !!(props.codigo && props.codigo.includes('HC-S'));
 });
-
 const hojaCargaId = computed(() => {
-    const ordenConId = props.ordenes.find(o => o.hojaCargaId);
-    if (ordenConId) return ordenConId.hojaCargaId;
-    
-    if (props.codigo) {
-        const match = props.codigo.match(/HC-(\d+)/i);
-        if (match && match[1]) {
-            return parseInt(match[1], 10);
-        }
-    }
-    return null;
+    const ordenConId = props.ordenes.find(o => o.hojaCargaId || o.HojaCargaId);
+    return ordenConId ? (ordenConId.hojaCargaId || ordenConId.HojaCargaId) : null;
 });
 
 const idClienteUnico = computed(() => {
@@ -110,79 +103,35 @@ onMounted(() => {
     cargarCatálogoMateriales();
 });
 
+// 🚀 EL MOTOR LIMPIO: Una sola llamada al nuevo endpoint inteligente del Backend
 watch(() => props.visible, async (isOpen) => {
     if (isOpen && props.ordenes.length > 0) {
         consumosMezcla.value = [];
         procesando.value = true;
         
         try {
-            const map = new Map<number, any>();
-
-            // 1. Pedimos el detalle completo de CADA orden a la API configurada
-            const peticiones = props.ordenes.map(async (o) => {
-                let insumosOrden: any[] = [];
-                try {
-                    const resFull = await api.get(`/Ordenes/${o.id}`);
-                    const ordenFull = resFull.data;
-                    
-                    if (ordenFull && ordenFull.consumos && ordenFull.consumos.length > 0) {
-                        insumosOrden = ordenFull.consumos;
-                    } 
-                    else if (ordenFull && (ordenFull.receta || ordenFull.recetaDinamica)) {
-                        insumosOrden = ordenFull.receta || ordenFull.recetaDinamica;
-                    }
-                    
-                    if (yaEstaDeclarado.value && insumosOrden.length === 0) {
-                        try {
-                            const resCons = await api.get(`/Ordenes/${o.id}/consumos`);
-                            if (resCons.data && resCons.data.length > 0) {
-                                insumosOrden = resCons.data;
-                            }
-                        } catch (err) {}
-                    }
-                } catch (e) {
-                    console.warn(`No se pudo traer el detalle histórico de la OP ${o.id}`);
-                }
-                return insumosOrden;
-            });
-
-            const resultadosInsumos = await Promise.all(peticiones);
-
-            // 2. Sumamos todo en nuestra tablita local
-            resultadosInsumos.forEach(arrayInsumos => {
-                arrayInsumos.forEach((c: any) => {
-                    const mId = c.materiaPrimaId || c.MateriaPrimaId || c.insumoId || c.id;
-                    if (!mId) return;
-
-                    const nombre = c.nombreMateriaPrima || c.nombreInsumo || c.nombre || 'Insumo';
-                    const kilosReales = Number(c.real !== undefined ? c.real : (c.cantidadKilos || c.CantidadKilos || c.kilos || c.cantidad || 0));
-                    const kilosTeoricos = Number(c.teorico !== undefined ? c.teorico : kilosReales);
-
-                    if (!map.has(mId)) {
-                        map.set(mId, { materiaPrimaId: mId, nombre, teorico: 0, real: 0 });
-                    }
-
-                    if (yaEstaDeclarado.value) {
-                        map.get(mId).real += kilosReales;
-                        map.get(mId).teorico += kilosTeoricos;
-                    } else {
-                        map.get(mId).teorico += kilosReales;
-                    }
-                });
-            });
-
-            // 3. Convertimos a la lista final
-            const consumosList = Array.from(map.values()).map(c => {
-                if (c.real === 0 && !yaEstaDeclarado.value) {
-                    c.real = Number(c.teorico.toFixed(2));
-                }
-                return c;
-            });
-
-            consumosMezcla.value = consumosList;
+            // Extraemos los IDs de las órdenes de la tablita visual
+            const ids = props.ordenes.map(o => o.id).join('&ordenIds=');
             
-        } catch (e) {
-            console.error("Error armando los consumos históricos", e);
+            // Hacemos una única consulta limpia
+            const { data } = await api.get(`/HojasCarga/consumos-consolidados?ordenIds=${ids}`);
+            
+            // El backend ya lo entregó sumado, procesado y ordenado
+            if (data && data.length > 0) {
+                consumosMezcla.value = data.map((c: any) => {
+                    // Ajuste estético por si no está declarada
+                    if (!yaEstaDeclarado.value && c.real === c.teorico) {
+                        c.real = Number(c.teorico.toFixed(2));
+                    }
+                    return c;
+                });
+            } else {
+                console.warn("El backend no encontró consumos para este grupo.");
+            }
+
+        } catch (error) {
+            console.error("Error al consultar el historial consolidado:", error);
+            Alertas.error("No se pudieron cargar los consumos históricos.");
         } finally {
             procesando.value = false;
             insumoExtraSeleccionado.value = '';

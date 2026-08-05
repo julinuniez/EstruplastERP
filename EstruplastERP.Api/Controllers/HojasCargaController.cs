@@ -227,5 +227,64 @@ namespace EstruplastERP.Controllers
 
             return Ok(consumos);
         }
+        [HttpGet("consumos-consolidados")]
+        public async Task<IActionResult> GetConsumosConsolidados([FromQuery] int[] ordenIds)
+        {
+            if (ordenIds == null || ordenIds.Length == 0)
+                return BadRequest(new { mensaje = "Debe enviar al menos una orden." });
+
+            // 1. Buscamos a qué Hoja de Carga pertenecen estas órdenes (tomamos la primera que tenga)
+            var ordenes = await _context.Ordenes
+                .Where(o => ordenIds.Contains(o.Id))
+                .ToListAsync();
+
+            var hojaCargaId = ordenes.FirstOrDefault(o => o.HojaCargaId != null)?.HojaCargaId;
+
+            if (hojaCargaId.HasValue)
+            {
+                // 2. Si tienen Hoja de Carga, verificamos su estado
+                var hojaCarga = await _context.HojasCarga.FindAsync(hojaCargaId.Value);
+
+                if (hojaCarga != null && hojaCarga.Estado == EstadoHojaCarga.ConsumosDeclarados)
+                {
+                    // Devolvemos la realidad absoluta declarada en esa hoja
+                    var consumosReales = await _context.ConsumosHojasCarga
+                        .Include(c => c.MateriaPrima)
+                        .Where(c => c.HojaCargaId == hojaCargaId.Value)
+                        .Select(c => new
+                        {
+                            materiaPrimaId = c.MateriaPrimaId,
+                            nombre = c.MateriaPrima != null ? c.MateriaPrima.Nombre : "Insumo",
+                            teorico = c.CantidadRealKg, // Emparejamos para la vista
+                            real = c.CantidadRealKg
+                        })
+                        .ToListAsync();
+
+                    return Ok(consumosReales);
+                }
+            }
+
+            // 3. PLAN B DE BACKEND: Si es una orden simple o la hoja no está declarada, 
+            // traemos las órdenes con sus consumos y agrupamos en memoria.
+            var ordenesConConsumos = await _context.Ordenes
+                .Include(o => o.Consumos) // Fijate que acá diga Consumos, Receta, o como se llame la lista en tu clase Orden
+                    .ThenInclude(c => c.MateriaPrima)
+                .Where(o => ordenIds.Contains(o.Id))
+                .ToListAsync();
+
+            var consumosHistoricos = ordenesConConsumos
+                .SelectMany(o => o.Consumos)
+                .GroupBy(c => new { c.MateriaPrimaId, Nombre = c.MateriaPrima?.Nombre })
+                .Select(g => new
+                {
+                    materiaPrimaId = g.Key.MateriaPrimaId,
+                    nombre = g.Key.Nombre ?? "Insumo",
+                    teorico = g.Sum(c => c.CantidadKilos), // Verificá que la propiedad de los kilos se llame CantidadKilos
+                    real = g.Sum(c => c.CantidadKilos)
+                })
+                .ToList();
+
+            return Ok(consumosHistoricos);
+        }
     }
 }

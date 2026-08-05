@@ -41,15 +41,23 @@ const esCargaSimple = computed(() => {
 // Si es carga simple o consolidada, ocultamos columnas y controles extras
 const modoCargaLimpia = computed(() => esConsolidadoReal.value || esCargaSimple.value);
 
+// 🚀 FILTRO NUCLEAR PARA EL LOTE
 const codigoLoteVisible = computed(() => {
-    if (!props.form?.observacion) return props.form?.id;
-    const match = props.form.observacion.match(/\[Grupo: (HC-[^\]]+)\]/);
-    return match ? match[1] : props.form?.id;
+    const obs = props.form?.observacion || '';
+    const match = obs.match(/\[Grupo: (HC-[^\]]+)\]/);
+    if (match) return match[1];
+
+    const idLote = props.form?.id || props.form?.Id;
+    if (idLote && !String(idLote).toLowerCase().includes('undefined')) {
+        return idLote;
+    }
+    
+    return 'MÚLTIPLE'; // Si no hay ID, evitamos que quede en blanco
 });
 
 const valorCodigoBarra = computed(() => {
     if (modoCargaLimpia.value) {
-        if (!codigoLoteVisible.value) return '';
+        if (!codigoLoteVisible.value || codigoLoteVisible.value === 'MÚLTIPLE') return '';
         return `LOTE-${codigoLoteVisible.value}`;
     }
     if (!props.form?.id) return ''; 
@@ -142,8 +150,65 @@ const esInsumoFijo = (r: any) => {
     return false;
 };
 
+// 🚀 CAZADOR NUCLEAR DE NOTAS DE PEDIDO
+const notasPedidoVisibles = computed(() => {
+    try {
+        let notas: string[] = [];
+        
+        // 1. Rescatar la del formulario
+        const nP = props.form?.notaPedido || props.form?.NotaPedido;
+        if (nP && !String(nP).toLowerCase().includes('undefined')) {
+            notas.push(String(nP));
+        }
+
+        // 2. Rescatar de las subórdenes
+        const subOrdenes = props.form?.ordenes || props.form?.pedidos || props.form?.detalles || props.form?.items || [];
+        if (subOrdenes && subOrdenes.length > 0) {
+            subOrdenes.forEach((o: any) => {
+                const n = o.notaPedido || o.NotaPedido;
+                if (n && !String(n).toLowerCase().includes('undefined') && !String(n).toLowerCase().includes('null')) {
+                    notas.push(String(n));
+                } else if (o.id && !String(o.id).toLowerCase().includes('undefined')) {
+                    notas.push(String(o.id)); // Fallback al N° de OP
+                }
+            });
+        }
+
+        if (notas.length === 0) {
+            // Último recurso: usar el ID de la OP principal
+            const idPrincipal = props.form?.id || props.form?.Id;
+            if (idPrincipal && !String(idPrincipal).toLowerCase().includes('undefined')) {
+                return String(idPrincipal);
+            }
+            return '-';
+        }
+
+        // 3. Limpieza extrema: Regex para matar "undefined" literal que viene del backend
+        const crudo = notas.join(' | ');
+        const arrayLimpio = crudo
+            .replace(/undefined/gi, '') // Destruye "undefined"
+            .replace(/null/gi, '')      // Destruye "null"
+            .split(/[|,]/)
+            .map(s => s.trim())
+            .filter(s => s !== '');
+        
+        const finales = [...new Set(arrayLimpio)];
+        return finales.length > 0 ? finales.join(' | ') : '-';
+    } catch (e) {
+        return '-';
+    }
+});
+
+// 🚀 EMBUDO INTELIGENTE: Atrapa los insumos de donde sea que vengan
+const insumosParaImprimir = computed(() => {
+    if (props.receta && props.receta.length > 0) return props.receta;
+    if (props.form?.consumos && props.form.consumos.length > 0) return props.form.consumos;
+    if (props.form?.receta && props.form.receta.length > 0) return props.form.receta;
+    return [];
+});
+
 const recetaVisual = computed(() => {
-    let lista = JSON.parse(JSON.stringify(props.receta || []));
+    let lista = JSON.parse(JSON.stringify(insumosParaImprimir.value));
 
     if (esConsolidadoReal.value) {
         const map = new Map<number, any>();
@@ -153,7 +218,8 @@ const recetaVisual = computed(() => {
             if (!idMp) return; 
 
             const nombre = item.nombreInsumo || item.nombreMateriaPrima || item.NombreMateriaPrima || item.nombre || 'Insumo';
-            const kilos = Number(item.cantidadKilos || item.CantidadKilos || item.kilos || item.cantidad || 0);
+            // 🚀 RESPALDO FUERTE: Toma el real, kilos, o lo que haya
+            const kilos = Number(item.real !== undefined ? item.real : (item.cantidadKilos || item.CantidadKilos || item.kilos || item.cantidad || 0));
             const fijos = Number(item.kilosFijos || 0);
 
             if (!map.has(idMp)) {
@@ -161,7 +227,7 @@ const recetaVisual = computed(() => {
                     ...item, 
                     materiaPrimaId: idMp,
                     nombreInsumo: nombre,
-                    cantidadKilos: kilos,
+                    cantidadKilos: kilos, // Lo forzamos a esta variable para asegurar compatibilidad
                     kilosFijos: fijos,
                     esEstearato: item.esEstearato || nombre.toUpperCase().includes('ESTEARATO'),
                     esColor: item.esColor || nombre.toUpperCase().includes('MB') || nombre.toUpperCase().includes('MASTER') || nombre.toUpperCase().includes('COLOR'),
@@ -188,14 +254,14 @@ const recetaVisual = computed(() => {
             
             if (esColor) {
                 porcentajeRemovido += Number(item.cantidad || 0);
-                kilosRemovidos += Number(item.kilosFijos || item.cantidadKilos || item.CantidadKilos || item.kilos || item.cantidad || 0);
+                kilosRemovidos += Number(item.kilosFijos || item.cantidadKilos || item.CantidadKilos || item.kilos || item.real || item.cantidad || 0);
             } else {
                 listaLimpia.push(item);
             }
         });
 
         if (listaLimpia.length > 0 && kilosRemovidos > 0) {
-            listaLimpia.sort((a: any, b: any) => Number(b.cantidadKilos || b.CantidadKilos || 0) - Number(a.cantidadKilos || a.CantidadKilos || 0));
+            listaLimpia.sort((a: any, b: any) => Number(b.cantidadKilos || b.CantidadKilos || b.real || 0) - Number(a.cantidadKilos || a.CantidadKilos || a.real || 0));
             const materialPrincipal = listaLimpia.find((i: any) => i.esBase) || listaLimpia[0];
 
             if (materialPrincipal) {
@@ -204,7 +270,7 @@ const recetaVisual = computed(() => {
                 if (Number(materialPrincipal.kilosFijos) > 0) {
                     materialPrincipal.kilosFijos = Number(materialPrincipal.kilosFijos) + kilosRemovidos;
                 } else {
-                    materialPrincipal.cantidadKilos = Number(materialPrincipal.cantidadKilos || materialPrincipal.CantidadKilos || materialPrincipal.cantidad || 0) + kilosRemovidos;
+                    materialPrincipal.cantidadKilos = Number(materialPrincipal.cantidadKilos || materialPrincipal.CantidadKilos || materialPrincipal.real || materialPrincipal.cantidad || 0) + kilosRemovidos;
                 }
             }
         }
@@ -219,8 +285,8 @@ const recetaVisual = computed(() => {
             return aEsFijo - bEsFijo;
         }
 
-        const cantidadA = Number(a.cantidadKilos || a.CantidadKilos || a.cantidad || 0);
-        const cantidadB = Number(b.cantidadKilos || b.CantidadKilos || b.cantidad || 0);
+        const cantidadA = Number(a.cantidadKilos || a.CantidadKilos || a.real || a.cantidad || 0);
+        const cantidadB = Number(b.cantidadKilos || b.CantidadKilos || b.real || b.cantidad || 0);
         
         return cantidadB - cantidadA;
     });
@@ -318,7 +384,7 @@ const tituloLimpioParaPDF = computed(() => {
 
 const observacionLimpia = computed(() => {
     if (!props.form?.observacion) return '-';
-    return props.form.observacion.replace(/\[Grupo: HC-[^\]]+\]/g, '').replace(/\[LOTE: HC-[^\]]+\]/g, '').trim();
+    return props.form.observacion.replace(/\[Grupo: HC-[^\]]+\]/g, '').replace(/\[LOTE: HC-[^\]]+\]/g, '').replace(/\[FORZAR_CARGA\]/g, '').trim();
 });
 
 const esVerdadero = (valor: any) => {
@@ -372,7 +438,6 @@ const tipoCorona = computed(() => {
             <div class="logo-area"><img :src="logoImg" class="logo-central" /></div>
             
             <div class="datos-orden">
-                <!-- 🚀 TÍTULO INTELIGENTE QUE DETECTA QUÉ TIPO DE HOJA ES -->
                 <h3>{{ modoCargaLimpia ? (esConsolidadoReal ? 'HOJA DE CARGA MÚLTIPLE' : 'HOJA DE CARGA INDIVIDUAL') : (ocultarFormula ? 'ORDEN DE PRODUCCIÓN' : 'HOJA DE CARGA') }}</h3>
                 
                 <div v-if="modoCargaLimpia" class="lote-mezcla-resaltado">
@@ -380,7 +445,8 @@ const tipoCorona = computed(() => {
                 </div>
 
                 <p>FECHA: <strong>{{ fechaHoy }}</strong></p>
-                <p>NOTA PEDIDO: <strong>{{ form?.notaPedido || '-' }}</strong></p>
+                <!-- 🚀 AQUÍ APLICAMOS EL CAZADOR NUCLEAR DE NOTAS DE PEDIDO -->
+                <p>NOTA PEDIDO: <strong>{{ notasPedidoVisibles }}</strong></p>
                 <p v-if="!esConsolidadoReal">OC CLIENTE: <strong>{{ form?.numeroPedidoCliente || '-' }}</strong></p>
             </div>
         </div>
@@ -446,7 +512,6 @@ const tipoCorona = computed(() => {
                 <thead>
                     <tr>
                         <th>INSUMO / MATERIA PRIMA</th>
-                        <!-- 🚀 SE OCULTA LA COLUMNA SI ES MODO CARGA (CONSOLIDADA O SIMPLE) -->
                         <th style="width:100px; text-align:center;" v-if="!modoCargaLimpia" class="ocultar-en-impresion">% MEZCLA</th>
                         <th style="width:120px; text-align:right;">PESO A CARGAR</th>
                         <th data-html2canvas-ignore="true" style="width:40px" v-if="!modoCargaLimpia" class="ocultar-en-impresion"></th>
@@ -488,7 +553,7 @@ const tipoCorona = computed(() => {
                             <td style="text-align:right; font-size: 1.1em;">
                                 <strong v-if="esInsumoFijo(r)" style="color: #2980b9;">
                                     {{ esConsolidadoReal 
-                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
+                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
                                         : (r.kilosFijos 
                                             ? parseFloat(r.kilosFijos).toFixed(2) 
                                             : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2)) 
@@ -496,7 +561,7 @@ const tipoCorona = computed(() => {
                                 </strong>
                                 <strong v-else>
                                     {{ esConsolidadoReal 
-                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || 0).toFixed(2) 
+                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
                                         : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2) 
                                     }} kg
                                 </strong>

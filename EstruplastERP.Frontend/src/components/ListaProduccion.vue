@@ -22,6 +22,7 @@ export interface ProduccionItem {
     esFinalizada: boolean;
     esImpreso?: boolean;
     notaPedido?: string;
+    NotaPedido?: string;
     numeroPedidoCliente?: string;
     clienteNombre?: string; 
     cliente?: any;
@@ -352,11 +353,10 @@ async function cancelarOrden(item: ProduccionItem) {
     }
 }
 
-// 🚀 IMPRESIÓN SÚPER ROBUSTA (Inyecta los consumos reales como Receta al PDF)
+// 🚀 REIMPRESIÓN DESDE EL MODAL (CORREGIDA)
 const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], consumosMezcla: any[]) => {
     if (!ordenesGrupo || ordenesGrupo.length === 0) return;
 
-    // Convertimos la lista de consumos del Modal en el formato exacto que espera el PDF
     const recetaInyectada = consumosMezcla && consumosMezcla.length > 0 ? consumosMezcla.map(c => {
         const kilosAImprimir = Number(c.real) > 0 ? Number(c.real) : Number(c.teorico);
         return {
@@ -374,40 +374,60 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], c
     }) : [];
 
     if (codigo.startsWith('HC-S')) {
-        const ordenCopia = { ...ordenesGrupo[0] };
+        const ordenCopia = JSON.parse(JSON.stringify(ordenesGrupo[0]));
         ordenCopia.observacion = (ordenCopia.observacion ? ordenCopia.observacion + ' ' : '') + `[Grupo: HC-S${ordenCopia.id}] [FORZAR_CARGA]`;
+        
+        ordenCopia.consumos = recetaInyectada;
+        ordenCopia.receta = recetaInyectada;
         
         emit('imprimir-historial', { 
             orden: ordenCopia, 
             tipo: 'carga', 
-            receta: recetaInyectada, // 🚀 Acá inyectamos la receta real a la fuerza
+            receta: recetaInyectada, 
             materiasPrimasBase: materiasPrimas.value,
             imprimirEnPaquetes: false
         });
     } else {
         const nombresUnicos = [...new Set(ordenesGrupo.map(o => o.producto))];
-        const notas = ordenesGrupo.map(o => o.notaPedido || o.id).join(', ');
+        
+        // 🚀 FILTRO: Elimina los "undefined" y extrae las notas únicas
+        const notasArray = ordenesGrupo.map(o => {
+            const n = o.notaPedido || o.NotaPedido;
+            if (n && String(n).toLowerCase() !== 'undefined' && String(n).toLowerCase() !== 'null') {
+                return String(n).trim();
+            }
+            return String(o.id); // Si no tiene nota, muestra el ID de la OP
+        });
+        const notasAgrupadas = [...new Set(notasArray)].join(' | ');
         
         const totalKilos = ordenesGrupo.reduce((acc, curr) => acc + (Number(curr.kilos) || 0), 0);
         const totalUnidades = ordenesGrupo.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
 
-        const formObj = {
-            ...ordenesGrupo[0], 
-            productoNombre: nombresUnicos.length === 1 ? nombresUnicos[0] : "MEZCLA CONSOLIDADA",
-            esConsolidado: true,
-            cantidad: totalUnidades,
-            kilosTotales: totalKilos,
-            kilosEstimados: totalKilos,
-            kilos: totalKilos,
-            observacion: `[Grupo: ${codigo}] [MEZCLA CONSOLIDADA] Notas: ${notas} [FORZAR_CARGA]`,
-            producto: ordenesGrupo[0].producto || { id: ordenesGrupo[0].productoId || 9999, nombre: "MEZCLA", pesoEspecifico: 0, codigoSku: 'MEZCLA' },
-            cliente: ordenesGrupo[0].cliente || { id: ordenesGrupo[0].clienteId || 1, razonSocial: 'MÚLTIPLE' }
-        };
+        // 🚀 DESVINCULACIÓN para que Vue no nos sobreescriba los datos
+        const formObj = JSON.parse(JSON.stringify(ordenesGrupo[0]));
+        
+        formObj.productoNombre = nombresUnicos.length === 1 ? nombresUnicos[0] : "MEZCLA CONSOLIDADA";
+        formObj.esConsolidado = true;
+        formObj.cantidad = totalUnidades;
+        formObj.kilosTotales = totalKilos;
+        formObj.kilosEstimados = totalKilos;
+        formObj.kilos = totalKilos;
+        
+        // 🚀 Inyectamos las notas a la fuerza
+        formObj.notaPedido = notasAgrupadas;
+        formObj.NotaPedido = notasAgrupadas;
+        
+        formObj.observacion = `[Grupo: ${codigo}] [MEZCLA CONSOLIDADA] [FORZAR_CARGA]`;
+        formObj.producto = ordenesGrupo[0].producto || { id: ordenesGrupo[0].productoId || 9999, nombre: "MEZCLA", pesoEspecifico: 0, codigoSku: 'MEZCLA' };
+        formObj.cliente = ordenesGrupo[0].cliente || { id: ordenesGrupo[0].clienteId || 1, razonSocial: 'MÚLTIPLE' };
+        
+        formObj.consumos = recetaInyectada;
+        formObj.receta = recetaInyectada;
 
         const payloadImpresion = {
             form: formObj,
             orden: formObj,
-            receta: recetaInyectada, // 🚀 Acá inyectamos la receta real a la fuerza
+            receta: recetaInyectada,
             tipo: 'carga',
             materiasPrimasBase: materiasPrimas.value,
             imprimirEnPaquetes: false
@@ -529,6 +549,7 @@ async function imprimirLoteOP() {
     ordenesSeleccionadas.value = []
 }
 
+// 🚀 CREAR HOJA NUEVA DESDE LA BANDEJA (CORREGIDA)
 async function ejecutarCargaConsolidada() {
     if (ordenesSeleccionadas.value.length < 2) return
     const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id))
@@ -537,7 +558,22 @@ async function ejecutarCargaConsolidada() {
     
     if (payload) {
         const nombresUnicos = [...new Set(ordenesAImprimir.map(o => o.producto))]
-        const formObj = (payload as any).form ? (payload as any).form : payload
+        
+        // 🚀 DESVINCULACIÓN
+        const payloadCrudo = (payload as any).form ? (payload as any).form : payload;
+        const formObj = JSON.parse(JSON.stringify(payloadCrudo));
+        
+        const recetaCalculada = (payload as any).receta || []
+
+        // 🚀 FILTRO: Elimina los "undefined"
+        const notasArray = ordenesAImprimir.map(o => {
+            const n = o.notaPedido || o.NotaPedido;
+            if (n && String(n).toLowerCase() !== 'undefined' && String(n).toLowerCase() !== 'null') {
+                return String(n).trim();
+            }
+            return String(o.id);
+        });
+        const notasAgrupadas = [...new Set(notasArray)].join(' | ');
 
         if (nombresUnicos.length === 1) {
             formObj.productoNombre = nombresUnicos[0]
@@ -553,10 +589,17 @@ async function ejecutarCargaConsolidada() {
         formObj.kilosEstimados = formObj.kilosTotales;
         formObj.kilos = formObj.kilosTotales;
 
+        // 🚀 Inyectamos las notas
+        formObj.notaPedido = notasAgrupadas;
+        formObj.NotaPedido = notasAgrupadas;
+
+        formObj.consumos = recetaCalculada;
+        formObj.receta = recetaCalculada;
+
         const payloadImpresion = {
             form: formObj, 
             orden: formObj,
-            receta: (payload as any).receta || [],
+            receta: recetaCalculada,
             tipo: 'carga',
             materiasPrimasBase: materiasPrimas.value,
             imprimirEnPaquetes: false
