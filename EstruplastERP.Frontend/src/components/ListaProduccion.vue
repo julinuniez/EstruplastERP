@@ -390,20 +390,18 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], c
     } else {
         const nombresUnicos = [...new Set(ordenesGrupo.map(o => o.producto))];
         
-        // 🚀 FILTRO: Elimina los "undefined" y extrae las notas únicas
         const notasArray = ordenesGrupo.map(o => {
             const n = o.notaPedido || o.NotaPedido;
             if (n && String(n).toLowerCase() !== 'undefined' && String(n).toLowerCase() !== 'null') {
                 return String(n).trim();
             }
-            return String(o.id); // Si no tiene nota, muestra el ID de la OP
+            return String(o.id);
         });
         const notasAgrupadas = [...new Set(notasArray)].join(' | ');
         
         const totalKilos = ordenesGrupo.reduce((acc, curr) => acc + (Number(curr.kilos) || 0), 0);
         const totalUnidades = ordenesGrupo.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
 
-        // 🚀 DESVINCULACIÓN para que Vue no nos sobreescriba los datos
         const formObj = JSON.parse(JSON.stringify(ordenesGrupo[0]));
         
         formObj.productoNombre = nombresUnicos.length === 1 ? nombresUnicos[0] : "MEZCLA CONSOLIDADA";
@@ -413,7 +411,6 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], c
         formObj.kilosEstimados = totalKilos;
         formObj.kilos = totalKilos;
         
-        // 🚀 Inyectamos las notas a la fuerza
         formObj.notaPedido = notasAgrupadas;
         formObj.NotaPedido = notasAgrupadas;
         
@@ -438,6 +435,39 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], c
     mostrarModalGrupo.value = false;
 }
 
+// 🚀 FUNCIÓN AYUDANTE: Limpia puntos huérfanos e inyecta alertas sin duplicar
+function inyectarAlertasFabrica(orden: any) {
+    // 1. Limpiamos la observación de puntos huérfanos, guiones o espacios vacíos
+    let obsText = (orden.observacion || '').trim();
+    if (obsText === '.' || obsText === '-' || obsText === '.-' || obsText === 'undefined' || obsText === 'null') {
+        obsText = '';
+    }
+
+    // 2. ALERTA NYLON (10 a 199 -> 10 | >= 200 -> 20)
+    if (!orden.esBobina && orden.cantidad >= 10) {
+        const divisor = orden.cantidad >= 200 ? 20 : 10;
+        // Texto limpio sin emojis para evitar símbolos raros en html2pdf
+        const alertaNylon = `SEPARAR CADA ${divisor} LÁMINAS CON UN NYLON.`;
+        
+        if (!String(orden.observacion || '').includes("SEPARAR CADA")) {
+            if (obsText && !obsText.endsWith('.')) obsText += '.';
+            obsText = obsText ? `${obsText}\n\n${alertaNylon}` : alertaNylon;
+        }
+    }
+
+    // 3. ALERTA CORONA
+    if (orden.tipoCorona && orden.tipoCorona !== 'Ninguno') {
+        const alertaPrueba = "COLOCAR LÁMINA DE PRUEBA ARRIBA.";
+        if (!String(orden.observacion || '').includes("LÁMINA DE PRUEBA")) {
+            if (obsText && !obsText.endsWith('.')) obsText += '.';
+            obsText = obsText ? `${obsText}\n\n${alertaPrueba}` : alertaPrueba;
+        }
+    }
+
+    orden.observacion = obsText;
+    return orden;
+}
+
 const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
     const ordenCopia = { ...orden };
 
@@ -453,19 +483,8 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
         return; 
     }
 
-    if (ordenCopia.tipoCorona && ordenCopia.tipoCorona !== 'Ninguno') {
-        const alertaPrueba = "PONER LÁMINA DE PRUEBA ARRIBA";
-        
-        if (ordenCopia.observacion && ordenCopia.observacion.trim() !== '') {
-            let obsText = ordenCopia.observacion.trim();
-            if (!obsText.endsWith('.')) {
-                obsText += '.';
-            }
-            ordenCopia.observacion = `${obsText}\n\n${alertaPrueba}`;
-        } else {
-            ordenCopia.observacion = alertaPrueba;
-        }
-    }
+    // 🚀 INYECTAR ALERTAS SIN DUPLICADOS
+    inyectarAlertasFabrica(ordenCopia);
 
     if (ordenCopia.esImpreso) {
         const confirmado = await Alertas.confirmar(
@@ -477,9 +496,10 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
 
     let enPaquetes = false;
     if (ordenCopia.cantidad >= 10) {
+        const divisorMsg = ordenCopia.cantidad >= 200 ? 20 : 10;
         const resp = await Swal.fire({
             title: '¿Imprimir en Paquetes?',
-            text: `¿Deseas imprimir las etiquetas de OP divididas en paquetes de 10?`,
+            text: `¿Deseas imprimir las etiquetas de OP divididas en paquetes de ${divisorMsg}?`,
             icon: 'question',
             showCancelButton: true,
             confirmButtonText: '📦 Sí, en paquetes',
@@ -526,21 +546,8 @@ async function imprimirLoteOP() {
 
     const ordenesAImprimir = ordenesBase.map(orden => {
         const copia = { ...orden };
-        
-        if (copia.tipoCorona && copia.tipoCorona !== 'Ninguno') {
-            const alertaPrueba = "COLOCAR LÁMINA DE PRUEBA ARRIBA";
-            
-            if (copia.observacion && copia.observacion.trim() !== '') {
-                let obsText = copia.observacion.trim();
-                if (!obsText.endsWith('.')) {
-                    obsText += '.';
-                }
-                copia.observacion = `${obsText}\n\n${alertaPrueba}`;
-            } else {
-                copia.observacion = alertaPrueba;
-            }
-        }
-        
+        // 🚀 INYECTAR ALERTAS SIN DUPLICADOS
+        inyectarAlertasFabrica(copia);
         copia.imprimirEnPaquetes = false; 
         return copia;
     });
@@ -559,13 +566,11 @@ async function ejecutarCargaConsolidada() {
     if (payload) {
         const nombresUnicos = [...new Set(ordenesAImprimir.map(o => o.producto))]
         
-        // 🚀 DESVINCULACIÓN
         const payloadCrudo = (payload as any).form ? (payload as any).form : payload;
         const formObj = JSON.parse(JSON.stringify(payloadCrudo));
         
         const recetaCalculada = (payload as any).receta || []
 
-        // 🚀 FILTRO: Elimina los "undefined"
         const notasArray = ordenesAImprimir.map(o => {
             const n = o.notaPedido || o.NotaPedido;
             if (n && String(n).toLowerCase() !== 'undefined' && String(n).toLowerCase() !== 'null') {
@@ -589,7 +594,6 @@ async function ejecutarCargaConsolidada() {
         formObj.kilosEstimados = formObj.kilosTotales;
         formObj.kilos = formObj.kilosTotales;
 
-        // 🚀 Inyectamos las notas
         formObj.notaPedido = notasAgrupadas;
         formObj.NotaPedido = notasAgrupadas;
 

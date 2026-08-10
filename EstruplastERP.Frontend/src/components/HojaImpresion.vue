@@ -360,31 +360,62 @@ const fechaHoy = new Date().toLocaleString('es-AR', {
 });
 
 const tituloLimpioParaPDF = computed(() => {
-    let crudo = props.form?.productoNombre || props.producto?.nombre || '';
+    // 1. Recolectamos todos los nombres posibles que llegan desde Vue
+    const nombreForm = props.form?.productoNombre;
+    const nombreProducto = props.producto?.nombre;
+    const nombreAdentroDeForm = props.form?.producto?.nombre;
 
-    if (esConsolidadoReal.value) {
-        if (crudo && crudo !== "MEZCLA CONSOLIDADA") {
-            return crudo;
+    // 2. Los metemos en una lista para evaluarlos (el orden importa)
+    const candidatos = [nombreProducto, nombreAdentroDeForm, nombreForm].filter(Boolean);
+
+    let tituloFinal = "MEZCLA MÚLTIPLE"; // Nuestro comodín por defecto
+
+    // 3. Buscamos el primer nombre que SEA REAL y no un texto genérico
+    for (let candidato of candidatos) {
+        let texto = String(candidato).trim();
+        
+        // Si el texto es válido y NO es un comodín, nos lo quedamos y dejamos de buscar
+        if (texto && 
+            texto !== "MEZCLA CONSOLIDADA" && 
+            texto !== "MEZCLA MÚLTIPLE" && 
+            !texto.includes('[object')) {
+            
+            tituloFinal = texto;
+            break;
         }
-        return "MEZCLA MÚLTIPLE";
     }
 
-    crudo = crudo.trim();
-    const upper = crudo.toUpperCase();
-    
+    // 4. Limpieza final de los prefijos de FAZON (por si aplica)
+    const upper = tituloFinal.toUpperCase();
     const prefijos = ['LAMINADO A FAZON -', 'LAMINADO A FAZON-', 'FAZON -', 'FAZON-', 'FAZON '];
     
     for (const pref of prefijos) {
         if (upper.startsWith(pref)) {
-            return crudo.substring(pref.length).trim();
+            return tituloFinal.substring(pref.length).trim();
         }
     }
-    return crudo;
+    
+    return tituloFinal;
 });
 
 const observacionLimpia = computed(() => {
     if (!props.form?.observacion) return '-';
-    return props.form.observacion.replace(/\[Grupo: HC-[^\]]+\]/g, '').replace(/\[LOTE: HC-[^\]]+\]/g, '').replace(/\[FORZAR_CARGA\]/g, '').trim();
+    
+    let limpia = props.form.observacion
+        .replace(/\[Grupo: HC-[^\]]+\]/g, '')
+        .replace(/\[LOTE: HC-[^\]]+\]/g, '')
+        .replace(/\[FORZAR_CARGA\]/g, '')
+        .trim();
+
+    // Si la observación era solamente un punto o guión, devolvemos un guión prolijo
+    if (limpia === '.' || limpia === '-' || limpia === '.-') {
+        return '-';
+    }
+
+    // 🚀 ELIMINA PUNTOS O GUIONES HUÉRFANOS AL INICIO (Arriba de la alerta)
+    limpia = limpia.replace(/^[.\s-]+\n+/g, '').trim();
+
+    return limpia || '-';
 });
 
 const esVerdadero = (valor: any) => {
@@ -445,7 +476,6 @@ const tipoCorona = computed(() => {
                 </div>
 
                 <p>FECHA: <strong>{{ fechaHoy }}</strong></p>
-                <!-- 🚀 AQUÍ APLICAMOS EL CAZADOR NUCLEAR DE NOTAS DE PEDIDO -->
                 <p>NOTA PEDIDO: <strong>{{ notasPedidoVisibles }}</strong></p>
                 <p v-if="!esConsolidadoReal">OC CLIENTE: <strong>{{ form?.numeroPedidoCliente || '-' }}</strong></p>
             </div>
@@ -600,8 +630,9 @@ const tipoCorona = computed(() => {
                 
                 <div class="recuadro-gigante-pdf" style="font-size: 16px;">
                     {{ form.cantidad }}
-                    <span v-if="form.cantidad >= 10 && form.imprimirEnPaquetes" style="font-size: 13px; color: #333; margin-left: 6px; font-weight: bold;">
-                        | {{ Math.floor(form.cantidad / 10) }} paq. de 10<span v-if="form.cantidad % 10 > 0"> y 1 de {{ form.cantidad % 10 }}</span>
+                    <!-- 🚀 LÓGICA DINÁMICA: De 10 a 199 de a 10 | >= 200 de a 20 -->
+                    <span v-if="form.cantidad >= 10 && !form.esBobina" style="font-size: 13px; color: #333; margin-left: 6px; font-weight: bold;">
+                        | {{ Math.floor(form.cantidad / (form.cantidad >= 200 ? 20 : 10)) }} paq. de {{ form.cantidad >= 200 ? 20 : 10 }}<span v-if="form.cantidad % (form.cantidad >= 200 ? 20 : 10) > 0"> y 1 de {{ form.cantidad % (form.cantidad >= 200 ? 20 : 10) }}</span>
                     </span>
                 </div>
             </div>
