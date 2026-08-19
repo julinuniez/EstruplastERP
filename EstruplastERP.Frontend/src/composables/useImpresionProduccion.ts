@@ -20,7 +20,6 @@ export function useImpresionProduccion(
     inventarioCompleto: Ref<any[]>
 ) {
 
-    // --- LÓGICA DE NEGOCIO BLINDADA ---
     const determinarDuenioMaterial = (idInsumo: number, insumoHistorial: any) => {
         const mpMaestra = inventarioCompleto.value?.find(m => Number(m.id) === idInsumo);
         
@@ -49,7 +48,8 @@ export function useImpresionProduccion(
         return pallets;
     }
 
-    async function generarPDF(tipo: 'orden' | 'carga' | 'carga-consolidada') {
+    // 🚀 AHORA LE PASAMOS EL LÍMITE AL GENERADOR DE PDF
+    async function generarPDF(tipo: 'orden' | 'carga' | 'carga-consolidada', limiteKilosCliente: number = 1000) {
         const tipoLimpio = String(tipo).trim().toLowerCase();
         ocultarFormula.value = (tipoLimpio === 'orden');
         
@@ -69,7 +69,8 @@ export function useImpresionProduccion(
             jsPDF: { unit: 'mm', format: 'a4' }
         };
 
-        if (tipoLimpio === 'orden' && form.value.kilosTotales > 1000 && cantidadPalletsUsuario.value > 1) {
+        // 🚀 USAMOS EL LÍMITE DEL CLIENTE EN LUGAR DE 1000
+        if (tipoLimpio === 'orden' && form.value.kilosTotales > limiteKilosCliente && cantidadPalletsUsuario.value > 1) {
             const tickets = calcularEtiquetasPallets(form.value.kilosTotales, form.value.cantidad, cantidadPalletsUsuario.value);
             const originalKilos = form.value.kilosTotales;
             const originalCantidad = form.value.cantidad;
@@ -136,6 +137,9 @@ export function useImpresionProduccion(
 
         let tipoLimpio = String(tipo).trim().toLowerCase();
         
+        // 🚀 ATRAPAMOS EL LÍMITE (Si viene nulo, asume 1000)
+        const limiteKilos = Number(orden?.limiteKilosPallet || orden?.LimiteKilosPallet || 1000);
+
         try {
             loading.value = true;
             imprimiendoHistorial.value = true;
@@ -169,7 +173,6 @@ export function useImpresionProduccion(
 
             const pesoBrutoTotal = orden.kilos * (1 + (desp / 100));
 
-            // 🚀 ESCUDO ABSOLUTO: Detectamos si es Hoja de Carga, Mezcla o Consolidación por contenido de texto
             const esHojaCargaOMezlca = 
                 tipoLimpio.includes('carga') || 
                 tipoLimpio.includes('consolidada') || 
@@ -194,21 +197,23 @@ export function useImpresionProduccion(
                     materiaPrimaId: idBuscado,
                     nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo,
                     cantidad: (tipoLimpio === 'carga-consolidada') ? c.cantidadKilos : Number(((c.cantidadKilos / pesoBrutoTotal) * 100).toFixed(2)),
-                    clienteId: determinarDuenioMaterial(idBuscado, c)
+                    clienteId: determinarDuenioMaterial(idBuscado, c),
+                    extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
                 };
             });
 
             if (!form.value.esConsolidado && typeof balancearBase === 'function') balancearBase();
 
-            // 🚀 VALIDACIÓN ESTRICTA: Solo pregunta pallets si NO es mezcla/carga, es orden y la orden específica supera los 1000 kg
-            const debaPreguntarPallets = !esHojaCargaOMezlca && tipoLimpio === 'orden' && Number(orden?.kilos || 0) >= 1000;
+            // 🚀 USAMOS LA VARIABLE limiteKilos EN VEZ DE 1000
+            const debaPreguntarPallets = !esHojaCargaOMezlca && tipoLimpio === 'orden' && Number(orden?.kilos || 0) > limiteKilos;
 
             if (debaPreguntarPallets) {
-                const palletsSugeridos = Math.ceil(Number(orden.kilos) / 1000);
+                // 🚀 CALCULAMOS LA SUGERENCIA DE PALLETS EN BASE AL LÍMITE REAL
+                const palletsSugeridos = Math.ceil(Number(orden.kilos) / limiteKilos);
                 
                 const result = await Swal.fire({
                     title: 'Dividir Impresión',
-                    text: `⚠️ Pedido grande (${orden.kilos} kg).\n¿En cuántos pallets querés dividir la impresión de las OP?`,
+                    text: `⚠️ Pedido de ${orden.kilos} kg.\nEl límite para este cliente es de ${limiteKilos} kg.\n¿En cuántos pallets querés dividir la impresión de las OP?`,
                     input: 'number',
                     inputValue: palletsSugeridos,
                     showCancelButton: true,
@@ -233,7 +238,8 @@ export function useImpresionProduccion(
                 cantidadPalletsUsuario.value = 1;
             }
 
-            await generarPDF(tipoLimpio as any);
+            // 🚀 LE PASAMOS EL LÍMITE AL GENERADOR PARA QUE NO FALLE
+            await generarPDF(tipoLimpio as any, limiteKilos);
 
             if (tipoLimpio === 'orden') {
                 await ProduccionAPI.marcarOrdenImpresa(orden.id);
@@ -297,7 +303,8 @@ export function useImpresionProduccion(
                             materiaPrimaId: idBuscado,
                             nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo,
                             cantidad: ((c.cantidadKilos / pesoBrutoTotal) * 100).toFixed(2),
-                            clienteId: determinarDuenioMaterial(idBuscado, c)
+                            clienteId: determinarDuenioMaterial(idBuscado, c),
+                            extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
                         };
                     });
                 }

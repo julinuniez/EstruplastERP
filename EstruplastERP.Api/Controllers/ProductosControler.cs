@@ -226,7 +226,9 @@ namespace EstruplastERP.Api.Controllers
                 {
                     MateriaPrimaId = f.MateriaPrimaId,
                     NombreInsumo = f.MateriaPrima?.Nombre ?? "(MP No Encontrada)",
-                    Cantidad = f.Cantidad
+                    Cantidad = f.Cantidad,
+                    // 🚀 LEEMOS EL DESTINO DESDE SQL Y SE LO DEVOLVEMOS A VUE
+                    ExtrusoraDestino = string.IsNullOrWhiteSpace(f.ExtrusoraDestino) ? "UNICA" : f.ExtrusoraDestino
                 }).ToList()
             };
 
@@ -266,6 +268,7 @@ namespace EstruplastERP.Api.Controllers
                 _context.Productos.Add(nuevoProducto);
                 await _context.SaveChangesAsync();
 
+                // Adentro de CrearProductoConReceta...
                 if (esProductoTerminado && data.Receta != null)
                 {
                     foreach (var item in data.Receta)
@@ -274,7 +277,9 @@ namespace EstruplastERP.Api.Controllers
                         {
                             ProductoTerminadoId = nuevoProducto.Id,
                             MateriaPrimaId = item.MateriaPrimaId,
-                            Cantidad = item.Cantidad
+                            Cantidad = item.Cantidad,
+                            // 🚀 AGREGÁ ESTA LÍNEA ACÁ TAMBIÉN:
+                            ExtrusoraDestino = string.IsNullOrWhiteSpace(item.ExtrusoraDestino) ? "UNICA" : item.ExtrusoraDestino
                         });
                     }
                     await _context.SaveChangesAsync();
@@ -460,7 +465,9 @@ namespace EstruplastERP.Api.Controllers
                         {
                             ProductoTerminadoId = id,
                             MateriaPrimaId = item.MateriaPrimaId,
-                            Cantidad = item.Cantidad
+                            Cantidad = item.Cantidad,
+                            // 🚀 ACÁ ESTABA EL ERROR: AHORA SÍ GUARDAMOS EL DESTINO EN SQL
+                            ExtrusoraDestino = string.IsNullOrWhiteSpace(item.ExtrusoraDestino) ? "UNICA" : item.ExtrusoraDestino
                         });
                     }
                 }

@@ -29,6 +29,7 @@ namespace EstruplastERP.Api.Controllers
         {
             var query = _context.Ordenes
                 .Include(o => o.Producto)
+                    .ThenInclude(p => p.Formulas)
                 .Include(o => o.Cliente)
                 .Include(o => o.Pallets)
                 .Include(o => o.Consumos)
@@ -57,6 +58,10 @@ namespace EstruplastERP.Api.Controllers
                     NumeroPedidoCliente = o.NumeroPedidoCliente,
                     ClienteId = o.ClienteId,
                     ClienteNombre = o.Cliente != null ? o.Cliente.RazonSocial : "STOCK / INTERNO",
+
+                    // 🚀 ACÁ ESTÁ EL DATO VITAL PARA QUE VUE SEPA A CUÁNTOS KILOS CORTAR
+                    LimiteKilosPallet = o.Cliente != null && o.Cliente.LimiteKilosPallet > 0 ? o.Cliente.LimiteKilosPallet : 1000m,
+
                     o.Observacion,
                     o.Largo,
                     o.Ancho,
@@ -86,9 +91,12 @@ namespace EstruplastERP.Api.Controllers
                         NombreMateriaPrima = c.MateriaPrima != null ? c.MateriaPrima.Nombre : "Insumo",
                         c.CantidadKilos,
                         ClienteId = c.MateriaPrima != null ? (c.MateriaPrima.ClienteId ?? 0) : 0,
-                        ClienteNombre = (c.MateriaPrima != null && c.MateriaPrima.Cliente != null)
-                    ? c.MateriaPrima.Cliente.RazonSocial
-                    : ""
+                        ClienteNombre = (c.MateriaPrima != null && c.MateriaPrima.Cliente != null) ? c.MateriaPrima.Cliente.RazonSocial : "",
+                        ExtrusoraDestino = o.Producto != null && o.Producto.Formulas != null
+                            ? (o.Producto.Formulas.FirstOrDefault(f => f.MateriaPrimaId == c.MateriaPrimaId) != null
+                                ? o.Producto.Formulas.FirstOrDefault(f => f.MateriaPrimaId == c.MateriaPrimaId).ExtrusoraDestino
+                                : "UNICA")
+                            : "UNICA"
                     }).ToList()
                 })
                 .ToListAsync();

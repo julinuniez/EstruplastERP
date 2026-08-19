@@ -353,7 +353,7 @@ async function cancelarOrden(item: ProduccionItem) {
     }
 }
 
-// 🚀 REIMPRESIÓN DESDE EL MODAL (CORREGIDA)
+// 🚀 REIMPRESIÓN DESDE EL MODAL
 const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], consumosMezcla: any[]) => {
     if (!ordenesGrupo || ordenesGrupo.length === 0) return;
 
@@ -369,7 +369,9 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], c
             CantidadKilos: kilosAImprimir, 
             kilos: kilosAImprimir,
             cantidad: kilosAImprimir,
-            kilosFijos: kilosAImprimir 
+            kilosFijos: kilosAImprimir,
+            // 🚀 MAPEO EXTRUSORAS DESDE EL MODAL 
+            extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
         };
     }) : [];
 
@@ -435,18 +437,14 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], c
     mostrarModalGrupo.value = false;
 }
 
-// 🚀 FUNCIÓN AYUDANTE: Limpia puntos huérfanos e inyecta alertas sin duplicar
 function inyectarAlertasFabrica(orden: any) {
-    // 1. Limpiamos la observación de puntos huérfanos, guiones o espacios vacíos
     let obsText = (orden.observacion || '').trim();
     if (obsText === '.' || obsText === '-' || obsText === '.-' || obsText === 'undefined' || obsText === 'null') {
         obsText = '';
     }
 
-    // 2. ALERTA NYLON (10 a 199 -> 10 | >= 200 -> 20)
     if (!orden.esBobina && orden.cantidad >= 10) {
         const divisor = orden.cantidad >= 200 ? 20 : 10;
-        // Texto limpio sin emojis para evitar símbolos raros en html2pdf
         const alertaNylon = `SEPARAR CADA ${divisor} LÁMINAS CON UN NYLON.`;
         
         if (!String(orden.observacion || '').includes("SEPARAR CADA")) {
@@ -455,7 +453,6 @@ function inyectarAlertasFabrica(orden: any) {
         }
     }
 
-    // 3. ALERTA CORONA
     if (orden.tipoCorona && orden.tipoCorona !== 'Ninguno') {
         const alertaPrueba = "COLOCAR LÁMINA DE PRUEBA ARRIBA.";
         if (!String(orden.observacion || '').includes("LÁMINA DE PRUEBA")) {
@@ -469,7 +466,15 @@ function inyectarAlertasFabrica(orden: any) {
 }
 
 const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
-    const ordenCopia = { ...orden };
+    const ordenCopia = JSON.parse(JSON.stringify(orden));
+
+    // 🚀 MAPEO EXTRUSORAS PARA CARGA INDIVIDUAL DIRECTA
+    if (ordenCopia.consumos && ordenCopia.consumos.length > 0) {
+        ordenCopia.consumos = ordenCopia.consumos.map((c: any) => ({
+            ...c,
+            extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
+        }));
+    }
 
     if (tipo === 'carga') {
         ordenCopia.observacion = (ordenCopia.observacion ? ordenCopia.observacion + ' ' : '') + `[Grupo: HC-S${orden.id}] [FORZAR_CARGA]`;
@@ -477,13 +482,13 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
         emit('imprimir-historial', { 
             orden: ordenCopia, 
             tipo: 'carga', 
+            receta: ordenCopia.consumos, // 🚀 Mandamos los consumos con las tolvas
             materiasPrimasBase: materiasPrimas.value,
             imprimirEnPaquetes: false
         });
         return; 
     }
 
-    // 🚀 INYECTAR ALERTAS SIN DUPLICADOS
     inyectarAlertasFabrica(ordenCopia);
 
     if (ordenCopia.esImpreso) {
@@ -515,6 +520,7 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
     emit('imprimir-historial', { 
         orden: ordenCopia, 
         tipo: 'orden', 
+        receta: ordenCopia.consumos,
         materiasPrimasBase: materiasPrimas.value,
         imprimirEnPaquetes: enPaquetes 
     });
@@ -545,8 +551,7 @@ async function imprimirLoteOP() {
     }
 
     const ordenesAImprimir = ordenesBase.map(orden => {
-        const copia = { ...orden };
-        // 🚀 INYECTAR ALERTAS SIN DUPLICADOS
+        const copia = JSON.parse(JSON.stringify(orden));
         inyectarAlertasFabrica(copia);
         copia.imprimirEnPaquetes = false; 
         return copia;
@@ -556,7 +561,6 @@ async function imprimirLoteOP() {
     ordenesSeleccionadas.value = []
 }
 
-// 🚀 CREAR HOJA NUEVA DESDE LA BANDEJA (CORREGIDA)
 async function ejecutarCargaConsolidada() {
     if (ordenesSeleccionadas.value.length < 2) return
     const ordenesAImprimir = producciones.value.filter(p => ordenesSeleccionadas.value.includes(p.id))
@@ -569,7 +573,25 @@ async function ejecutarCargaConsolidada() {
         const payloadCrudo = (payload as any).form ? (payload as any).form : payload;
         const formObj = JSON.parse(JSON.stringify(payloadCrudo));
         
-        const recetaCalculada = (payload as any).receta || []
+        const recetaCalculada = (payload as any).receta || [];
+
+        const recetaInyectada = recetaCalculada.map((c: any) => {
+            const kilosAImprimir = Number(c.real) > 0 ? Number(c.real) : (Number(c.teorico) > 0 ? Number(c.teorico) : Number(c.cantidad || c.kilos || 0));
+            return {
+                ...c,
+                id: c.materiaPrimaId || c.id,
+                materiaPrimaId: c.materiaPrimaId || c.id,
+                MateriaPrimaId: c.materiaPrimaId || c.id,
+                nombreMateriaPrima: c.nombre || c.nombreMateriaPrima || c.nombreInsumo,
+                nombreInsumo: c.nombre || c.nombreInsumo || c.nombreMateriaPrima,
+                cantidadKilos: kilosAImprimir, 
+                CantidadKilos: kilosAImprimir, 
+                kilos: kilosAImprimir,
+                cantidad: kilosAImprimir,
+                kilosFijos: kilosAImprimir,
+                extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
+            };
+        });
 
         const notasArray = ordenesAImprimir.map(o => {
             const n = o.notaPedido || o.NotaPedido;
@@ -586,9 +608,32 @@ async function ejecutarCargaConsolidada() {
             formObj.productoNombre = "MEZCLA CONSOLIDADA"
         }
 
-        formObj.esConsolidado = true
-        formObj.observacion = '[MEZCLA CONSOLIDADA] ' + (formObj.observacion || '') + ' [FORZAR_CARGA]'
+        formObj.esConsolidado = true;
+
+        const primeraOrden = ordenesAImprimir[0];
+        if (!primeraOrden) return;
+
+        const codigoLote = getCodigoCarga(primeraOrden);
         
+        formObj.observacion = `[Grupo: ${codigoLote}] [MEZCLA CONSOLIDADA] [FORZAR_CARGA]`;
+        
+        formObj.producto = primeraOrden.producto || { id: primeraOrden.productoId || 9999, nombre: formObj.productoNombre, pesoEspecifico: 0, codigoSku: 'MIX' };
+        formObj.cliente = primeraOrden.cliente || { id: primeraOrden.clienteId || 1, razonSocial: 'MÚLTIPLE' };
+        
+        formObj.aditivoUV = ordenesAImprimir.some(o => o.aditivoUV || (o as any).AditivoUV);
+        formObj.conBrillo = ordenesAImprimir.some(o => o.conBrillo || (o as any).ConBrillo);
+        formObj.llevaFilm = ordenesAImprimir.some(o => o.llevaFilm || (o as any).LlevaFilm);
+        formObj.esGofrado = ordenesAImprimir.some(o => (o as any).esGofrado || (o as any).EsGofrado);
+
+        const ordenConCorona = ordenesAImprimir.find(o => {
+            const v = String(o.tipoCorona || (o as any).TipoCorona || '').toUpperCase();
+            return v && v !== 'NINGUNO' && v !== 'FALSE' && v !== '0' && v !== 'NULL';
+        });
+        if (ordenConCorona) {
+            formObj.tipoCorona = ordenConCorona.tipoCorona || (ordenConCorona as any).TipoCorona;
+        }
+
+        formObj.ordenes = ordenesAImprimir;
         formObj.cantidad = ordenesAImprimir.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0);
         formObj.kilosTotales = ordenesAImprimir.reduce((acc, curr) => acc + (Number(curr.kilos) || 0), 0);
         formObj.kilosEstimados = formObj.kilosTotales;
@@ -597,13 +642,13 @@ async function ejecutarCargaConsolidada() {
         formObj.notaPedido = notasAgrupadas;
         formObj.NotaPedido = notasAgrupadas;
 
-        formObj.consumos = recetaCalculada;
-        formObj.receta = recetaCalculada;
+        formObj.consumos = recetaInyectada;
+        formObj.receta = recetaInyectada;
 
         const payloadImpresion = {
             form: formObj, 
             orden: formObj,
-            receta: recetaCalculada,
+            receta: recetaInyectada,
             tipo: 'carga',
             materiasPrimasBase: materiasPrimas.value,
             imprimirEnPaquetes: false

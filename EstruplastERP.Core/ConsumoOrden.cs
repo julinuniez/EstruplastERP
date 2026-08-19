@@ -15,6 +15,7 @@ namespace EstruplastERP.Core
 
         [ForeignKey("MateriaPrimaId")]
         public virtual Producto MateriaPrima { get; set; }
+        public string ExtrusoraDestino { get; set; } = "UNICA";
 
         [Column(TypeName = "decimal(18,4)")]
         public decimal CantidadKilos { get; set; }

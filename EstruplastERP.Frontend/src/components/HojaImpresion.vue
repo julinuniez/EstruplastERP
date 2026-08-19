@@ -22,6 +22,7 @@ const emit = defineEmits(['add-insumo', 'remove-insumo', 'update-receta']);
 
 const insumoBusquedaTexto = ref(''); 
 const insumoExtraPorc = ref<number | ''>('');
+const insumoExtraExtrusora = ref('UNICA'); // 🚀 NUEVO: Destino para agregados manuales
 const mostrarLista = ref(false); 
 
 const esConsolidadoReal = computed(() => {
@@ -33,15 +34,12 @@ const esConsolidadoReal = computed(() => {
            props.form?.productoNombre === 'MEZCLA CONSOLIDADA';
 });
 
-// 🚀 NUEVA LÓGICA: Detecta si es una impresión simple para quitar la columna de %
 const esCargaSimple = computed(() => {
     return (props.form?.observacion || '').includes('[Grupo: HC-S');
 });
 
-// Si es carga simple o consolidada, ocultamos columnas y controles extras
 const modoCargaLimpia = computed(() => esConsolidadoReal.value || esCargaSimple.value);
 
-// 🚀 FILTRO NUCLEAR PARA EL LOTE
 const codigoLoteVisible = computed(() => {
     const obs = props.form?.observacion || '';
     const match = obs.match(/\[Grupo: (HC-[^\]]+)\]/);
@@ -52,7 +50,7 @@ const codigoLoteVisible = computed(() => {
         return idLote;
     }
     
-    return 'MÚLTIPLE'; // Si no hay ID, evitamos que quede en blanco
+    return 'MÚLTIPLE';
 });
 
 const valorCodigoBarra = computed(() => {
@@ -68,16 +66,9 @@ const generarCodigoDirecto = (texto: string) => {
     if (!texto || texto.includes('undefined')) return '';
     try {
         const canvas = document.createElement("canvas");
-        
         (window as any).JsBarcode(canvas, texto, {
-            format: "CODE128",
-            displayValue: true, 
-            fontSize: 14,
-            height: 40, 
-            width: 1.5, 
-            margin: 0
+            format: "CODE128", displayValue: true, fontSize: 14, height: 40, width: 1.5, margin: 0
         });
-        
         return canvas.toDataURL("image/png");
     } catch (error) {
         return '';
@@ -97,10 +88,20 @@ const pesoBrutoExacto = computed(() => {
 });
 
 const kilosCabeceraRedondeado = computed(() => {
-    if (esConsolidadoReal.value) {
-        return Math.round(kilosNetosExactos.value);
+    if (props.ocultarFormula) {
+        return Math.ceil(kilosNetosExactos.value);
     }
-    return props.ocultarFormula ? Math.ceil(kilosNetosExactos.value) : Math.ceil(pesoBrutoExacto.value);
+    let sumaFisica = 0;
+    recetaVisual.value.forEach((r: any) => {
+        if (esConsolidadoReal.value) {
+            sumaFisica += Number(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0);
+        } else {
+            sumaFisica += r.kilosFijos 
+                ? Number(r.kilosFijos) 
+                : ceilKilos((pesoBrutoExacto.value * (Number(r.cantidad) || 0)) / 100);
+        }
+    });
+    return Math.round(sumaFisica); 
 });
 
 const ceilKilos = (valor: number, decimales = 3) => {
@@ -119,16 +120,9 @@ const densidadReal = computed(() => {
 const obtenerEtiquetaOrigen = (itemReceta: any) => {
     const idDuenio = Number(itemReceta.clienteId || itemReceta.ClienteId || 0);
     const nombreDuenio = itemReceta.clienteNombre || itemReceta.ClienteNombre || '';
-
     if (idDuenio <= 1) return '';
-
-    if (nombreDuenio && nombreDuenio.trim() !== '') {
-        return `(DE ${nombreDuenio.toUpperCase()})`;
-    }
-
-    if (props.cliente && Number(props.cliente.id) === idDuenio) {
-        return `(DE ${String(props.cliente.razonSocial || '').toUpperCase()})`;
-    }
+    if (nombreDuenio && nombreDuenio.trim() !== '') return `(DE ${nombreDuenio.toUpperCase()})`;
+    if (props.cliente && Number(props.cliente.id) === idDuenio) return `(DE ${String(props.cliente.razonSocial || '').toUpperCase()})`;
     return '';
 };
 
@@ -138,30 +132,17 @@ const esInsumoFijo = (r: any) => {
     if (r.kilosFijos !== undefined && r.kilosFijos !== null) return true;
     
     const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
-    
-    if (n.includes('ESTEARATO') || 
-        n.includes('BRILLO') || 
-        n.includes('CRISTAL') || 
-        n.includes('777') || 
-        n.includes('555') || 
-        n.includes('UV') || 
-        n.includes('CAUCHO')) return true;
-    
+    if (n.includes('ESTEARATO') || n.includes('BRILLO') || n.includes('CRISTAL') || 
+        n.includes('777') || n.includes('555') || n.includes('UV') || n.includes('CAUCHO')) return true;
     return false;
 };
 
-// 🚀 CAZADOR NUCLEAR DE NOTAS DE PEDIDO
 const notasPedidoVisibles = computed(() => {
     try {
         let notas: string[] = [];
-        
-        // 1. Rescatar la del formulario
         const nP = props.form?.notaPedido || props.form?.NotaPedido;
-        if (nP && !String(nP).toLowerCase().includes('undefined')) {
-            notas.push(String(nP));
-        }
+        if (nP && !String(nP).toLowerCase().includes('undefined')) notas.push(String(nP));
 
-        // 2. Rescatar de las subórdenes
         const subOrdenes = props.form?.ordenes || props.form?.pedidos || props.form?.detalles || props.form?.items || [];
         if (subOrdenes && subOrdenes.length > 0) {
             subOrdenes.forEach((o: any) => {
@@ -169,29 +150,19 @@ const notasPedidoVisibles = computed(() => {
                 if (n && !String(n).toLowerCase().includes('undefined') && !String(n).toLowerCase().includes('null')) {
                     notas.push(String(n));
                 } else if (o.id && !String(o.id).toLowerCase().includes('undefined')) {
-                    notas.push(String(o.id)); // Fallback al N° de OP
+                    notas.push(String(o.id)); 
                 }
             });
         }
 
         if (notas.length === 0) {
-            // Último recurso: usar el ID de la OP principal
             const idPrincipal = props.form?.id || props.form?.Id;
-            if (idPrincipal && !String(idPrincipal).toLowerCase().includes('undefined')) {
-                return String(idPrincipal);
-            }
+            if (idPrincipal && !String(idPrincipal).toLowerCase().includes('undefined')) return String(idPrincipal);
             return '-';
         }
 
-        // 3. Limpieza extrema: Regex para matar "undefined" literal que viene del backend
         const crudo = notas.join(' | ');
-        const arrayLimpio = crudo
-            .replace(/undefined/gi, '') // Destruye "undefined"
-            .replace(/null/gi, '')      // Destruye "null"
-            .split(/[|,]/)
-            .map(s => s.trim())
-            .filter(s => s !== '');
-        
+        const arrayLimpio = crudo.replace(/undefined/gi, '').replace(/null/gi, '').split(/[|,]/).map(s => s.trim()).filter(s => s !== '');
         const finales = [...new Set(arrayLimpio)];
         return finales.length > 0 ? finales.join(' | ') : '-';
     } catch (e) {
@@ -199,7 +170,6 @@ const notasPedidoVisibles = computed(() => {
     }
 });
 
-// 🚀 EMBUDO INTELIGENTE: Atrapa los insumos de donde sea que vengan
 const insumosParaImprimir = computed(() => {
     if (props.receta && props.receta.length > 0) return props.receta;
     if (props.form?.consumos && props.form.consumos.length > 0) return props.form.consumos;
@@ -211,36 +181,47 @@ const recetaVisual = computed(() => {
     let lista = JSON.parse(JSON.stringify(insumosParaImprimir.value));
 
     if (esConsolidadoReal.value) {
-        const map = new Map<number, any>();
+        const map = new Map<string, any>();
 
         lista.forEach((item: any) => {
             const idMp = Number(item.materiaPrimaId || item.MateriaPrimaId || item.id);
             if (!idMp) return; 
 
             const nombre = item.nombreInsumo || item.nombreMateriaPrima || item.NombreMateriaPrima || item.nombre || 'Insumo';
-            // 🚀 RESPALDO FUERTE: Toma el real, kilos, o lo que haya
             const kilos = Number(item.real !== undefined ? item.real : (item.cantidadKilos || item.CantidadKilos || item.kilos || item.cantidad || 0));
             const fijos = Number(item.kilosFijos || 0);
+            
+            // 🚀 RESCATAMOS EL DESTINO (Por defecto UNICA)
+            const destino = item.extrusoraDestino || item.ExtrusoraDestino || 'UNICA';
+            
+            // Agrupamos por ID de material y por Destino
+            const key = `${idMp}-${destino}`; 
 
-            if (!map.has(idMp)) {
-                map.set(idMp, {
+            if (!map.has(key)) {
+                map.set(key, {
                     ...item, 
                     materiaPrimaId: idMp,
                     nombreInsumo: nombre,
-                    cantidadKilos: kilos, // Lo forzamos a esta variable para asegurar compatibilidad
+                    cantidadKilos: kilos, 
                     kilosFijos: fijos,
+                    extrusoraDestino: destino,
                     esEstearato: item.esEstearato || nombre.toUpperCase().includes('ESTEARATO'),
                     esColor: item.esColor || nombre.toUpperCase().includes('MB') || nombre.toUpperCase().includes('MASTER') || nombre.toUpperCase().includes('COLOR'),
                     esBase: item.esBase || false
                 });
             } else {
-                const agrupado = map.get(idMp);
+                const agrupado = map.get(key);
                 agrupado.cantidadKilos += kilos;
                 agrupado.kilosFijos += fijos;
             }
         });
 
         lista = Array.from(map.values());
+    } else {
+        // Aseguramos que los no consolidados tengan la variable seteada
+        lista.forEach((item: any) => {
+            item.extrusoraDestino = item.extrusoraDestino || item.ExtrusoraDestino || 'UNICA';
+        });
     }
 
     if (props.tipoSalidaVisual === 'NATURAL') {
@@ -280,34 +261,51 @@ const recetaVisual = computed(() => {
     return lista.sort((a: any, b: any) => {
         const aEsFijo = esInsumoFijo(a) ? 1 : 0;
         const bEsFijo = esInsumoFijo(b) ? 1 : 0;
-
-        if (aEsFijo !== bEsFijo) {
-            return aEsFijo - bEsFijo;
-        }
+        if (aEsFijo !== bEsFijo) return aEsFijo - bEsFijo;
 
         const cantidadA = Number(a.cantidadKilos || a.CantidadKilos || a.real || a.cantidad || 0);
         const cantidadB = Number(b.cantidadKilos || b.CantidadKilos || b.real || b.cantidad || 0);
-        
         return cantidadB - cantidadA;
     });
+});
+
+// 🚀 CEREBRO DE AGRUPACIÓN POR TOLVAS PARA EL PDF
+const gruposReceta = computed(() => {
+    const grupos = {
+        A: { titulo: 'EXTRUSORA A (Capa)', items: [] as any[] },
+        B: { titulo: 'EXTRUSORA B (Masa)', items: [] as any[] },
+        UNICA: { titulo: 'MEZCLA GENERAL', items: [] as any[] }
+    };
+
+    recetaVisual.value.forEach((r: any) => {
+        const dest = String(r.extrusoraDestino || 'UNICA').toUpperCase();
+        if (dest === 'A') grupos.A.items.push(r);
+        else if (dest === 'B') grupos.B.items.push(r);
+        else grupos.UNICA.items.push(r);
+    });
+
+    const tieneSeparacion = grupos.A.items.length > 0 || grupos.B.items.length > 0;
+    
+    // Si no hay separación A/B, metemos todo a ÚNICA pero sin título para que se vea normal
+    if (!tieneSeparacion) {
+        grupos.UNICA.titulo = '';
+    }
+
+    return { tieneSeparacion, A: grupos.A, B: grupos.B, UNICA: grupos.UNICA };
 });
 
 const sugerenciasFiltradas = computed(() => {
     const texto = insumoBusquedaTexto.value.trim().toUpperCase();
     let lista = props.materiasPrimas || [];
-    
     const idClienteActual = Number(props.cliente?.id || props.form?.clienteId || 0);
 
     lista = lista.filter(mp => {
         const idDuenio = Number(mp.clienteId || mp.ClienteId || 0);
         if (idDuenio > 1 && idDuenio !== idClienteActual) return false;
-
         const nombreLimpio = (mp.nombre || '').toUpperCase().trim();
         if (nombreLimpio.includes('BASE')) return false;
-
         const excluidosExactos = ['ABS','PAI', 'PEAD', 'POLIPROPILENO','POLIETILENO','RESISTENTE AL FREON'];
         if (excluidosExactos.includes(nombreLimpio)) return false;
-
         return true;
     });
     
@@ -329,8 +327,16 @@ const solicitarAgregar = () => {
     if (!insumoBusquedaTexto.value || !insumoExtraPorc.value) return;
     const mpEncontrada = sugerenciasFiltradas.value.find(m => m.nombre === insumoBusquedaTexto.value);
     if (mpEncontrada) {
-        emit('add-insumo', { id: mpEncontrada.id, porcentaje: Number(insumoExtraPorc.value) });
-        insumoBusquedaTexto.value = ''; insumoExtraPorc.value = ''; mostrarLista.value = false;
+        // 🚀 AHORA ENVÍA TAMBIÉN A QUÉ TOLVA VA EL INSUMO
+        emit('add-insumo', { 
+            id: mpEncontrada.id, 
+            porcentaje: Number(insumoExtraPorc.value),
+            extrusoraDestino: insumoExtraExtrusora.value
+        });
+        insumoBusquedaTexto.value = ''; 
+        insumoExtraPorc.value = ''; 
+        insumoExtraExtrusora.value = 'UNICA';
+        mostrarLista.value = false;
     }
 };
 
@@ -346,75 +352,52 @@ const solicitarModificarPorcentaje = (item: any, event: Event) => {
     if (target) {
         const val = Number(target.value);
         if (!isNaN(val) && val >= 0) {
-            emit('add-insumo', { id: item.materiaPrimaId || item.id, porcentaje: val });
+            emit('add-insumo', { 
+                id: item.materiaPrimaId || item.id, 
+                porcentaje: val,
+                extrusoraDestino: item.extrusoraDestino // Respeta la tolva original
+            });
         }
     }
 };
 
 const fechaHoy = new Date().toLocaleString('es-AR', { 
-    day: '2-digit', 
-    month: '2-digit', 
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
 });
 
 const tituloLimpioParaPDF = computed(() => {
-    // 1. Recolectamos todos los nombres posibles que llegan desde Vue
     const nombreForm = props.form?.productoNombre;
     const nombreProducto = props.producto?.nombre;
     const nombreAdentroDeForm = props.form?.producto?.nombre;
-
-    // 2. Los metemos en una lista para evaluarlos (el orden importa)
     const candidatos = [nombreProducto, nombreAdentroDeForm, nombreForm].filter(Boolean);
 
-    let tituloFinal = "MEZCLA MÚLTIPLE"; // Nuestro comodín por defecto
-
-    // 3. Buscamos el primer nombre que SEA REAL y no un texto genérico
+    let tituloFinal = "MEZCLA MÚLTIPLE"; 
     for (let candidato of candidatos) {
         let texto = String(candidato).trim();
-        
-        // Si el texto es válido y NO es un comodín, nos lo quedamos y dejamos de buscar
-        if (texto && 
-            texto !== "MEZCLA CONSOLIDADA" && 
-            texto !== "MEZCLA MÚLTIPLE" && 
-            !texto.includes('[object')) {
-            
+        if (texto && texto !== "MEZCLA CONSOLIDADA" && texto !== "MEZCLA MÚLTIPLE" && !texto.includes('[object')) {
             tituloFinal = texto;
             break;
         }
     }
 
-    // 4. Limpieza final de los prefijos de FAZON (por si aplica)
     const upper = tituloFinal.toUpperCase();
     const prefijos = ['LAMINADO A FAZON -', 'LAMINADO A FAZON-', 'FAZON -', 'FAZON-', 'FAZON '];
-    
     for (const pref of prefijos) {
-        if (upper.startsWith(pref)) {
-            return tituloFinal.substring(pref.length).trim();
-        }
+        if (upper.startsWith(pref)) return tituloFinal.substring(pref.length).trim();
     }
-    
     return tituloFinal;
 });
 
 const observacionLimpia = computed(() => {
     if (!props.form?.observacion) return '-';
-    
     let limpia = props.form.observacion
         .replace(/\[Grupo: HC-[^\]]+\]/g, '')
         .replace(/\[LOTE: HC-[^\]]+\]/g, '')
         .replace(/\[FORZAR_CARGA\]/g, '')
         .trim();
 
-    // Si la observación era solamente un punto o guión, devolvemos un guión prolijo
-    if (limpia === '.' || limpia === '-' || limpia === '.-') {
-        return '-';
-    }
-
-    // 🚀 ELIMINA PUNTOS O GUIONES HUÉRFANOS AL INICIO (Arriba de la alerta)
+    if (limpia === '.' || limpia === '-' || limpia === '.-') return '-';
     limpia = limpia.replace(/^[.\s-]+\n+/g, '').trim();
-
     return limpia || '-';
 });
 
@@ -442,7 +425,6 @@ const tieneUV = computed(() => verificarCaracteristica('aditivoUV', 'AditivoUV')
 
 const tipoCorona = computed(() => {
     let val = props.form?.tipoCorona || props.form?.TipoCorona || props.producto?.tipoCorona || props.producto?.TipoCorona;
-    
     const validarCorona = (v: any) => {
         if (!v) return false;
         const texto = String(v).trim().toUpperCase();
@@ -454,7 +436,6 @@ const tipoCorona = computed(() => {
         const ordenConCorona = subOrdenes.find((o: any) => validarCorona(o.tipoCorona) || validarCorona(o.TipoCorona));
         if (ordenConCorona) val = ordenConCorona.tipoCorona || ordenConCorona.TipoCorona;
     }
-    
     return validarCorona(val) ? String(val).toUpperCase() : null;
 });
 </script>
@@ -535,75 +516,78 @@ const tipoCorona = computed(() => {
         <div v-show="!ocultarFormula" class="seccion-receta-pdf">
             <div class="titulo-receta-pdf">
                 {{ modoCargaLimpia ? (esConsolidadoReal ? 'RESUMEN DE MEZCLA CONSOLIDADA' : 'RECETA DE CARGA A BATEA') : (densidadReal > 0 ? `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(densidadReal.toFixed(3))})` : 'FÓRMULA DE MEZCLA') }}
-                
                 <span style="float:right; font-size: 0.8em; color: #333" v-if="!modoCargaLimpia" class="ocultar-en-impresion">Total: {{ Number(totalPorcentaje).toFixed(2) }}%</span>
             </div>
-            <table class="tabla-receta-pdf">
-                <thead>
-                    <tr>
-                        <th>INSUMO / MATERIA PRIMA</th>
-                        <th style="width:100px; text-align:center;" v-if="!modoCargaLimpia" class="ocultar-en-impresion">% MEZCLA</th>
-                        <th style="width:120px; text-align:right;">PESO A CARGAR</th>
-                        <th data-html2canvas-ignore="true" style="width:40px" v-if="!modoCargaLimpia" class="ocultar-en-impresion"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-if="recetaVisual.length === 0">
-                        <td colspan="4" style="text-align: center; color: #7f8c8d; padding: 15px; font-style: italic;">
-                            Aún no hay materiales. Agregue insumos desde el buscador 👇
-                        </td>
-                    </tr>
-                    <template v-for="(r, i) in recetaVisual" :key="i">
-                        <tr>
-                            <td style="font-weight: 600;">
-                                {{ r.nombreInsumo || r.nombreMateriaPrima }}
-                                <span v-if="obtenerEtiquetaOrigen(r)" style="font-size: 0.85em; font-style: italic; color: #555; margin-left: 5px;">
-                                    {{ obtenerEtiquetaOrigen(r) }}
-                                </span>
-                            </td>
-                            
-                            <td style="text-align:center; vertical-align: middle;" v-if="!modoCargaLimpia" class="ocultar-en-impresion">
-                                <div v-if="esInsumoFijo(r)" style="font-weight: bold; color: #2980b9; font-size: 11px; letter-spacing: 1px;">
-                                    (EXTRA)
-                                </div>
-                                <div v-else>
-                                    <div style="display:flex; justify-content:center; align-items:center;">
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            :value="Number(r.cantidad).toFixed(2)"
-                                            @change="solicitarModificarPorcentaje(r, $event)"
-                                            class="input-porc-edit"
-                                        /> %
-                                    </div>
-                                </div>
-                            </td>
-                            
-                            <td style="text-align:right; font-size: 1.1em;">
-                                <strong v-if="esInsumoFijo(r)" style="color: #2980b9;">
-                                    {{ esConsolidadoReal 
-                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
-                                        : (r.kilosFijos 
-                                            ? parseFloat(r.kilosFijos).toFixed(2) 
-                                            : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2)) 
-                                    }} kg
-                                </strong>
-                                <strong v-else>
-                                    {{ esConsolidadoReal 
-                                        ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
-                                        : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2) 
-                                    }} kg
-                                </strong>
-                            </td>
-                            
-                            <td data-html2canvas-ignore="true" v-if="!modoCargaLimpia" style="text-align:center;" class="ocultar-en-impresion">
-                                <button v-if="!esInsumoFijo(r)" @click="solicitarQuitar(r)" class="btn-borrar-insumo" title="Quitar insumo">❌</button>
-                            </td>
-                        </tr>
-                    </template>
-                </tbody>
-            </table>
+
+            <!-- 🚀 RECORREMOS LOS GRUPOS DE EXTRUSORAS -->
+            <div class="contenedor-tolvas">
+                <template v-for="grupoKey in ['A', 'B', 'UNICA']" :key="grupoKey">
+                    <div v-if="gruposReceta[grupoKey].items.length > 0" class="grupo-tolva">
+                        <div v-if="gruposReceta[grupoKey].titulo" :class="'titulo-tolva tolva-' + grupoKey">
+                            {{ gruposReceta[grupoKey].titulo }}
+                        </div>
+                        
+                        <table class="tabla-receta-pdf">
+                            <thead>
+                                <tr v-if="!gruposReceta.tieneSeparacion">
+                                    <th>INSUMO / MATERIA PRIMA</th>
+                                    <th style="width:100px; text-align:center;" v-if="!modoCargaLimpia" class="ocultar-en-impresion">% MEZCLA</th>
+                                    <th style="width:120px; text-align:right;">PESO A CARGAR</th>
+                                    <th data-html2canvas-ignore="true" style="width:40px" v-if="!modoCargaLimpia" class="ocultar-en-impresion"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template v-for="(r, i) in gruposReceta[grupoKey].items" :key="i">
+                                    <tr>
+                                        <td style="font-weight: 600;">
+                                            {{ r.nombreInsumo || r.nombreMateriaPrima }}
+                                            <span v-if="obtenerEtiquetaOrigen(r)" style="font-size: 0.85em; font-style: italic; color: #555; margin-left: 5px;">
+                                                {{ obtenerEtiquetaOrigen(r) }}
+                                            </span>
+                                        </td>
+                                        
+                                        <td style="text-align:center; vertical-align: middle; width:100px;" v-if="!modoCargaLimpia" class="ocultar-en-impresion">
+                                            <div v-if="esInsumoFijo(r)" style="font-weight: bold; color: #2980b9; font-size: 11px; letter-spacing: 1px;">
+                                                (EXTRA)
+                                            </div>
+                                            <div v-else>
+                                                <div style="display:flex; justify-content:center; align-items:center;">
+                                                    <input type="number" step="0.01" min="0" :value="Number(r.cantidad).toFixed(2)" @change="solicitarModificarPorcentaje(r, $event)" class="input-porc-edit"/> %
+                                                </div>
+                                            </div>
+                                        </td>
+                                        
+                                        <td style="text-align:right; font-size: 1.1em; width:120px;">
+                                            <strong v-if="esInsumoFijo(r)" style="color: #2980b9;">
+                                                {{ esConsolidadoReal 
+                                                    ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
+                                                    : (r.kilosFijos 
+                                                        ? parseFloat(r.kilosFijos).toFixed(2) 
+                                                        : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2)) 
+                                                }} kg
+                                            </strong>
+                                            <strong v-else>
+                                                {{ esConsolidadoReal 
+                                                    ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
+                                                    : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2) 
+                                                }} kg
+                                            </strong>
+                                        </td>
+                                        
+                                        <td data-html2canvas-ignore="true" v-if="!modoCargaLimpia" style="text-align:center; width:40px;" class="ocultar-en-impresion">
+                                            <button v-if="!esInsumoFijo(r)" @click="solicitarQuitar(r)" class="btn-borrar-insumo" title="Quitar insumo">❌</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
+
+                <div v-if="recetaVisual.length === 0" style="text-align: center; color: #7f8c8d; padding: 15px; font-style: italic;">
+                    Aún no hay materiales. Agregue insumos desde el buscador 👇
+                </div>
+            </div>
 
             <div class="agregar-fila-pdf ocultar-en-impresion" data-html2canvas-ignore="true" v-if="!modoCargaLimpia">
                 <div class="buscador-wrapper">
@@ -611,7 +595,6 @@ const tipoCorona = computed(() => {
                     <div class="lista-resultados" v-if="mostrarLista && sugerenciasFiltradas.length > 0">
                         <div v-for="mp in sugerenciasFiltradas" :key="mp.id" class="item-resultado" @click="seleccionarInsumo(mp)">
                             <span class="nombre-insumo-lista">{{ mp.nombre }}</span>
-                            
                             <span v-if="(mp.clienteId || mp.ClienteId) > 1" class="badge-mini-cliente">
                                 👤 {{ cliente && (mp.clienteId || mp.ClienteId) === cliente.id ? cliente.razonSocial : 'TERCERO' }}
                             </span>
@@ -620,6 +603,14 @@ const tipoCorona = computed(() => {
                     </div>
                 </div>
                 <input type="number" v-model="insumoExtraPorc" placeholder="%" style="width: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; margin-left: 5px;" />
+                
+                <!-- 🚀 SELECTOR PARA ELEGIR TOLVA AL AGREGAR MANUALMENTE -->
+                <select v-model="insumoExtraExtrusora" style="margin-left: 5px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                    <option value="UNICA">Única</option>
+                    <option value="A">Tolva A</option>
+                    <option value="B">Tolva B</option>
+                </select>
+
                 <button class="btn-add-insumo" @click="solicitarAgregar" style="margin-left: 5px;">AGREGAR</button>
             </div>
         </div>
@@ -630,7 +621,6 @@ const tipoCorona = computed(() => {
                 
                 <div class="recuadro-gigante-pdf" style="font-size: 16px;">
                     {{ form.cantidad }}
-                    <!-- 🚀 LÓGICA DINÁMICA: De 10 a 199 de a 10 | >= 200 de a 20 -->
                     <span v-if="form.cantidad >= 10 && !form.esBobina" style="font-size: 13px; color: #333; margin-left: 6px; font-weight: bold;">
                         | {{ Math.floor(form.cantidad / (form.cantidad >= 200 ? 20 : 10)) }} paq. de {{ form.cantidad >= 200 ? 20 : 10 }}<span v-if="form.cantidad % (form.cantidad >= 200 ? 20 : 10) > 0"> y 1 de {{ form.cantidad % (form.cantidad >= 200 ? 20 : 10) }}</span>
                     </span>
@@ -707,9 +697,20 @@ const tipoCorona = computed(() => {
 .valor-tech-pdf { font-size: 14px; font-weight: bold; margin-top: 2px; display: block; }
 .seccion-receta-pdf { margin-top: 10px; border: 2px solid black; font-size: 14px; }
 .titulo-receta-pdf { background: #e0e0e0; padding: 5px; font-weight: 900; text-align: center; border-bottom: 2px solid black; font-size: 14px; }
+
+/* 🚀 ESTILOS PARA LAS TOLVAS MÚLTIPLES */
+.contenedor-tolvas { display: flex; flex-direction: column; gap: 0px; }
+.titulo-tolva { font-size: 11px; font-weight: 900; padding: 4px 8px; border-bottom: 2px solid black; border-top: 2px solid black; text-align: center; }
+.tolva-A { background-color: #e0f2fe; color: #0369a1; }
+.tolva-B { background-color: #dcfce7; color: #15803d; }
+.tolva-UNICA { background-color: #f1f5f9; color: #475569; }
+
 .tabla-receta-pdf { width: 100%; border-collapse: collapse; }
-.tabla-receta-pdf th { border-right: 1px solid black; border-bottom: 2px solid black; padding: 5px; background: #f4f4f4; font-size: 11px; }
+.tabla-receta-pdf th { border-right: 1px solid black; border-bottom: 2px solid black; padding: 5px; background: #f4f4f4; font-size: 11px; text-align: left; }
+.tabla-receta-pdf th:last-child { border-right: none; }
 .tabla-receta-pdf td { border-right: 1px solid black; padding: 5px; font-size: 12px; border-bottom: 1px solid #ccc; }
+.tabla-receta-pdf td:last-child { border-right: none; }
+
 .fila-lotes-pdf { display: flex; gap: 15px; margin-top: 5px; margin-bottom: 10px; }
 .mitad-pdf { flex: 1; }
 .recuadro-gigante-pdf { border: 2px solid black; height: 35px; font-size: 20px; display: flex; align-items: center; justify-content: center; margin-top: 2px; font-weight: 900; overflow: hidden; white-space: nowrap; }
@@ -763,38 +764,15 @@ const tipoCorona = computed(() => {
 .badge-mini-propio { background: #3498db; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; letter-spacing: 0.5px; }
 
 .input-porc-edit {
-    width: 60px;
-    text-align: right;
-    border: 1px solid #bdc3c7;
-    border-radius: 4px;
-    padding: 4px;
-    font-size: 12px;
-    font-weight: bold;
-    color: #2c3e50;
-    background: #fff;
-    margin-right: 4px;
-    transition: all 0.2s;
+    width: 60px; text-align: right; border: 1px solid #bdc3c7; border-radius: 4px; padding: 4px; font-size: 12px; font-weight: bold; color: #2c3e50; background: #fff; margin-right: 4px; transition: all 0.2s;
 }
-.input-porc-edit:focus {
-    border-color: #3498db;
-    outline: none;
-    box-shadow: 0 0 3px rgba(52, 152, 219, 0.5);
-}
+.input-porc-edit:focus { border-color: #3498db; outline: none; box-shadow: 0 0 3px rgba(52, 152, 219, 0.5); }
 
 @media print {
-    .ocultar-en-impresion {
-        display: none !important;
-    }
+    .ocultar-en-impresion { display: none !important; }
 }
 
 input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-input[type=number] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 </style>

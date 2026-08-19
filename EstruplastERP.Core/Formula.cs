@@ -18,5 +18,6 @@ namespace EstruplastERP.Core
 
         [Column(TypeName = "decimal(18,4)")]
         public decimal Cantidad { get; set; }
+        public string ExtrusoraDestino { get; set; } = "UNICA";
     }
 }

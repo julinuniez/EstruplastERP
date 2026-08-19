@@ -38,7 +38,10 @@ namespace EstruplastERP.Api.Controllers
 
             // Aseguramos valores por defecto
             cliente.Activo = true;
-            // cliente.EsFazon ya viene del body o es false por defecto (bool)
+
+            // 🚀 PARACAÍDAS: Límite de pallets
+            if (cliente.LimiteKilosPallet <= 0)
+                cliente.LimiteKilosPallet = 1000m;
 
             _context.Clientes.Add(cliente);
             await _context.SaveChangesAsync();
@@ -47,7 +50,6 @@ namespace EstruplastERP.Api.Controllers
         }
 
         // PUT: api/Clientes/5
-        // Agregamos método PUT para poder editar la propiedad EsFazon desde el frontend si lo necesitas
         [HttpPut("{id}")]
         public async Task<IActionResult> PutCliente(int id, Cliente cliente)
         {
@@ -55,6 +57,10 @@ namespace EstruplastERP.Api.Controllers
             {
                 return BadRequest();
             }
+
+            // 🚀 PARACAÍDAS: Límite de pallets
+            if (cliente.LimiteKilosPallet <= 0)
+                cliente.LimiteKilosPallet = 1000m;
 
             // Marcamos el estado como modificado para que EF actualice los campos
             _context.Entry(cliente).State = EntityState.Modified;

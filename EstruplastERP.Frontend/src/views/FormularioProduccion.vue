@@ -19,7 +19,13 @@ interface Producto {
     tipoMaterial?: string;
 }
 
-interface Cliente { id: number; razonSocial: string; esFazon?: boolean; }
+interface Cliente { 
+    id: number; 
+    razonSocial: string; 
+    esFazon?: boolean; 
+    limiteKilosPallet?: number; 
+    LimiteKilosPallet?: number; 
+}
 
 interface ItemReceta {
     id: number | string; cantidad: number | string; nombreInsumo: string; densidad: number;
@@ -27,6 +33,7 @@ interface ItemReceta {
     esBrillo?: boolean; esEstearato?: boolean; esUv?: boolean; esCaucho?: boolean;
     esFazonInput?: boolean; materialBase?: string;
     kilosFijos?: number | string;
+    extrusoraDestino?: string;
 }
 
 // CONFIGURACIÓN
@@ -108,8 +115,6 @@ const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Num
 
 const densidadPT = computed(() => productoSeleccionado.value?.pesoEspecifico || 1.1);
 
-// ✅ SOLUCIÓN REAL: Se suma leyendo el rubro original de la base de datos (SIN HARDCODEAR).
-// 🚀 CORRECCIÓN: Se incluyen explícitamente las "Cargas" dentro de la base principal que debe sumar 100%.
 const porcentajeSoloBase = computed(() => {
     let suma = 0;
     recetaDinamica.value.forEach((r: any) => {
@@ -119,10 +124,8 @@ const porcentajeSoloBase = computed(() => {
         const rubro = mpInfo ? String(mpInfo.rubro || mpInfo.Rubro || '').toUpperCase() : '';
         const nombreMaterial = mpInfo ? String(mpInfo.nombre || mpInfo.Nombre || '').toUpperCase() : '';
         
-        // EsCarga visual detectado por el nombre o flag del componente
         const esCargaFisica = r.esCarga || nombreMaterial.includes('CARGA') || nombreMaterial.includes('CARBONATO') || nombreMaterial.includes('TIZA');
 
-        // Si el material ES un aditivo u "otros" Y NO ES UNA CARGA, no suma a la base de 100%.
         if ((rubro !== 'ADITIVO' && rubro !== 'OTROS') || esCargaFisica) {
             suma += Number(r.cantidad || 0);
         }
@@ -159,14 +162,22 @@ const recetaConExtrasParaVista = computed(() => {
     });
 
     const kilosBase = form.value.kilosTotales > 0 ? form.value.kilosTotales : 1;
+    
+    // 🚀 DETECTOR INTELIGENTE: ¿Es monocapa o coextruido?
+    const usaCoextrusion = recetaDinamica.value.some(r => r.extrusoraDestino === 'A' || r.extrusoraDestino === 'B');
+    const tolvaCapa = usaCoextrusion ? 'A' : 'UNICA';
+    const tolvaMasa = usaCoextrusion ? 'B' : 'UNICA';
+
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
     if (est && kilosEstearato.value > 0) {
         const valorKilos = kilosEstearato.value.toFixed(2);
         recetaLimpia.push({
             id: 'estearato-fijo', materiaPrimaId: est.id, nombreInsumo: `🧪 ${est.nombre}`,
-            densidad: est.pesoEspecifico || 1, esEstearato: true, cantidad: valorKilos, kilosFijos: valorKilos
+            densidad: est.pesoEspecifico || 1, esEstearato: true, cantidad: valorKilos, kilosFijos: valorKilos,
+            extrusoraDestino: tolvaMasa // 🚀 Va a la Masa (B) o Única
         });
     }
+    
     if (form.value.conBrillo && form.value.porcBrillo > 0) {
         const keywordBrillo = form.value.tipoBrillo === '555' ? '555' : '777';
         let mpBrillo = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes(`BRILLO ${keywordBrillo}`)) || listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('BRILLO'));
@@ -174,7 +185,8 @@ const recetaConExtrasParaVista = computed(() => {
             const kilosAditivo = ((kilosBase * form.value.porcBrillo) / 100).toFixed(2);
             recetaLimpia.push({
                 id: 'brillo-fijo', materiaPrimaId: mpBrillo.id, nombreInsumo: `✨ ${mpBrillo.nombre} (${form.value.porcBrillo}%)`,
-                densidad: mpBrillo.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo
+                densidad: mpBrillo.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo,
+                extrusoraDestino: tolvaCapa // 🚀 Va a la Capa (A) o Única
             });
         }
     }
@@ -185,17 +197,20 @@ const recetaConExtrasParaVista = computed(() => {
             const kilosAditivo = ((kilosBase * form.value.porcentajeUv) / 100).toFixed(2);
             recetaLimpia.push({
                 id: 'uv-fijo', materiaPrimaId: mpUV.id, nombreInsumo: `☀️ ${mpUV.nombre} (${form.value.porcentajeUv}%)`,
-                densidad: mpUV.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo
+                densidad: mpUV.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo,
+                extrusoraDestino: tolvaCapa // 🚀 Va a la Capa (A) o Única
             });
         }
     }
+    
     if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
         const mpCaucho = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('CAUCHO'));
         if (mpCaucho) {
             const kilosAditivo = ((kilosBase * form.value.porcentajeCaucho) / 100).toFixed(2);
             recetaLimpia.push({
                 id: 'caucho-fijo', materiaPrimaId: mpCaucho.id, nombreInsumo: `🚜 ${mpCaucho.nombre} (${form.value.porcentajeCaucho}%)`,
-                densidad: mpCaucho.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo
+                densidad: mpCaucho.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo,
+                extrusoraDestino: tolvaMasa // 🚀 Va a la Masa (B) o Única
             });
         }
     }
@@ -296,7 +311,9 @@ async function CargarDatosProductos(id: number) {
                     cantidad: r.cantidad || r.porcentaje || 0,
                     densidad: r.densidad || r.pesoEspecifico || 1.1,
                     esBase: r.esBase || false,
-                    clienteId: idDuenioReal 
+                    clienteId: idDuenioReal,
+                    // 🚀 ESTA ES LA PIEZA CLAVE DE LAS EXTRUSORAS:
+                    extrusoraDestino: r.extrusoraDestino || r.ExtrusoraDestino || 'UNICA'
                 };
             });
             
@@ -433,13 +450,23 @@ watch(
     { immediate: true }
 );
 
-watch(() => form.value.kilosTotales, (v) => {
-    if (v > 1000) {
-        cantidadPalletsUsuario.value = Math.ceil(v / 1000);
-    } else {
-        cantidadPalletsUsuario.value = 1;
-    }
-});
+// 🚀 WATCHER RECARGADO: Reacciona al peso Y al cambio de cliente
+watch(
+    [() => form.value.kilosTotales, () => form.value.clienteId], 
+    ([kilos]) => {
+        const cliente = clienteSeleccionado.value;
+        const limite = (cliente && (cliente.limiteKilosPallet || cliente.LimiteKilosPallet) > 0) 
+                        ? Number(cliente.limiteKilosPallet || cliente.LimiteKilosPallet) 
+                        : 1000;
+                        
+        if (Number(kilos) > limite) {
+            cantidadPalletsUsuario.value = Math.ceil(Number(kilos) / limite);
+        } else {
+            cantidadPalletsUsuario.value = 1;
+        }
+    },
+    { immediate: true }
+);
 
 watch(imprimiendoHistorial, (estaImprimiendo) => {
     if (!estaImprimiendo && recetaDinamica.value.length > 0 && !form.value.esConsolidado) {
@@ -484,6 +511,11 @@ const procesarGuardado = async () => {
     mostrarOpcionMismoPedido.value = false; 
 
     const copiaProfundaOriginal = JSON.parse(JSON.stringify(recetaDinamica.value));
+    
+    // 🚀 AL GUARDAR TAMBIÉN RESPETAMOS LA COEXTRUSIÓN
+    const usaCoextrusion = recetaDinamica.value.some(r => r.extrusoraDestino === 'A' || r.extrusoraDestino === 'B');
+    const tolvaCapa = usaCoextrusion ? 'A' : 'UNICA';
+    const tolvaMasa = usaCoextrusion ? 'B' : 'UNICA';
 
     if (tipoSalidaVisual.value === 'NATURAL') {
         let porcentajeRemovido = 0;
@@ -521,7 +553,8 @@ const procesarGuardado = async () => {
             nombreInsumo: est.nombre,
             cantidad: Number((kilosEstearato.value / (form.value.kilosTotales > 0 ? form.value.kilosTotales : 1) * 100).toFixed(2)), 
             densidad: est.pesoEspecifico || 1,
-            esEstearato: true
+            esEstearato: true,
+            extrusoraDestino: tolvaMasa // 🚀
         });
     }
 
@@ -536,7 +569,8 @@ const procesarGuardado = async () => {
                 materiaPrimaId: mpBrillo.id,
                 nombreInsumo: mpBrillo.nombre,
                 cantidad: Number(form.value.porcBrillo).toFixed(2),
-                densidad: mpBrillo.pesoEspecifico || 1
+                densidad: mpBrillo.pesoEspecifico || 1,
+                extrusoraDestino: tolvaCapa // 🚀
             });
         }
     }
@@ -549,7 +583,8 @@ const procesarGuardado = async () => {
                 materiaPrimaId: mpUV.id, 
                 nombreInsumo: mpUV.nombre,
                 cantidad: Number(form.value.porcentajeUv).toFixed(2),
-                densidad: mpUV.pesoEspecifico || 1
+                densidad: mpUV.pesoEspecifico || 1,
+                extrusoraDestino: tolvaCapa // 🚀
             });
         }
     }
@@ -562,7 +597,8 @@ const procesarGuardado = async () => {
                 materiaPrimaId: mpCaucho.id, 
                 nombreInsumo: mpCaucho.nombre,
                 cantidad: Number(form.value.porcentajeCaucho).toFixed(2),
-                densidad: mpCaucho.pesoEspecifico || 1
+                densidad: mpCaucho.pesoEspecifico || 1,
+                extrusoraDestino: tolvaMasa // 🚀
             });
         }
     }
@@ -788,7 +824,15 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     </div>
                 </div>
 
-                <div class="resumen-peso">Peso Final: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +8%)</small></div>
+                <div class="resumen-peso">
+                    Peso Final: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +8%)</small>
+                    
+                    <!-- 🚀 TESTIGO VISUAL DEL CORTE DE PALLET -->
+                    <div v-if="cantidadPalletsUsuario > 1" style="color:#3498db; margin-top: 8px; font-weight: bold; background: #ebf5fb; padding: 5px; border-radius: 4px; font-size: 12px; border-left: 3px solid #3498db; text-align: left;">
+                        📦 Se dividirá en {{ cantidadPalletsUsuario }} pallets internos <br>
+                        <span style="color:#7f8c8d; font-size: 10px;">(Límite de este cliente: {{ clienteSeleccionado?.limiteKilosPallet || clienteSeleccionado?.LimiteKilosPallet || 1000 }} kg)</span>
+                    </div>
+                </div>
                 
                 <label class="lbl-sep">Aditivos:</label>
                 
@@ -841,7 +885,6 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     </div>
                 </div>
 
-                <!-- 🖨️ NUEVO: IMPRESIÓN Y RECUADRO DE CARGA -->
                 <div style="margin-top: 5px; margin-bottom: 15px;">
                     <div class="fila-control-aditivo">
                         <label class="check-container">
@@ -849,7 +892,6 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                         </label>
                     </div>
                     
-                    <!-- Recuadro anidado (Solo aparece si se tilda Impresión) -->
                     <div v-if="uiLlevaImpresion" style="margin-top: 4px; margin-left: 28px; padding: 10px 15px; background: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.05);">
                         <div style="display: flex; flex-direction: column; gap: 2px;">
                             <span style="color: #1e40af; font-weight: 800; font-size: 0.85rem;">🪨 Carga Mineral</span>
@@ -876,7 +918,6 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     <option value="Doble">Doble</option>
                 </select>
                 
-                <!-- 🪨 CARGAS ABAJO (Solo aparece si NO está tildada la impresión) -->
                 <template v-if="!uiLlevaImpresion">
                     <label class="lbl-sep">Cargas:</label>
                     <div class="fila-input">

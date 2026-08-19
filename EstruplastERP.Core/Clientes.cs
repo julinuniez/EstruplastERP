@@ -16,6 +16,7 @@ namespace EstruplastERP.Core
         public string? Telefono { get; set; }
         public string? Email { get; set; }
         public bool EsFazon { get; set; }
+        public decimal LimiteKilosPallet { get; set; } = 1000m;
         public bool Activo { get; set; } = true;
     }
 }

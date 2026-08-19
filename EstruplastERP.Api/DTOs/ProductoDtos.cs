@@ -70,6 +70,7 @@ namespace EstruplastERP.Api.Dtos
         public int MateriaPrimaId { get; set; }
         public string? NombreInsumo { get; set; }
         public decimal Cantidad { get; set; }
+        public string ExtrusoraDestino { get; set; }
     }
 
     // 6. PARA CONFIGURACIÓN TÉCNICA (Peso, Tipo, etc.)

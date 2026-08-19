@@ -83,6 +83,12 @@ onMounted(async () => {
         producto.value.rubro = resProd.data.rubro || resProd.data.Rubro || '';
         producto.value.precioCosto = resProd.data.precioCosto || resProd.data.PrecioCosto || 0;
 
+        // 🚀 ASEGURAR QUE LAS RECETAS VIEJAS TENGAN EL CAMPO EXTRUSORA
+        producto.value.receta = producto.value.receta.map(r => ({
+            ...r,
+            extrusoraDestino: r.extrusoraDestino || 'A' // Valor por defecto si no lo tienen
+        }));
+
         const resTodos = await api.get('/Productos');
         listaMateriasPrimas.value = resTodos.data.filter(p => 
             p.id !== Number(id) && 
@@ -117,7 +123,8 @@ const procesarIngresoIngrediente = (idInsumo, cantidadAingresar) => {
         producto.value.receta.push({
             materiaPrimaId: idInsumo,
             nombreInsumo: mpInfo.nombre || mpInfo.Nombre,
-            cantidad: Math.round(cantidad * 10000) / 10000
+            cantidad: Math.round(cantidad * 10000) / 10000,
+            extrusoraDestino: 'A' // 🚀 VALOR POR DEFECTO PARA INSUMOS NUEVOS
         });
     }
 };
@@ -175,7 +182,8 @@ const guardarConfiguracion = async () => {
             esFazon: producto.value.esFazon,
             receta: producto.value.receta.map(item => ({
                 materiaPrimaId: item.materiaPrimaId,
-                cantidad: Number(item.cantidad)
+                cantidad: Number(item.cantidad),
+                extrusoraDestino: item.extrusoraDestino // 🚀 MANDAMOS EL DESTINO AL BACKEND
             }))
         };
 
@@ -329,6 +337,8 @@ const volver = () => {
                         <thead>
                             <tr>
                                 <th>Insumo</th>
+                                <!-- 🚀 NUEVA COLUMNA EN LA TABLA VISUAL -->
+                                <th width="200" class="text-center">Tolva / Máquina</th>
                                 <th width="120" class="text-center">Porcentaje</th>
                                 <th width="40"></th>
                             </tr>
@@ -336,13 +346,23 @@ const volver = () => {
                         <tbody>
                             <tr v-for="(item, index) in producto.receta" :key="index">
                                 <td>{{ item.nombreInsumo }}</td>
+                                
+                                <!-- 🚀 SELECTOR DE DESTINO PARA EL USUARIO -->
+                                <td class="text-center">
+                                    <select v-model="item.extrusoraDestino" class="select-tolva">
+                                        <option value="A">Extrusora A (Capa)</option>
+                                        <option value="B">Extrusora B (Masa)</option>
+                                        <option value="UNICA">Única (General)</option>
+                                    </select>
+                                </td>
+
                                 <td class="text-center font-bold">{{ item.cantidad }} %</td>
                                 <td>
                                     <button @click="quitarIngrediente(index)" class="btn-x">×</button>
                                 </td>
                             </tr>
                             <tr v-if="producto.receta.length === 0">
-                                <td colspan="3" class="text-center text-muted">Aún no hay ingredientes. Agregue materias primas para completar el 100%.</td>
+                                <td colspan="4" class="text-center text-muted">Aún no hay ingredientes. Agregue materias primas para completar el 100%.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -431,6 +451,25 @@ const volver = () => {
 .tabla-receta td { padding: 10px 12px; border-bottom: 1px solid #f1f1f1; }
 .btn-x { background: none; border: none; color: #c0392b; font-weight: bold; cursor: pointer; font-size: 1.4em; }
 .btn-x:hover { color: #e74c3c; transform: scale(1.1); }
+
+/* 🚀 NUEVO ESTILO PARA EL SELECTOR DE TOLVA EN LA TABLA */
+.select-tolva {
+    padding: 6px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-weight: bold;
+    color: #2c3e50;
+    cursor: pointer;
+    background-color: #f8f9fa;
+    transition: all 0.2s ease;
+}
+.select-tolva:focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+}
+
 .footer-actions { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; padding-top: 20px; }
 .acciones-derecha { display: flex; gap: 15px; }
 .btn-eliminar { padding: 12px 20px; border: 1px solid #e74c3c; background: #fff; color: #e74c3c; border-radius: 4px; cursor: pointer; font-weight: bold; transition: all 0.3s; }

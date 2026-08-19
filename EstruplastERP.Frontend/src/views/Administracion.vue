@@ -13,9 +13,9 @@ interface Entidad {
   direccion?: string;
   esFazon?: boolean; 
   activo: boolean;
+  limiteKilosPallet?: number; // 🚀 NUEVO CAMPO
 }
 
-// Ahora la pestaña por defecto es 'clientes'
 const pestana = ref<'clientes' | 'proveedores'>('clientes')
 const lista = ref<Entidad[]>([]) 
 const cargando = ref(false)
@@ -30,7 +30,8 @@ const itemForm = ref({
   telefono: '',
   direccion: '',
   esFazon: false,
-  activo: true
+  activo: true,
+  limiteKilosPallet: 1000 // 🚀 VALOR POR DEFECTO
 })
 
 const modoEdicion = ref(false)
@@ -82,6 +83,7 @@ async function guardar() {
 
   if (pestana.value === 'clientes') {
     payload.esFazon = itemForm.value.esFazon;
+    payload.limiteKilosPallet = itemForm.value.limiteKilosPallet; // 🚀 SE ENVÍA AL BACKEND
   }
 
   if (pestana.value === 'proveedores') {
@@ -120,7 +122,8 @@ function editar(item: Entidad) {
     telefono: item.telefono || '',
     direccion: item.direccion || '',
     esFazon: item.esFazon || false,
-    activo: item.activo
+    activo: item.activo,
+    limiteKilosPallet: item.limiteKilosPallet || 1000 // 🚀 RECUPERA EL LÍMITE
   };
 }
 
@@ -141,7 +144,8 @@ function limpiarForm() {
   modoEdicion.value = false;
   itemForm.value = {
     id: 0, nombre: '', identificacion: '',
-    contacto: '', email: '', telefono: '', direccion: '', esFazon: false, activo: true
+    contacto: '', email: '', telefono: '', direccion: '', esFazon: false, activo: true,
+    limiteKilosPallet: 1000 // 🚀 RESETEA AL POR DEFECTO
   };
 }
 
@@ -187,6 +191,16 @@ onMounted(() => cargarDatos())
             <label>CUIT:</label>
             <input type="text" v-model="itemForm.identificacion" placeholder="XX-XXXXXXXX-X">
 
+            <!-- 🚀 NUEVO INPUT PARA EL LÍMITE DE PALLET -->
+            <div v-if="pestana==='clientes'" style="margin-bottom: 15px;">
+                <label style="color: #2980b9;">📦 Límite Kilos por Pallet:</label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="number" v-model="itemForm.limiteKilosPallet" style="margin-bottom: 0;" min="100" step="50">
+                    <span style="color: #7f8c8d; font-weight: bold; font-size: 13px;">Kg.</span>
+                </div>
+                <small style="color: #95a5a6; font-size: 11px;">Capacidad máxima antes de armar un pallet nuevo. (Por defecto 1000 kg).</small>
+            </div>
+
             <div v-if="pestana==='clientes'" class="check-box fazon-check">
                 <input type="checkbox" v-model="itemForm.esFazon" id="chkFazon">
                 <label for="chkFazon">🛠️ Habilitar Servicio Fazón</label>
@@ -221,6 +235,7 @@ onMounted(() => cargarDatos())
                         <th>Razón Social</th>
                         <th>CUIT</th>
                         <th v-if="pestana==='proveedores'">Contacto</th> 
+                        <th v-if="pestana==='clientes'">Límite Pallet</th> 
                         <th>Estado</th>
                         <th>Acciones</th>
                     </tr>
@@ -236,6 +251,13 @@ onMounted(() => cargarDatos())
                         
                         <td>{{ item.cuit || '-' }}</td>
                         <td v-if="pestana==='proveedores'">{{ item.contactoNombre || '-' }}</td>
+                        
+                        <!-- 🚀 NUEVA COLUMNA VISUAL -->
+                        <td v-if="pestana==='clientes'">
+                            <span style="background: #e8f4f8; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; color: #2980b9;">
+                                {{ item.limiteKilosPallet || 1000 }} kg
+                            </span>
+                        </td>
 
                         <td>
                             <span :class="item.activo ? 'badge-ok' : 'badge-no'">{{ item.activo ? 'Activo' : 'Inactivo' }}</span>
@@ -265,6 +287,7 @@ onMounted(() => cargarDatos())
 </template>
 
 <style scoped>
+/* Acá va tu CSS original (dejalo exactamente igual, no hace falta cambiarlo) */
 .panel-admin { max-width: 1200px; margin: 0 auto; font-family: 'Segoe UI', sans-serif; padding: 20px; }
 h2 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
 h3 { margin-top: 0; color: #34495e; font-size: 1.2rem; margin-bottom: 15px; }
@@ -279,7 +302,7 @@ h3 { margin-top: 0; color: #34495e; font-size: 1.2rem; margin-bottom: 15px; }
 
 .card-form { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e1e1e1; position: sticky; top: 20px; }
 .card-form label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem; color: #555; }
-.card-form input[type="text"], .card-form select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 0.95rem; }
+.card-form input[type="text"], .card-form input[type="number"], .card-form select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 0.95rem; }
 .card-form input:focus, .card-form select:focus { outline: none; border-color: #3498db; box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2); }
 
 .check-box { margin: 10px 0 20px 0; display: flex; gap: 8px; align-items: center; cursor: pointer; background: #f8f9fa; padding: 10px; border-radius: 5px; }
