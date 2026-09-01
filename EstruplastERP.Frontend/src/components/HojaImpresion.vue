@@ -22,7 +22,7 @@ const emit = defineEmits(['add-insumo', 'remove-insumo', 'update-receta']);
 
 const insumoBusquedaTexto = ref(''); 
 const insumoExtraPorc = ref<number | ''>('');
-const insumoExtraExtrusora = ref('UNICA'); // 🚀 NUEVO: Destino para agregados manuales
+const insumoExtraExtrusora = ref('UNICA'); 
 const mostrarLista = ref(false); 
 
 const esConsolidadoReal = computed(() => {
@@ -87,14 +87,106 @@ const pesoBrutoExacto = computed(() => {
     return isNaN(resultado) ? 0 : resultado;
 });
 
+const ceilKilos = (valor: number, decimales = 3) => {
+    const num = Number(valor) || 0;
+    const factor = Math.pow(10, decimales);
+    return Math.ceil(num * factor) / factor;
+};
+
+const insumosParaImprimir = computed(() => {
+    if (props.receta && props.receta.length > 0) return props.receta;
+    if (props.form?.consumos && props.form.consumos.length > 0) return props.form.consumos;
+    if (props.form?.receta && props.form.receta.length > 0) return props.form.receta;
+    return [];
+});
+
+const recetaVisual = computed(() => {
+    let lista = JSON.parse(JSON.stringify(insumosParaImprimir.value));
+
+    if (esConsolidadoReal.value) {
+        const map = new Map<string, any>();
+
+        lista.forEach((item: any) => {
+            const idMp = Number(item.materiaPrimaId || item.MateriaPrimaId || item.id);
+            if (!idMp) return; 
+
+            const nombre = item.nombreInsumo || item.nombreMateriaPrima || item.NombreMateriaPrima || item.nombre || 'Insumo';
+            const fijos = Number(item.kilosFijos || item.real || item.cantidadKilos || item.CantidadKilos || item.kilos || item.cantidad || 0);
+            const destino = item.extrusoraDestino || item.ExtrusoraDestino || 'UNICA';
+            
+            const key = `${idMp}-${destino}`; 
+
+            if (!map.has(key)) {
+                map.set(key, {
+                    ...item, 
+                    materiaPrimaId: idMp,
+                    nombreInsumo: nombre,
+                    cantidadKilos: fijos, 
+                    kilosFijos: fijos,
+                    extrusoraDestino: destino,
+                    esEstearato: item.esEstearato || nombre.toUpperCase().includes('ESTEARATO'),
+                    esColor: item.esColor || nombre.toUpperCase().includes('MB') || nombre.toUpperCase().includes('MASTER') || nombre.toUpperCase().includes('COLOR'),
+                    esBase: item.esBase || false
+                });
+            } else {
+                const agrupado = map.get(key);
+                agrupado.cantidadKilos += fijos;
+                agrupado.kilosFijos += fijos;
+            }
+        });
+
+        lista = Array.from(map.values());
+    } else {
+        lista.forEach((item: any) => {
+            item.extrusoraDestino = item.extrusoraDestino || item.ExtrusoraDestino || 'UNICA';
+        });
+    }
+
+    if (props.tipoSalidaVisual === 'NATURAL') {
+        let kilosRemovidos = 0;
+        const listaLimpia: any[] = [];
+
+        lista.forEach((item: any) => {
+            const n = (item.nombreInsumo || item.nombreMateriaPrima || item.NombreMateriaPrima || '').toUpperCase();
+            const esColor = item.esColor || n.includes('MB') || n.includes('MASTER') || n.includes('COLOR');
+            
+            if (esColor) {
+                kilosRemovidos += Number(item.kilosFijos || item.cantidadKilos || item.CantidadKilos || item.real || item.kilos || item.cantidad || 0);
+            } else {
+                listaLimpia.push(item);
+            }
+        });
+
+        if (listaLimpia.length > 0 && kilosRemovidos > 0) {
+            listaLimpia.sort((a: any, b: any) => Number(b.kilosFijos || 0) - Number(a.kilosFijos || 0));
+            const materialPrincipal = listaLimpia.find((i: any) => i.esBase) || listaLimpia[0];
+
+            if (materialPrincipal) {
+                materialPrincipal.kilosFijos = Number(materialPrincipal.kilosFijos || 0) + kilosRemovidos;
+            }
+        }
+        lista = listaLimpia;
+    }
+
+    return lista.sort((a: any, b: any) => {
+        const aEsFijo = esInsumoFijo(a) ? 1 : 0;
+        const bEsFijo = esInsumoFijo(b) ? 1 : 0;
+        if (aEsFijo !== bEsFijo) return aEsFijo - bEsFijo;
+
+        const cantidadA = Number(a.kilosFijos || a.real || a.cantidad || 0);
+        const cantidadB = Number(b.kilosFijos || b.real || b.cantidad || 0);
+        return cantidadB - cantidadA;
+    });
+});
+
 const kilosCabeceraRedondeado = computed(() => {
     if (props.ocultarFormula) {
         return Math.ceil(kilosNetosExactos.value);
     }
     let sumaFisica = 0;
     recetaVisual.value.forEach((r: any) => {
-        if (esConsolidadoReal.value) {
-            sumaFisica += Number(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0);
+        if (modoCargaLimpia.value) {
+            sumaFisica += Number(r.kilosFijos || r.cantidadKilos || r.CantidadKilos || r.real || 0);
         } else {
             sumaFisica += r.kilosFijos 
                 ? Number(r.kilosFijos) 
@@ -103,12 +195,6 @@ const kilosCabeceraRedondeado = computed(() => {
     });
     return Math.round(sumaFisica); 
 });
-
-const ceilKilos = (valor: number, decimales = 3) => {
-    const num = Number(valor) || 0;
-    const factor = Math.pow(10, decimales);
-    return Math.ceil(num * factor) / factor;
-};
 
 const densidadReal = computed(() => {
     if (esConsolidadoReal.value) return 0;
@@ -129,7 +215,6 @@ const obtenerEtiquetaOrigen = (itemReceta: any) => {
 const esInsumoFijo = (r: any) => {
     if (!r) return false;
     if (r.esEstearato) return true;
-    if (r.kilosFijos !== undefined && r.kilosFijos !== null) return true;
     
     const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
     if (n.includes('ESTEARATO') || n.includes('BRILLO') || n.includes('CRISTAL') || 
@@ -137,161 +222,46 @@ const esInsumoFijo = (r: any) => {
     return false;
 };
 
-const notasPedidoVisibles = computed(() => {
-    try {
-        let notas: string[] = [];
-        const nP = props.form?.notaPedido || props.form?.NotaPedido;
-        if (nP && !String(nP).toLowerCase().includes('undefined')) notas.push(String(nP));
+// 🚀 ACÁ ESTÁ LA LÓGICA DE LAS TOLVAS MÚLTIPLES
+const gruposReceta = computed<Record<string, any>>(() => {
+    const porcA = props.form?.porcentajeTolvaA || 100;
+    const porcB = props.form?.porcentajeTolvaB || 0;
+    const porcC = props.form?.porcentajeTolvaC || 0;
 
-        const subOrdenes = props.form?.ordenes || props.form?.pedidos || props.form?.detalles || props.form?.items || [];
-        if (subOrdenes && subOrdenes.length > 0) {
-            subOrdenes.forEach((o: any) => {
-                const n = o.notaPedido || o.NotaPedido;
-                if (n && !String(n).toLowerCase().includes('undefined') && !String(n).toLowerCase().includes('null')) {
-                    notas.push(String(n));
-                } else if (o.id && !String(o.id).toLowerCase().includes('undefined')) {
-                    notas.push(String(o.id)); 
-                }
-            });
-        }
+    const tituloA = modoCargaLimpia.value ? `🟦 EXTRUSORA A (Capa)` : `🟦 EXTRUSORA A (Capa) - ${porcA}%`;
+    const tituloB = modoCargaLimpia.value ? `🟩 EXTRUSORA B (Masa)` : `🟩 EXTRUSORA B (Masa) - ${porcB}%`;
+    const tituloC = modoCargaLimpia.value ? `🟨 EXTRUSORA C (Capa)` : `🟨 EXTRUSORA C (Capa) - ${porcC}%`;
 
-        if (notas.length === 0) {
-            const idPrincipal = props.form?.id || props.form?.Id;
-            if (idPrincipal && !String(idPrincipal).toLowerCase().includes('undefined')) return String(idPrincipal);
-            return '-';
-        }
-
-        const crudo = notas.join(' | ');
-        const arrayLimpio = crudo.replace(/undefined/gi, '').replace(/null/gi, '').split(/[|,]/).map(s => s.trim()).filter(s => s !== '');
-        const finales = [...new Set(arrayLimpio)];
-        return finales.length > 0 ? finales.join(' | ') : '-';
-    } catch (e) {
-        return '-';
-    }
-});
-
-const insumosParaImprimir = computed(() => {
-    if (props.receta && props.receta.length > 0) return props.receta;
-    if (props.form?.consumos && props.form.consumos.length > 0) return props.form.consumos;
-    if (props.form?.receta && props.form.receta.length > 0) return props.form.receta;
-    return [];
-});
-
-const recetaVisual = computed(() => {
-    let lista = JSON.parse(JSON.stringify(insumosParaImprimir.value));
-
-    if (esConsolidadoReal.value) {
-        const map = new Map<string, any>();
-
-        lista.forEach((item: any) => {
-            const idMp = Number(item.materiaPrimaId || item.MateriaPrimaId || item.id);
-            if (!idMp) return; 
-
-            const nombre = item.nombreInsumo || item.nombreMateriaPrima || item.NombreMateriaPrima || item.nombre || 'Insumo';
-            const kilos = Number(item.real !== undefined ? item.real : (item.cantidadKilos || item.CantidadKilos || item.kilos || item.cantidad || 0));
-            const fijos = Number(item.kilosFijos || 0);
-            
-            // 🚀 RESCATAMOS EL DESTINO (Por defecto UNICA)
-            const destino = item.extrusoraDestino || item.ExtrusoraDestino || 'UNICA';
-            
-            // Agrupamos por ID de material y por Destino
-            const key = `${idMp}-${destino}`; 
-
-            if (!map.has(key)) {
-                map.set(key, {
-                    ...item, 
-                    materiaPrimaId: idMp,
-                    nombreInsumo: nombre,
-                    cantidadKilos: kilos, 
-                    kilosFijos: fijos,
-                    extrusoraDestino: destino,
-                    esEstearato: item.esEstearato || nombre.toUpperCase().includes('ESTEARATO'),
-                    esColor: item.esColor || nombre.toUpperCase().includes('MB') || nombre.toUpperCase().includes('MASTER') || nombre.toUpperCase().includes('COLOR'),
-                    esBase: item.esBase || false
-                });
-            } else {
-                const agrupado = map.get(key);
-                agrupado.cantidadKilos += kilos;
-                agrupado.kilosFijos += fijos;
-            }
-        });
-
-        lista = Array.from(map.values());
-    } else {
-        // Aseguramos que los no consolidados tengan la variable seteada
-        lista.forEach((item: any) => {
-            item.extrusoraDestino = item.extrusoraDestino || item.ExtrusoraDestino || 'UNICA';
-        });
-    }
-
-    if (props.tipoSalidaVisual === 'NATURAL') {
-        let porcentajeRemovido = 0;
-        let kilosRemovidos = 0;
-        const listaLimpia: any[] = [];
-
-        lista.forEach((item: any) => {
-            const n = (item.nombreInsumo || item.nombreMateriaPrima || item.NombreMateriaPrima || '').toUpperCase();
-            const esColor = item.esColor || n.includes('MB') || n.includes('MASTER') || n.includes('COLOR');
-            
-            if (esColor) {
-                porcentajeRemovido += Number(item.cantidad || 0);
-                kilosRemovidos += Number(item.kilosFijos || item.cantidadKilos || item.CantidadKilos || item.kilos || item.real || item.cantidad || 0);
-            } else {
-                listaLimpia.push(item);
-            }
-        });
-
-        if (listaLimpia.length > 0 && kilosRemovidos > 0) {
-            listaLimpia.sort((a: any, b: any) => Number(b.cantidadKilos || b.CantidadKilos || b.real || 0) - Number(a.cantidadKilos || a.CantidadKilos || a.real || 0));
-            const materialPrincipal = listaLimpia.find((i: any) => i.esBase) || listaLimpia[0];
-
-            if (materialPrincipal) {
-                materialPrincipal.cantidad = (Number(materialPrincipal.cantidad || 0) + porcentajeRemovido).toFixed(2);
-                
-                if (Number(materialPrincipal.kilosFijos) > 0) {
-                    materialPrincipal.kilosFijos = Number(materialPrincipal.kilosFijos) + kilosRemovidos;
-                } else {
-                    materialPrincipal.cantidadKilos = Number(materialPrincipal.cantidadKilos || materialPrincipal.CantidadKilos || materialPrincipal.real || materialPrincipal.cantidad || 0) + kilosRemovidos;
-                }
-            }
-        }
-        lista = listaLimpia;
-    }
-
-    return lista.sort((a: any, b: any) => {
-        const aEsFijo = esInsumoFijo(a) ? 1 : 0;
-        const bEsFijo = esInsumoFijo(b) ? 1 : 0;
-        if (aEsFijo !== bEsFijo) return aEsFijo - bEsFijo;
-
-        const cantidadA = Number(a.cantidadKilos || a.CantidadKilos || a.real || a.cantidad || 0);
-        const cantidadB = Number(b.cantidadKilos || b.CantidadKilos || b.real || b.cantidad || 0);
-        return cantidadB - cantidadA;
-    });
-});
-
-// 🚀 CEREBRO DE AGRUPACIÓN POR TOLVAS PARA EL PDF
-const gruposReceta = computed(() => {
-    const grupos = {
-        A: { titulo: 'EXTRUSORA A (Capa)', items: [] as any[] },
-        B: { titulo: 'EXTRUSORA B (Masa)', items: [] as any[] },
+    const grupos: Record<string, any> = {
+        tieneSeparacion: false,
+        A: { titulo: tituloA, items: [] as any[] },
+        B: { titulo: tituloB, items: [] as any[] },
+        C: { titulo: tituloC, items: [] as any[] },
         UNICA: { titulo: 'MEZCLA GENERAL', items: [] as any[] }
     };
 
     recetaVisual.value.forEach((r: any) => {
         const dest = String(r.extrusoraDestino || 'UNICA').toUpperCase();
-        if (dest === 'A') grupos.A.items.push(r);
-        else if (dest === 'B') grupos.B.items.push(r);
-        else grupos.UNICA.items.push(r);
+        if (dest === 'A') {
+            grupos.tieneSeparacion = true;
+            grupos.A.items.push(r);
+        } else if (dest === 'B') {
+            grupos.tieneSeparacion = true;
+            grupos.B.items.push(r);
+        } else if (dest === 'C') {
+            grupos.tieneSeparacion = true;
+            grupos.C.items.push(r);
+        } else {
+            grupos.UNICA.items.push(r);
+        }
     });
-
-    const tieneSeparacion = grupos.A.items.length > 0 || grupos.B.items.length > 0;
     
-    // Si no hay separación A/B, metemos todo a ÚNICA pero sin título para que se vea normal
-    if (!tieneSeparacion) {
+    if (!grupos.tieneSeparacion) {
+        grupos.UNICA.items = recetaVisual.value || [];
         grupos.UNICA.titulo = '';
     }
 
-    return { tieneSeparacion, A: grupos.A, B: grupos.B, UNICA: grupos.UNICA };
+    return grupos;
 });
 
 const sugerenciasFiltradas = computed(() => {
@@ -327,7 +297,6 @@ const solicitarAgregar = () => {
     if (!insumoBusquedaTexto.value || !insumoExtraPorc.value) return;
     const mpEncontrada = sugerenciasFiltradas.value.find(m => m.nombre === insumoBusquedaTexto.value);
     if (mpEncontrada) {
-        // 🚀 AHORA ENVÍA TAMBIÉN A QUÉ TOLVA VA EL INSUMO
         emit('add-insumo', { 
             id: mpEncontrada.id, 
             porcentaje: Number(insumoExtraPorc.value),
@@ -355,7 +324,7 @@ const solicitarModificarPorcentaje = (item: any, event: Event) => {
             emit('add-insumo', { 
                 id: item.materiaPrimaId || item.id, 
                 porcentaje: val,
-                extrusoraDestino: item.extrusoraDestino // Respeta la tolva original
+                extrusoraDestino: item.extrusoraDestino 
             });
         }
     }
@@ -438,6 +407,36 @@ const tipoCorona = computed(() => {
     }
     return validarCorona(val) ? String(val).toUpperCase() : null;
 });
+
+// 🚀 ACÁ ESTÁ LA FUNCIÓN PARA LIMPIAR LA NOTA DE PEDIDO
+const notasPedidoVisibles = computed(() => {
+    try {
+        let notas: string[] = [];
+        const nP = props.form?.notaPedido || props.form?.NotaPedido;
+        if (nP && !String(nP).toLowerCase().includes('undefined') && String(nP) !== '-') {
+            notas.push(String(nP));
+        }
+
+        const subOrdenes = props.form?.ordenes || props.form?.pedidos || props.form?.detalles || props.form?.items || [];
+        if (subOrdenes && subOrdenes.length > 0) {
+            subOrdenes.forEach((o: any) => {
+                const n = o.notaPedido || o.NotaPedido;
+                if (n && String(n).trim() !== '' && !String(n).toLowerCase().includes('undefined') && !String(n).toLowerCase().includes('null')) {
+                    notas.push(String(n).trim());
+                }
+            });
+        }
+
+        if (notas.length === 0) return '-';
+
+        const crudo = notas.join(' | ');
+        const arrayLimpio = crudo.replace(/undefined/gi, '').replace(/null/gi, '').split(/[|,]/).map(s => s.trim()).filter(s => s !== '' && s !== '-');
+        const finales = [...new Set(arrayLimpio)];
+        return finales.length > 0 ? finales.join(' | ') : '-';
+    } catch (e) {
+        return '-';
+    }
+});
 </script>
 
 <template>
@@ -519,9 +518,9 @@ const tipoCorona = computed(() => {
                 <span style="float:right; font-size: 0.8em; color: #333" v-if="!modoCargaLimpia" class="ocultar-en-impresion">Total: {{ Number(totalPorcentaje).toFixed(2) }}%</span>
             </div>
 
-            <!-- 🚀 RECORREMOS LOS GRUPOS DE EXTRUSORAS -->
+            <!-- 🚀 TOLVAS MÚLTIPLES -->
             <div class="contenedor-tolvas">
-                <template v-for="grupoKey in ['A', 'B', 'UNICA']" :key="grupoKey">
+                <template v-for="grupoKey in ['A', 'B', 'C', 'UNICA']" :key="grupoKey">
                     <div v-if="gruposReceta[grupoKey].items.length > 0" class="grupo-tolva">
                         <div v-if="gruposReceta[grupoKey].titulo" :class="'titulo-tolva tolva-' + grupoKey">
                             {{ gruposReceta[grupoKey].titulo }}
@@ -547,8 +546,13 @@ const tipoCorona = computed(() => {
                                         </td>
                                         
                                         <td style="text-align:center; vertical-align: middle; width:100px;" v-if="!modoCargaLimpia" class="ocultar-en-impresion">
-                                            <div v-if="esInsumoFijo(r)" style="font-weight: bold; color: #2980b9; font-size: 11px; letter-spacing: 1px;">
-                                                (EXTRA)
+                                            <div v-if="esInsumoFijo(r)">
+                                                <div v-if="r.esEstearato || (r.nombreInsumo || '').toUpperCase().includes('ESTEARATO')" style="font-weight: bold; color: #2980b9; font-size: 11px; letter-spacing: 1px;">
+                                                    (EXTRA)
+                                                </div>
+                                                <div v-else style="font-weight: bold; color: #2980b9; font-size: 13px;">
+                                                    {{ Number(r.cantidad).toFixed(2) }} %
+                                                </div>
                                             </div>
                                             <div v-else>
                                                 <div style="display:flex; justify-content:center; align-items:center;">
@@ -558,18 +562,12 @@ const tipoCorona = computed(() => {
                                         </td>
                                         
                                         <td style="text-align:right; font-size: 1.1em; width:120px;">
-                                            <strong v-if="esInsumoFijo(r)" style="color: #2980b9;">
-                                                {{ esConsolidadoReal 
-                                                    ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
+                                            <strong :style="{ color: esInsumoFijo(r) ? '#2980b9' : 'inherit' }">
+                                                {{ modoCargaLimpia 
+                                                    ? parseFloat(r.kilosFijos || r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
                                                     : (r.kilosFijos 
                                                         ? parseFloat(r.kilosFijos).toFixed(2) 
                                                         : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2)) 
-                                                }} kg
-                                            </strong>
-                                            <strong v-else>
-                                                {{ esConsolidadoReal 
-                                                    ? parseFloat(r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
-                                                    : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2) 
                                                 }} kg
                                             </strong>
                                         </td>
@@ -604,11 +602,11 @@ const tipoCorona = computed(() => {
                 </div>
                 <input type="number" v-model="insumoExtraPorc" placeholder="%" style="width: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; margin-left: 5px;" />
                 
-                <!-- 🚀 SELECTOR PARA ELEGIR TOLVA AL AGREGAR MANUALMENTE -->
                 <select v-model="insumoExtraExtrusora" style="margin-left: 5px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
                     <option value="UNICA">Única</option>
                     <option value="A">Tolva A</option>
                     <option value="B">Tolva B</option>
+                    <option value="C">Tolva C</option>
                 </select>
 
                 <button class="btn-add-insumo" @click="solicitarAgregar" style="margin-left: 5px;">AGREGAR</button>
@@ -675,6 +673,7 @@ const tipoCorona = computed(() => {
 </template>
 
 <style>
+/* CSS Intacto */
 .contenedor-principal-pdf { background: white; width: 209mm; min-height: 290mm; padding: 0; box-sizing: border-box; color: black; font-family: Arial, sans-serif; position: relative; }
 .pagina-copia { padding: 15mm; box-sizing: border-box; width: 100%; height: 290mm; display: flex; flex-direction: column; position: relative; }
 .pagina-copia.modo-mitad { height: 145mm; padding: 5mm 15mm; border-bottom: 1px dashed #999; display: block; }
@@ -698,11 +697,11 @@ const tipoCorona = computed(() => {
 .seccion-receta-pdf { margin-top: 10px; border: 2px solid black; font-size: 14px; }
 .titulo-receta-pdf { background: #e0e0e0; padding: 5px; font-weight: 900; text-align: center; border-bottom: 2px solid black; font-size: 14px; }
 
-/* 🚀 ESTILOS PARA LAS TOLVAS MÚLTIPLES */
 .contenedor-tolvas { display: flex; flex-direction: column; gap: 0px; }
 .titulo-tolva { font-size: 11px; font-weight: 900; padding: 4px 8px; border-bottom: 2px solid black; border-top: 2px solid black; text-align: center; }
 .tolva-A { background-color: #e0f2fe; color: #0369a1; }
 .tolva-B { background-color: #dcfce7; color: #15803d; }
+.tolva-C { background-color: #fef08a; color: #854d0e; }
 .tolva-UNICA { background-color: #f1f5f9; color: #475569; }
 
 .tabla-receta-pdf { width: 100%; border-collapse: collapse; }

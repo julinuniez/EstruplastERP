@@ -36,7 +36,6 @@ interface ItemReceta {
     extrusoraDestino?: string;
 }
 
-// CONFIGURACIÓN
 const apiUrl = import.meta.env.VITE_API_URL || '/api'; 
 const DENSIDAD_DEFAULT = 1.1;
 const ID_MASTERBATCH_GENERICO = 90; 
@@ -45,6 +44,8 @@ const KILOS_BASE_LATA = 25;
 
 const loading = ref(false);
 const guardando = ref(false); 
+const mutandoParaGuardar = ref(false); 
+
 const productos = ref<Producto[]>([])
 const listaInventarioCompleto = ref<any[]>([])
 const listaTodasMateriasPrimas = ref<any[]>([])
@@ -92,7 +93,10 @@ const form = ref({
     esBobina: false,
     kilosPorBobina: 0,
     productoNombre: '',
-    clienteNombre: ''
+    clienteNombre: '',
+    porcentajeTolvaA: 0,
+    porcentajeTolvaB: 0,
+    porcentajeTolvaC: 0
 })
 
 const ultimoPedidoGuardado = ref({
@@ -101,6 +105,8 @@ const ultimoPedidoGuardado = ref({
     notaPedido: ''
 });
 const mostrarOpcionMismoPedido = ref(false);
+
+const usaCoextrusionCalculado = computed(() => recetaDinamica.value.some(r => r.extrusoraDestino === 'A' || r.extrusoraDestino === 'B' || r.extrusoraDestino === 'C'));
 
 const espesorValido = computed(() => {
     if (limiteMinimo.value === 0 && limiteMaximo.value === 0) return true;
@@ -115,22 +121,64 @@ const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Num
 
 const densidadPT = computed(() => productoSeleccionado.value?.pesoEspecifico || 1.1);
 
-const porcentajeSoloBase = computed(() => {
-    let suma = 0;
+const porcentajesPorTolva = computed(() => {
+    let sumas = { UNICA: 0, A: 0, B: 0, C: 0 };
+    let tieneCoextrusion = false;
+
     recetaDinamica.value.forEach((r: any) => {
         const mpId = r.materiaPrimaId || r.id;
         const mpInfo = listaTodasMateriasPrimas.value.find(m => m.id === mpId) || listaInventarioCompleto.value.find(m => m.id === mpId);
         
         const rubro = mpInfo ? String(mpInfo.rubro || mpInfo.Rubro || '').toUpperCase() : '';
         const nombreMaterial = mpInfo ? String(mpInfo.nombre || mpInfo.Nombre || '').toUpperCase() : '';
-        
         const esCargaFisica = r.esCarga || nombreMaterial.includes('CARGA') || nombreMaterial.includes('CARBONATO') || nombreMaterial.includes('TIZA');
 
+        const destino = r.extrusoraDestino || r.ExtrusoraDestino || 'UNICA';
+        if (destino === 'A' || destino === 'B' || destino === 'C') tieneCoextrusion = true;
+
         if ((rubro !== 'ADITIVO' && rubro !== 'OTROS') || esCargaFisica) {
-            suma += Number(r.cantidad || 0);
+            if (destino === 'A') sumas.A += Number(r.cantidad || 0);
+            else if (destino === 'B') sumas.B += Number(r.cantidad || 0);
+            else if (destino === 'C') sumas.C += Number(r.cantidad || 0);
+            else sumas.UNICA += Number(r.cantidad || 0);
         }
     });
-    return Math.round(suma * 100) / 100;
+
+    return {
+        A: Math.round(sumas.A * 100) / 100,
+        B: Math.round(sumas.B * 100) / 100,
+        C: Math.round(sumas.C * 100) / 100,
+        UNICA: Math.round(sumas.UNICA * 100) / 100,
+        usaCoextrusion: tieneCoextrusion
+    };
+});
+
+const errorBasePorcentaje = computed(() => {
+    if (mutandoParaGuardar.value) return null;
+
+    const p = porcentajesPorTolva.value;
+    if (p.usaCoextrusion) {
+        const errA = p.A > 0 && Math.abs(p.A - 100) > 0.5;
+        const errB = p.B > 0 && Math.abs(p.B - 100) > 0.5;
+        const errC = p.C > 0 && Math.abs(p.C - 100) > 0.5;
+        if (errA || errB || errC) {
+            let msj = [];
+            if (errA) msj.push(`Tolva A (${p.A}%)`);
+            if (errB) msj.push(`Tolva B (${p.B}%)`);
+            if (errC) msj.push(`Tolva C (${p.C}%)`);
+            return `Mezcla incompleta: ${msj.join(' / ')}. Cada tolva debe sumar 100%.`;
+        }
+        return null;
+    } else {
+        if (Math.abs(p.UNICA - 100) > 0.5 && recetaDinamica.value.length > 0) {
+            return `La mezcla única suma ${p.UNICA}%. Debe sumar exactamente 100%.`;
+        }
+        return null;
+    }
+});
+
+const porcentajeSoloBase = computed(() => {
+    return errorBasePorcentaje.value ? 0 : 100;
 });
 
 const { factorMerma } = useCalculosProduccion(form, recetaDinamica, productoSeleccionado);
@@ -156,15 +204,46 @@ const kilosEstearato = computed(() => {
 });
 
 const recetaConExtrasParaVista = computed(() => {
-    const recetaLimpia = recetaDinamica.value.filter(r => {
-        const n = (r.nombreInsumo || '').toUpperCase();
-        return !n.includes('ESTEARATO') && !n.includes('BRILLO') && !n.includes('UV') && !n.includes('CAUCHO');
-    });
+    if (imprimiendoHistorial.value) {
+        return recetaDinamica.value.map(r => {
+            return {
+                ...r,
+                cantidad: Number(r.cantidad || 0).toFixed(2),
+                kilosFijos: Number(r.kilosFijos || 0).toFixed(2)
+            };
+        });
+    }
+
+    // 🚀 CLONACIÓN VITAL PARA EVITAR BUCLE INFINITO AL IMPRIMIR
+    const recetaLimpia = recetaDinamica.value
+        .filter(r => {
+            const n = (r.nombreInsumo || '').toUpperCase();
+            return !n.includes('ESTEARATO') && !n.includes('BRILLO') && !n.includes('UV') && !n.includes('CAUCHO');
+        })
+        .map(r => ({ ...r })); 
 
     const kilosBase = form.value.kilosTotales > 0 ? form.value.kilosTotales : 1;
+    const usaCoextrusion = usaCoextrusionCalculado.value;
     
-    // 🚀 DETECTOR INTELIGENTE: ¿Es monocapa o coextruido?
-    const usaCoextrusion = recetaDinamica.value.some(r => r.extrusoraDestino === 'A' || r.extrusoraDestino === 'B');
+    const porcA = usaCoextrusion ? Number(form.value.porcentajeTolvaA) : 100;
+    const porcB = usaCoextrusion ? Number(form.value.porcentajeTolvaB) : 100;
+    const porcC = usaCoextrusion ? Number(form.value.porcentajeTolvaC) : 100;
+
+    const kilosCapaA = kilosBase * (porcA / 100);
+    const kilosMasaB = kilosBase * (porcB / 100);
+    const kilosCapaC = kilosBase * (porcC / 100);
+
+    recetaLimpia.forEach(r => {
+        const destino = r.extrusoraDestino || 'UNICA';
+        let kilosDeLaTolva = kilosBase;
+        
+        if (destino === 'A') kilosDeLaTolva = kilosCapaA;
+        if (destino === 'B') kilosDeLaTolva = kilosMasaB;
+        if (destino === 'C') kilosDeLaTolva = kilosCapaC;
+        
+        r.kilosFijos = ((kilosDeLaTolva * Number(r.cantidad)) / 100).toFixed(2);
+    });
+
     const tolvaCapa = usaCoextrusion ? 'A' : 'UNICA';
     const tolvaMasa = usaCoextrusion ? 'B' : 'UNICA';
 
@@ -173,8 +252,10 @@ const recetaConExtrasParaVista = computed(() => {
         const valorKilos = kilosEstearato.value.toFixed(2);
         recetaLimpia.push({
             id: 'estearato-fijo', materiaPrimaId: est.id, nombreInsumo: `🧪 ${est.nombre}`,
-            densidad: est.pesoEspecifico || 1, esEstearato: true, cantidad: valorKilos, kilosFijos: valorKilos,
-            extrusoraDestino: tolvaMasa // 🚀 Va a la Masa (B) o Única
+            densidad: est.pesoEspecifico || 1, esEstearato: true, 
+            cantidad: 0.08, 
+            kilosFijos: valorKilos,
+            extrusoraDestino: tolvaMasa
         });
     }
     
@@ -182,11 +263,14 @@ const recetaConExtrasParaVista = computed(() => {
         const keywordBrillo = form.value.tipoBrillo === '555' ? '555' : '777';
         let mpBrillo = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes(`BRILLO ${keywordBrillo}`)) || listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('BRILLO'));
         if (mpBrillo) {
-            const kilosAditivo = ((kilosBase * form.value.porcBrillo) / 100).toFixed(2);
+            const baseParaBrillo = tolvaCapa === 'A' ? kilosCapaA : kilosBase;
+            const kilosAditivo = ((baseParaBrillo * form.value.porcBrillo) / 100).toFixed(2);
             recetaLimpia.push({
-                id: 'brillo-fijo', materiaPrimaId: mpBrillo.id, nombreInsumo: `✨ ${mpBrillo.nombre} (${form.value.porcBrillo}%)`,
-                densidad: mpBrillo.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo,
-                extrusoraDestino: tolvaCapa // 🚀 Va a la Capa (A) o Única
+                id: 'brillo-fijo', materiaPrimaId: mpBrillo.id, nombreInsumo: `✨ ${mpBrillo.nombre}`,
+                densidad: mpBrillo.pesoEspecifico || 1, 
+                cantidad: form.value.porcBrillo,
+                kilosFijos: kilosAditivo,
+                extrusoraDestino: tolvaCapa
             });
         }
     }
@@ -194,11 +278,14 @@ const recetaConExtrasParaVista = computed(() => {
     if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
         const mpUV = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('UV'));
         if (mpUV) {
-            const kilosAditivo = ((kilosBase * form.value.porcentajeUv) / 100).toFixed(2);
+            const baseParaUv = tolvaCapa === 'A' ? kilosCapaA : kilosBase;
+            const kilosAditivo = ((baseParaUv * form.value.porcentajeUv) / 100).toFixed(2);
             recetaLimpia.push({
-                id: 'uv-fijo', materiaPrimaId: mpUV.id, nombreInsumo: `☀️ ${mpUV.nombre} (${form.value.porcentajeUv}%)`,
-                densidad: mpUV.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo,
-                extrusoraDestino: tolvaCapa // 🚀 Va a la Capa (A) o Única
+                id: 'uv-fijo', materiaPrimaId: mpUV.id, nombreInsumo: `☀️ ${mpUV.nombre}`,
+                densidad: mpUV.pesoEspecifico || 1, 
+                cantidad: form.value.porcentajeUv,
+                kilosFijos: kilosAditivo,
+                extrusoraDestino: tolvaCapa
             });
         }
     }
@@ -206,20 +293,21 @@ const recetaConExtrasParaVista = computed(() => {
     if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
         const mpCaucho = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('CAUCHO'));
         if (mpCaucho) {
-            const kilosAditivo = ((kilosBase * form.value.porcentajeCaucho) / 100).toFixed(2);
+            const baseParaCaucho = tolvaMasa === 'B' ? kilosMasaB : kilosBase;
+            const kilosAditivo = ((baseParaCaucho * form.value.porcentajeCaucho) / 100).toFixed(2);
             recetaLimpia.push({
-                id: 'caucho-fijo', materiaPrimaId: mpCaucho.id, nombreInsumo: `🚜 ${mpCaucho.nombre} (${form.value.porcentajeCaucho}%)`,
-                densidad: mpCaucho.pesoEspecifico || 1, cantidad: kilosAditivo, kilosFijos: kilosAditivo,
-                extrusoraDestino: tolvaMasa // 🚀 Va a la Masa (B) o Única
+                id: 'caucho-fijo', materiaPrimaId: mpCaucho.id, nombreInsumo: `🚜 ${mpCaucho.nombre}`,
+                densidad: mpCaucho.pesoEspecifico || 1, 
+                cantidad: form.value.porcentajeCaucho,
+                kilosFijos: kilosAditivo,
+                extrusoraDestino: tolvaMasa
             });
         }
     }
 
     return recetaLimpia.map(r => {
-        let c = r.cantidad;
-        let k = r.kilosFijos;
-        if (c !== undefined && c !== null && c !== "") c = Number(c).toFixed(2); else c = "0.00";
-        if (k !== undefined && k !== null && k !== "") k = Number(k).toFixed(2);
+        let c = Number(r.cantidad || 0).toFixed(2);
+        let k = Number(r.kilosFijos || 0).toFixed(2);
         return { ...r, cantidad: c, kilosFijos: k };
     });
 });
@@ -297,23 +385,42 @@ async function CargarDatosProductos(id: number) {
         const prod = await ProduccionAPI.obtenerProductoPorId(id);
 
         if (prod.receta && Array.isArray(prod.receta) && prod.receta.length > 0) {
+            
+            const tieneA = prod.receta.some((r: any) => (r.extrusoraDestino || 'UNICA') === 'A');
+            const tieneB = prod.receta.some((r: any) => (r.extrusoraDestino || 'UNICA') === 'B');
+            const tieneC = prod.receta.some((r: any) => (r.extrusoraDestino || 'UNICA') === 'C');
+
+            if (tieneA && tieneB && !tieneC) {
+                form.value.porcentajeTolvaA = 20;
+                form.value.porcentajeTolvaB = 80;
+                form.value.porcentajeTolvaC = 0;
+            } else if (tieneA && tieneB && tieneC) {
+                form.value.porcentajeTolvaA = 10;
+                form.value.porcentajeTolvaB = 80;
+                form.value.porcentajeTolvaC = 10;
+            } else {
+                form.value.porcentajeTolvaA = 100;
+                form.value.porcentajeTolvaB = 0;
+                form.value.porcentajeTolvaC = 0;
+            }
+
             recetaDinamica.value = prod.receta.map((r: any) => {
                 const mpId = r.materiaPrimaId || r.id;
                 const mp = listaTodasMateriasPrimas.value.find(m => m.id === mpId) || 
                            listaInventarioCompleto.value.find(m => m.id === mpId);
                 
                 const idDuenioReal = mp ? Number(mp.clienteId || mp.ClienteId || 0) : Number(r.clienteId || 0);
+                const destino = r.extrusoraDestino || r.ExtrusoraDestino || 'UNICA';
 
                 return {
                     id: r.id || Math.random(),
                     materiaPrimaId: mpId,
-                    nombreInsumo: r.nombreInsumo || r.nombreMateriaPrima || r.nombre,
-                    cantidad: r.cantidad || r.porcentaje || 0,
+                    nombreInsumo: r.nombreInsumo || r.nombreMateriaPrima || mp?.nombre,
+                    cantidad: Number(r.cantidad || r.porcentaje || 0).toFixed(2),
                     densidad: r.densidad || r.pesoEspecifico || 1.1,
                     esBase: r.esBase || false,
                     clienteId: idDuenioReal,
-                    // 🚀 ESTA ES LA PIEZA CLAVE DE LAS EXTRUSORAS:
-                    extrusoraDestino: r.extrusoraDestino || r.ExtrusoraDestino || 'UNICA'
+                    extrusoraDestino: destino
                 };
             });
             
@@ -343,6 +450,20 @@ async function CargarDatosProductos(id: number) {
 
 watch(mostrarCajaColor, (v) => {
     if (!v) form.value.masterbatchId = '';
+});
+
+watch(() => form.value.porcentajeTolvaA, (newVal) => {
+    if (!usaCoextrusionCalculado.value || imprimiendoHistorial.value) return;
+    const a = Number(newVal) || 0;
+    const c = Number(form.value.porcentajeTolvaC) || 0;
+    form.value.porcentajeTolvaB = Math.max(0, 100 - a - c);
+});
+
+watch(() => form.value.porcentajeTolvaC, (newVal) => {
+    if (!usaCoextrusionCalculado.value || imprimiendoHistorial.value) return;
+    const c = Number(newVal) || 0;
+    const a = Number(form.value.porcentajeTolvaA) || 0;
+    form.value.porcentajeTolvaB = Math.max(0, 100 - a - c);
 });
 
 const cargarLotesFazonSeguro = async () => {
@@ -392,6 +513,7 @@ watch(() => listaInventarioCompleto.value?.length, (nuevoLargo) => {
     }
 });
 
+// 🚀 ESCUDO CONTRA EL BUCLE INFINITO
 watch(
     [
         () => form.value.masterbatchId, () => form.value.aditivoCarga, 
@@ -400,7 +522,10 @@ watch(
         () => form.value.aditivoCaucho, () => form.value.porcentajeCaucho,
         () => form.value.conBrillo, () => form.value.tipoBrillo
     ],
-    recalcularFormulaAutomatica
+    () => {
+        if (imprimiendoHistorial.value || mutandoParaGuardar.value) return;
+        recalcularFormulaAutomatica();
+    }
 );
 
 watch(() => form.value.espesor, (v) => { if (v < 1) form.value.conBrillo = false; });
@@ -450,14 +575,12 @@ watch(
     { immediate: true }
 );
 
-// 🚀 WATCHER RECARGADO: Reacciona al peso Y al cambio de cliente
 watch(
     [() => form.value.kilosTotales, () => form.value.clienteId], 
     ([kilos]) => {
         const cliente = clienteSeleccionado.value;
-        const limite = (cliente && (cliente.limiteKilosPallet || cliente.LimiteKilosPallet) > 0) 
-                        ? Number(cliente.limiteKilosPallet || cliente.LimiteKilosPallet) 
-                        : 1000;
+        const limiteVal = cliente?.limiteKilosPallet || cliente?.LimiteKilosPallet;
+        const limite = (limiteVal && Number(limiteVal) > 0) ? Number(limiteVal) : 1000;
                         
         if (Number(kilos) > limite) {
             cantidadPalletsUsuario.value = Math.ceil(Number(kilos) / limite);
@@ -509,11 +632,12 @@ const procesarGuardado = async () => {
     if (guardando.value) return; 
     error.value = ''; 
     mostrarOpcionMismoPedido.value = false; 
+    
+    mutandoParaGuardar.value = true;
 
     const copiaProfundaOriginal = JSON.parse(JSON.stringify(recetaDinamica.value));
     
-    // 🚀 AL GUARDAR TAMBIÉN RESPETAMOS LA COEXTRUSIÓN
-    const usaCoextrusion = recetaDinamica.value.some(r => r.extrusoraDestino === 'A' || r.extrusoraDestino === 'B');
+    const usaCoextrusion = usaCoextrusionCalculado.value;
     const tolvaCapa = usaCoextrusion ? 'A' : 'UNICA';
     const tolvaMasa = usaCoextrusion ? 'B' : 'UNICA';
 
@@ -545,6 +669,20 @@ const procesarGuardado = async () => {
         form.value.colorTexto = '';
     }
 
+    if (usaCoextrusion) {
+        recetaDinamica.value.forEach(item => {
+            const destino = item.extrusoraDestino || 'UNICA';
+            let factor = 1;
+            if (destino === 'A') factor = form.value.porcentajeTolvaA / 100;
+            if (destino === 'B') factor = form.value.porcentajeTolvaB / 100;
+            if (destino === 'C') factor = form.value.porcentajeTolvaC / 100;
+            
+            if (item.cantidad !== undefined) {
+                item.cantidad = (Number(item.cantidad) * factor).toFixed(2);
+            }
+        });
+    }
+
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
     if (est && !recetaDinamica.value.some(r => r.materiaPrimaId === est.id)) {
         recetaDinamica.value.push({
@@ -554,7 +692,7 @@ const procesarGuardado = async () => {
             cantidad: Number((kilosEstearato.value / (form.value.kilosTotales > 0 ? form.value.kilosTotales : 1) * 100).toFixed(2)), 
             densidad: est.pesoEspecifico || 1,
             esEstearato: true,
-            extrusoraDestino: tolvaMasa // 🚀
+            extrusoraDestino: tolvaMasa
         });
     }
 
@@ -564,13 +702,15 @@ const procesarGuardado = async () => {
                     || listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('BRILLO'));
         
         if (mpBrillo) {
+            const factor = tolvaCapa === 'A' ? (form.value.porcentajeTolvaA / 100) : 1;
+            const cantidadGlobal = (Number(form.value.porcBrillo) * factor).toFixed(2);
             recetaDinamica.value.push({
                 id: 0,
                 materiaPrimaId: mpBrillo.id,
                 nombreInsumo: mpBrillo.nombre,
-                cantidad: Number(form.value.porcBrillo).toFixed(2),
+                cantidad: cantidadGlobal,
                 densidad: mpBrillo.pesoEspecifico || 1,
-                extrusoraDestino: tolvaCapa // 🚀
+                extrusoraDestino: tolvaCapa
             });
         }
     }
@@ -578,13 +718,15 @@ const procesarGuardado = async () => {
     if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
         const mpUV = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('UV'));
         if (mpUV) {
+            const factor = tolvaCapa === 'A' ? (form.value.porcentajeTolvaA / 100) : 1;
+            const cantidadGlobal = (Number(form.value.porcentajeUv) * factor).toFixed(2);
             recetaDinamica.value.push({
                 id: 0, 
                 materiaPrimaId: mpUV.id, 
                 nombreInsumo: mpUV.nombre,
-                cantidad: Number(form.value.porcentajeUv).toFixed(2),
+                cantidad: cantidadGlobal,
                 densidad: mpUV.pesoEspecifico || 1,
-                extrusoraDestino: tolvaCapa // 🚀
+                extrusoraDestino: tolvaCapa
             });
         }
     }
@@ -592,13 +734,15 @@ const procesarGuardado = async () => {
     if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
         const mpCaucho = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('CAUCHO'));
         if (mpCaucho) {
+            const factor = tolvaMasa === 'B' ? (form.value.porcentajeTolvaB / 100) : 1;
+            const cantidadGlobal = (Number(form.value.porcentajeCaucho) * factor).toFixed(2);
             recetaDinamica.value.push({
                 id: 0, 
                 materiaPrimaId: mpCaucho.id, 
                 nombreInsumo: mpCaucho.nombre,
-                cantidad: Number(form.value.porcentajeCaucho).toFixed(2),
+                cantidad: cantidadGlobal,
                 densidad: mpCaucho.pesoEspecifico || 1,
-                extrusoraDestino: tolvaMasa // 🚀
+                extrusoraDestino: tolvaMasa
             });
         }
     }
@@ -610,7 +754,9 @@ const procesarGuardado = async () => {
     };
 
     await registrarProduccion();
+    
     recetaDinamica.value = copiaProfundaOriginal;
+    mutandoParaGuardar.value = false;
 
     if (!error.value) {
         mostrarOpcionMismoPedido.value = true;
@@ -643,7 +789,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     :receta="recetaConExtrasParaVista" 
                     :colorFinal="colorFinalParaPDF" 
                     :densidad="densidadPT" 
-                    :totalPorcentaje="porcentajeSoloBase" 
+                    :totalPorcentaje="100" 
                     :materiasPrimas="listaTodasMateriasPrimas" 
                     :ocultarFormula="ocultarFormula" 
                     :tipoSalidaVisual="tipoSalidaVisual"
@@ -707,6 +853,26 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     {{ p.esFazon ? '★ ' : '' }}{{ p.nombre }} {{ p.esGenerico ? '(A Medida)' : (p.esFazon ? '(Fazón)' : '(Estándar)') }}
                 </option>
             </select>
+
+            <!-- 🚀 REPARTICIÓN AUTOMÁTICA DE PORCENTAJES A, B y C -->
+            <div v-if="usaCoextrusionCalculado" class="fila-input" style="margin-top: 15px; border-top: 1px dashed #7f8c8d; padding-top: 10px; background: #e8f4f8; padding: 10px; border-radius: 6px; border: 1px solid #bde0fe; flex-wrap: wrap;">
+                <div style="flex:1; min-width: 80px;" v-if="porcentajesPorTolva.A > 0 || form.porcentajeTolvaA > 0">
+                    <label style="color:#2980b9; font-weight: bold; margin-top: 0;">🟦 Capa A (%)</label>
+                    <input type="number" v-model="form.porcentajeTolvaA" min="1" max="99" @wheel.prevent style="font-weight:bold; color:#2980b9; border: 1px solid #3498db;" />
+                </div>
+                <div style="flex:1; min-width: 80px;" v-if="porcentajesPorTolva.B > 0 || form.porcentajeTolvaB > 0">
+                    <label style="color:#27ae60; font-weight: bold; margin-top: 0;">🟩 Masa B (%)</label>
+                    <input type="number" v-model="form.porcentajeTolvaB" disabled style="font-weight:bold; background:#eafaf1; color:#27ae60; border: 1px solid #2ecc71;" />
+                </div>
+                <div style="flex:1; min-width: 80px;" v-if="porcentajesPorTolva.C > 0 || form.porcentajeTolvaC > 0">
+                    <label style="color:#d97706; font-weight: bold; margin-top: 0;">🟨 Capa C (%)</label>
+                    <input type="number" v-model="form.porcentajeTolvaC" min="1" max="99" @wheel.prevent style="font-weight:bold; color:#d97706; border: 1px solid #f59e0b;" />
+                </div>
+                
+                <div v-if="usaCoextrusionCalculado && (form.porcentajeTolvaA + form.porcentajeTolvaB + form.porcentajeTolvaC) !== 100" class="text-error" style="width: 100%; font-size: 11px; margin-top: 4px;">
+                    ⚠️ Las tolvas suman {{ form.porcentajeTolvaA + form.porcentajeTolvaB + form.porcentajeTolvaC }}%. Deben sumar 100%.
+                </div>
+            </div>
 
             <div v-if="form.productoTerminadoId" class="caja-detalles-producto">
                 
@@ -827,7 +993,6 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 <div class="resumen-peso">
                     Peso Final: {{ form.kilosTotales }} Kg <small style="color:#bbb; display:block;">(Consumo Real MP +8%)</small>
                     
-                    <!-- 🚀 TESTIGO VISUAL DEL CORTE DE PALLET -->
                     <div v-if="cantidadPalletsUsuario > 1" style="color:#3498db; margin-top: 8px; font-weight: bold; background: #ebf5fb; padding: 5px; border-radius: 4px; font-size: 12px; border-left: 3px solid #3498db; text-align: left;">
                         📦 Se dividirá en {{ cantidadPalletsUsuario }} pallets internos <br>
                         <span style="color:#7f8c8d; font-size: 10px;">(Límite de este cliente: {{ clienteSeleccionado?.limiteKilosPallet || clienteSeleccionado?.LimiteKilosPallet || 1000 }} kg)</span>
@@ -937,8 +1102,8 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 </div>
             </div>
             
-            <div v-if="Math.abs(porcentajeSoloBase - 100) > 0.5 && recetaDinamica.length > 0" class="alerta-error">
-                ⚠️ La Base Principal suma {{ porcentajeSoloBase }}%.<br>Debe sumar exactamente 100%.
+            <div v-if="errorBasePorcentaje && recetaDinamica.length > 0" class="alerta-error">
+                ⚠️ {{ errorBasePorcentaje }}
             </div>
             
             <div v-if="hayBloqueoDeStock" class="alerta-stock-warning">
@@ -954,14 +1119,15 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
             <button 
                 class="btn-guardar" 
                 @click="procesarGuardado" 
-                :disabled="guardando || loading || form.clienteId === '' || !form.productoTerminadoId || !espesorValido || Math.abs(porcentajeSoloBase - 100) > 0.5" 
+                :disabled="guardando || loading || form.clienteId === '' || !form.productoTerminadoId || !espesorValido || !!errorBasePorcentaje || (usaCoextrusionCalculado && (form.porcentajeTolvaA + form.porcentajeTolvaB + form.porcentajeTolvaC) !== 100)" 
                 :class="{ 'btn-warning': hayBloqueoDeStock && form.clienteId !== '' && form.productoTerminadoId && espesorValido }"
             >
                 <span v-if="guardando">⏳ GUARDANDO ORDEN...</span>
                 <span v-else-if="loading">⏳ PROCESANDO...</span>
                 <span v-else-if="form.clienteId === '' || !form.productoTerminadoId">🚫 SELECCIONE CLIENTE Y PRODUCTO</span>
                 <span v-else-if="!espesorValido">🚫 ERROR: ESPESOR FUERA DE RANGO</span>
-                <span v-else-if="Math.abs(porcentajeSoloBase - 100) > 0.5">🚫 LA BASE DEBE SUMAR 100%</span>
+                <span v-else-if="!!errorBasePorcentaje">🚫 ERROR EN PORCENTAJES DE MEZCLA</span>
+                <span v-else-if="usaCoextrusionCalculado && (form.porcentajeTolvaA + form.porcentajeTolvaB + form.porcentajeTolvaC) !== 100">🚫 LAS TOLVAS DEBEN SUMAR 100%</span>
                 <span v-else-if="hayBloqueoDeStock">💾 GUARDAR PENDIENTE (FALTA STOCK)</span>
                 <span v-else>💾 GUARDAR ORDEN LISTA</span>
             </button>
@@ -1001,7 +1167,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
             :receta="recetaConExtrasParaVista" 
             :colorFinal="colorFinalParaPDF" 
             :densidad="densidadPT" 
-            :totalPorcentaje="porcentajeSoloBase" 
+            :totalPorcentaje="100" 
             :materiasPrimas="listaTodasMateriasPrimas" 
             :ocultarFormula="ocultarFormula" 
             :tipoSalidaVisual="tipoSalidaVisual"
@@ -1011,6 +1177,7 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
 </template>
 
 <style scoped>
+/* CSS Idéntico - No se toca */
 .contenedor-principal-produccion { display: flex; flex-direction: column; width: 100%; min-height: 100vh; font-family: 'Segoe UI', sans-serif; background-color: #ecf0f1; }
 .bloque-superior { display: flex; width: 100%; flex-wrap: wrap; }
 .panel-izquierdo { flex: 1; background-color: #e0e6ed; display: flex; justify-content: center; align-items: flex-start; padding: 20px; border-right: 1px solid #bdc3c7; overflow: hidden; min-width: 400px; }

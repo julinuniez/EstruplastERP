@@ -22,7 +22,6 @@ export function useImpresionProduccion(
 
     const determinarDuenioMaterial = (idInsumo: number, insumoHistorial: any) => {
         const mpMaestra = inventarioCompleto.value?.find(m => Number(m.id) === idInsumo);
-        
         if (mpMaestra) {
             const esFazon = mpMaestra.esFazon === true || mpMaestra.EsFazon === true;
             return esFazon ? Number(mpMaestra.clienteId || mpMaestra.ClienteId || 0) : 0;
@@ -48,7 +47,6 @@ export function useImpresionProduccion(
         return pallets;
     }
 
-    // 🚀 AHORA LE PASAMOS EL LÍMITE AL GENERADOR DE PDF
     async function generarPDF(tipo: 'orden' | 'carga' | 'carga-consolidada', limiteKilosCliente: number = 1000) {
         const tipoLimpio = String(tipo).trim().toLowerCase();
         ocultarFormula.value = (tipoLimpio === 'orden');
@@ -69,7 +67,6 @@ export function useImpresionProduccion(
             jsPDF: { unit: 'mm', format: 'a4' }
         };
 
-        // 🚀 USAMOS EL LÍMITE DEL CLIENTE EN LUGAR DE 1000
         if (tipoLimpio === 'orden' && form.value.kilosTotales > limiteKilosCliente && cantidadPalletsUsuario.value > 1) {
             const tickets = calcularEtiquetasPallets(form.value.kilosTotales, form.value.cantidad, cantidadPalletsUsuario.value);
             const originalKilos = form.value.kilosTotales;
@@ -136,8 +133,6 @@ export function useImpresionProduccion(
         }
 
         let tipoLimpio = String(tipo).trim().toLowerCase();
-        
-        // 🚀 ATRAPAMOS EL LÍMITE (Si viene nulo, asume 1000)
         const limiteKilos = Number(orden?.limiteKilosPallet || orden?.LimiteKilosPallet || 1000);
 
         try {
@@ -179,36 +174,82 @@ export function useImpresionProduccion(
                 forzarModoCarga ||
                 form.value.esConsolidado ||
                 String(orden?.producto || '').toUpperCase().includes('CONSOLIDADA') ||
-                String(orden?.producto || '').toUpperCase().includes('MEZCLA') ||
-                String(orden?.observacion || '').toUpperCase().includes('CONSOLIDADA') ||
-                String(orden?.observacion || '').toUpperCase().includes('MEZCLA') ||
-                String(form.value?.productoNombre || '').toUpperCase().includes('CONSOLIDADA') ||
-                String(form.value?.productoNombre || '').toUpperCase().includes('MEZCLA');
+                String(orden?.producto || '').toUpperCase().includes('MEZCLA');
 
             if (esHojaCargaOMezlca) {
                 tipoLimpio = (form.value.esConsolidado || String(orden?.producto || '').toUpperCase().includes('CONSOLIDADA')) ? 'carga-consolidada' : 'carga';
                 ocultarFormula.value = false; 
             }
 
+            const esKilosFijos = orden.esFinalizada || String(orden.estado).toUpperCase() === 'FINALIZADA' || orden.kilosYaCalculados;
+
+            // 🚀 DEDUCIMOS LOS PORCENTAJES REALES DE LAS TOLVAS DESDE LA BASE DE DATOS
+            let pesoA = 0; let pesoB = 0; let pesoC = 0; let pesoTotalPuros = 0;
+
+            orden.consumos.forEach((c: any) => {
+                const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
+                const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
+                
+                // 🚀 MATEMÁTICA CORRECTA: Si es pendiente (aún no se consumió en stock físico), le agregamos la merma al peso neto.
+                let kilos = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
+                const n = String(c.nombreMateriaPrima || c.nombreInsumo || '').toUpperCase();
+                const esAditivo = n.includes('ESTEARATO') || n.includes('BRILLO') || n.includes('UV') || n.includes('CAUCHO');
+                
+                if (!esAditivo) {
+                    if (destino === 'A') pesoA += kilos;
+                    else if (destino === 'B') pesoB += kilos;
+                    else if (destino === 'C') pesoC += kilos;
+                    pesoTotalPuros += kilos;
+                }
+            });
+
+            if (pesoTotalPuros > 0) {
+                form.value.porcentajeTolvaA = Math.round((pesoA / pesoTotalPuros) * 100);
+                form.value.porcentajeTolvaB = Math.round((pesoB / pesoTotalPuros) * 100);
+                form.value.porcentajeTolvaC = Math.round((pesoC / pesoTotalPuros) * 100);
+            } else {
+                form.value.porcentajeTolvaA = 100; form.value.porcentajeTolvaB = 0; form.value.porcentajeTolvaC = 0;
+            }
+
             recetaDinamica.value = orden.consumos.map((c: any) => {
                 const idBuscado = Number(c.materiaPrimaId || c.id);
+                const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
+                const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
+                
+                // 🚀 MATEMÁTICA CORRECTA
+                const kilosFisicosReales = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
+
+                let pesoDeEstaTolva = pesoTotalPuros;
+                if (destino === 'A') pesoDeEstaTolva = pesoA;
+                if (destino === 'B') pesoDeEstaTolva = pesoB;
+                if (destino === 'C') pesoDeEstaTolva = pesoC;
+
+                const n = String(c.nombreMateriaPrima || c.nombreInsumo || '').toUpperCase();
+                const esAditivo = n.includes('ESTEARATO') || n.includes('BRILLO') || n.includes('UV') || n.includes('CAUCHO');
+
+                let porcentajeLocal = 0;
+                if (esAditivo || esHojaCargaOMezlca) {
+                    porcentajeLocal = pesoBrutoTotal > 0 ? (kilosFisicosReales / pesoBrutoTotal) * 100 : 0;
+                } else {
+                    porcentajeLocal = pesoDeEstaTolva > 0 ? (kilosFisicosReales / pesoDeEstaTolva) * 100 : 0;
+                }
+
                 return {
                     id: Math.random(),
                     materiaPrimaId: idBuscado,
                     nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo,
-                    cantidad: (tipoLimpio === 'carga-consolidada') ? c.cantidadKilos : Number(((c.cantidadKilos / pesoBrutoTotal) * 100).toFixed(2)),
+                    cantidad: porcentajeLocal.toFixed(2), 
+                    kilosFijos: kilosFisicosReales.toFixed(2), 
                     clienteId: determinarDuenioMaterial(idBuscado, c),
-                    extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
+                    extrusoraDestino: destino
                 };
             });
 
             if (!form.value.esConsolidado && typeof balancearBase === 'function') balancearBase();
 
-            // 🚀 USAMOS LA VARIABLE limiteKilos EN VEZ DE 1000
             const debaPreguntarPallets = !esHojaCargaOMezlca && tipoLimpio === 'orden' && Number(orden?.kilos || 0) > limiteKilos;
 
             if (debaPreguntarPallets) {
-                // 🚀 CALCULAMOS LA SUGERENCIA DE PALLETS EN BASE AL LÍMITE REAL
                 const palletsSugeridos = Math.ceil(Number(orden.kilos) / limiteKilos);
                 
                 const result = await Swal.fire({
@@ -238,7 +279,6 @@ export function useImpresionProduccion(
                 cantidadPalletsUsuario.value = 1;
             }
 
-            // 🚀 LE PASAMOS EL LÍMITE AL GENERADOR PARA QUE NO FALLE
             await generarPDF(tipoLimpio as any, limiteKilos);
 
             if (tipoLimpio === 'orden') {
@@ -294,15 +334,23 @@ export function useImpresionProduccion(
                 
                 const desp = Number(orden.desperdicio || 0);
                 const pesoBrutoTotal = orden.kilos * (1 + (desp / 100));
+                const esKilosFijos = orden.esFinalizada || String(orden.estado).toUpperCase() === 'FINALIZADA' || orden.kilosYaCalculados;
 
                 if (orden.consumos) {
                     recetaDinamica.value = orden.consumos.map((c: any) => {
                         const idBuscado = Number(c.materiaPrimaId || c.id);
+                        const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
+                        
+                        // 🚀 MATEMÁTICA CORRECTA PARA LOS LOTES
+                        const kilosFisicosReales = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
+                        const porcentajeVisible = pesoBrutoTotal > 0 ? (kilosFisicosReales / pesoBrutoTotal) * 100 : 0;
+                        
                         return {
                             id: Math.random(),
                             materiaPrimaId: idBuscado,
                             nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo,
-                            cantidad: ((c.cantidadKilos / pesoBrutoTotal) * 100).toFixed(2),
+                            cantidad: porcentajeVisible.toFixed(2),
+                            kilosFijos: kilosFisicosReales.toFixed(2), 
                             clienteId: determinarDuenioMaterial(idBuscado, c),
                             extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
                         };

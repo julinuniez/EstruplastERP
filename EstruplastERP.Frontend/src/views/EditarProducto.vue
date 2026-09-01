@@ -28,14 +28,77 @@ const producto = ref({
 
 const ingredienteSeleccionado = ref('');
 const cantidadIngrediente = ref('');
+const extrusoraIngrediente = ref('A'); // 🚀 DESTINO PARA EL INGREDIENTE MANUAL
 const mostrarCalculadora = ref(false);
 const calcPorcentajeCapa = ref(20);
 const calcPorcentajeInterno = ref(99.92);
+const calcDestinoCalculadora = ref('A'); // 🚀 DESTINO DESDE LA CALCULADORA
 
-const totalPorcentaje = computed(() => {
-    if (!producto.value.receta) return 0;
-    const suma = producto.value.receta.reduce((acc, item) => acc + Number(item.cantidad), 0);
-    return Math.round(suma * 10000) / 10000;
+// 🚀 AHORA LA LÓGICA DE VALIDACIÓN SEPARA POR TOLVAS
+const porcentajesPorTolva = computed(() => {
+    let sumas = { UNICA: 0, A: 0, B: 0 };
+    let tieneCoextrusion = false;
+
+    if (!producto.value.receta) return { A: 0, B: 0, UNICA: 0, usaCoextrusion: false };
+
+    producto.value.receta.forEach((r) => {
+        const cantidad = Number(r.cantidad) || 0;
+        const destino = r.extrusoraDestino || 'UNICA';
+        
+        if (destino === 'A' || destino === 'B') tieneCoextrusion = true;
+
+        if (destino === 'A') sumas.A += cantidad;
+        else if (destino === 'B') sumas.B += cantidad;
+        else sumas.UNICA += cantidad;
+    });
+
+    return {
+        A: Math.round(sumas.A * 10000) / 10000,
+        B: Math.round(sumas.B * 10000) / 10000,
+        UNICA: Math.round(sumas.UNICA * 10000) / 10000,
+        usaCoextrusion: tieneCoextrusion
+    };
+});
+
+// 🚀 VERIFICA SI HAY ALGÚN ERROR EN ALGUNA TOLVA
+const errorBasePorcentaje = computed(() => {
+    const p = porcentajesPorTolva.value;
+    if (p.usaCoextrusion) {
+        const errA = p.A > 0 && Math.abs(p.A - 100) > 0.05;
+        const errB = p.B > 0 && Math.abs(p.B - 100) > 0.05;
+        
+        if (errA || errB) {
+            let msj = [];
+            if (errA) msj.push(`Tolva A (${p.A}%)`);
+            if (errB) msj.push(`Tolva B (${p.B}%)`);
+            return `Error de mezcla: ${msj.join(' y ')}. Cada tolva usada debe sumar 100%.`;
+        }
+        return null;
+    } else {
+        if (Math.abs(p.UNICA - 100) > 0.05 && producto.value.receta.length > 0) {
+            return `La mezcla única suma ${p.UNICA}%. Debe sumar exactamente 100%.`;
+        }
+        return null;
+    }
+});
+
+// 🚀 AGRUPADOR VISUAL PARA LAS TABLAS SEPARADAS
+const gruposRecetaVisual = computed(() => {
+    const grupos = {
+        A: { titulo: '🟦 EXTRUSORA A (Capa Externa)', items: [] },
+        B: { titulo: '🟩 EXTRUSORA B (Masa Interna)', items: [] },
+        UNICA: { titulo: '⚙️ MEZCLA ÚNICA (General)', items: [] }
+    };
+
+    producto.value.receta.forEach((item, index) => {
+        const dest = item.extrusoraDestino || 'UNICA';
+        // Guardamos el item y su index original para que el botón "Eliminar" funcione bien
+        if (dest === 'A') grupos.A.items.push({ item, index });
+        else if (dest === 'B') grupos.B.items.push({ item, index });
+        else grupos.UNICA.items.push({ item, index });
+    });
+
+    return grupos;
 });
 
 const porcentajeProyectado = computed(() => {
@@ -50,7 +113,9 @@ const faltaRubro = computed(() => producto.value.esMateriaPrima && !producto.val
 const puedeGuardar = computed(() => {
     if (guardando.value) return false;
     if (producto.value.esMateriaPrima && (faltaPrecioCosto.value || faltaRubro.value)) return false;
-    if (producto.value.esProductoTerminado) return totalPorcentaje.value === 100;
+    if (producto.value.esProductoTerminado && producto.value.receta.length > 0) {
+        return errorBasePorcentaje.value === null; 
+    }
     return true; 
 });
 
@@ -83,10 +148,9 @@ onMounted(async () => {
         producto.value.rubro = resProd.data.rubro || resProd.data.Rubro || '';
         producto.value.precioCosto = resProd.data.precioCosto || resProd.data.PrecioCosto || 0;
 
-        // 🚀 ASEGURAR QUE LAS RECETAS VIEJAS TENGAN EL CAMPO EXTRUSORA
         producto.value.receta = producto.value.receta.map(r => ({
             ...r,
-            extrusoraDestino: r.extrusoraDestino || 'A' // Valor por defecto si no lo tienen
+            extrusoraDestino: r.extrusoraDestino || 'UNICA' 
         }));
 
         const resTodos = await api.get('/Productos');
@@ -105,17 +169,18 @@ onMounted(async () => {
     }
 });
 
-const procesarIngresoIngrediente = (idInsumo, cantidadAingresar) => {
+const procesarIngresoIngrediente = (idInsumo, cantidadAingresar, tolvaDestino) => {
     if (!idInsumo) return Alertas.advertencia("Seleccione un insumo.");
     const cantidad = Number(cantidadAingresar);
     if (!cantidad || cantidad <= 0) return Alertas.advertencia("Ingrese un porcentaje válido.");
 
-    if (totalPorcentaje.value + cantidad > 100) {
-        return Alertas.advertencia(`⚠️ No puedes agregar ${cantidad}%. El total superaría el 100% (Actual: ${totalPorcentaje.value}%).`);
+    const tolvaActual = porcentajesPorTolva.value[tolvaDestino] || 0;
+    if (tolvaActual + cantidad > 100.05) {
+        return Alertas.advertencia(`⚠️ No puedes agregar ${cantidad}% a la Tolva ${tolvaDestino}. Superaría el 100% (Actual: ${tolvaActual}%).`);
     }
 
     const mpInfo = listaMateriasPrimas.value.find(m => m.id === idInsumo);
-    const existe = producto.value.receta.find(r => r.materiaPrimaId === idInsumo);
+    const existe = producto.value.receta.find(r => r.materiaPrimaId === idInsumo && r.extrusoraDestino === tolvaDestino);
     
     if (existe) {
         existe.cantidad = Math.round((Number(existe.cantidad) + cantidad) * 10000) / 10000;
@@ -124,19 +189,19 @@ const procesarIngresoIngrediente = (idInsumo, cantidadAingresar) => {
             materiaPrimaId: idInsumo,
             nombreInsumo: mpInfo.nombre || mpInfo.Nombre,
             cantidad: Math.round(cantidad * 10000) / 10000,
-            extrusoraDestino: 'A' // 🚀 VALOR POR DEFECTO PARA INSUMOS NUEVOS
+            extrusoraDestino: tolvaDestino
         });
     }
 };
 
 const agregarIngredienteSimple = () => {
-    procesarIngresoIngrediente(ingredienteSeleccionado.value, cantidadIngrediente.value);
+    procesarIngresoIngrediente(ingredienteSeleccionado.value, cantidadIngrediente.value, extrusoraIngrediente.value);
     ingredienteSeleccionado.value = '';
     cantidadIngrediente.value = '';
 };
 
 const agregarDesdeCalculadora = () => {
-    procesarIngresoIngrediente(ingredienteSeleccionado.value, porcentajeProyectado.value);
+    procesarIngresoIngrediente(ingredienteSeleccionado.value, porcentajeProyectado.value, calcDestinoCalculadora.value);
     ingredienteSeleccionado.value = '';
     calcPorcentajeInterno.value = '';
 };
@@ -162,8 +227,8 @@ const eliminarProducto = async () => {
 };
 
 const guardarConfiguracion = async () => {
-    if (producto.value.esProductoTerminado && totalPorcentaje.value !== 100) {
-        return Alertas.advertencia(`⚠️ La receta debe sumar exactamente 100%. Actual: ${totalPorcentaje.value}%`);
+    if (producto.value.esProductoTerminado && producto.value.receta.length > 0 && errorBasePorcentaje.value !== null) {
+        return Alertas.advertencia(errorBasePorcentaje.value);
     }
     if (producto.value.esMateriaPrima && (!producto.value.rubro || producto.value.precioCosto <= 0)) {
         return Alertas.advertencia(`⚠️ Por favor complete el Rubro y el Precio de Costo.`);
@@ -183,7 +248,7 @@ const guardarConfiguracion = async () => {
             receta: producto.value.receta.map(item => ({
                 materiaPrimaId: item.materiaPrimaId,
                 cantidad: Number(item.cantidad),
-                extrusoraDestino: item.extrusoraDestino // 🚀 MANDAMOS EL DESTINO AL BACKEND
+                extrusoraDestino: item.extrusoraDestino
             }))
         };
 
@@ -291,12 +356,25 @@ const volver = () => {
 
             <div v-if="producto.esProductoTerminado" class="seccion-box">
                 <div class="header-receta">
-                    <h4>📝 Fórmula (Porcentajes)</h4>
-                    <div class="total-badge" :class="totalPorcentaje === 100 ? 'ok' : 'error'">
-                        Total: {{ totalPorcentaje }}%
+                    <div style="display: flex; flex-direction: column;">
+                        <h4 style="margin-bottom: 5px; border-bottom: none;">📝 Fórmula (Porcentajes)</h4>
+                        
+                        <!-- 🚀 INDICADORES DE TOLVAS INDEPENDIENTES -->
+                        <div style="display: flex; gap: 10px; font-size: 11px;">
+                            <div class="total-badge" :class="porcentajesPorTolva.UNICA === 100 ? 'ok' : 'error'" v-if="!porcentajesPorTolva.usaCoextrusion">
+                                ÚNICA: {{ porcentajesPorTolva.UNICA }}%
+                            </div>
+                            <div class="total-badge" :class="porcentajesPorTolva.A === 100 ? 'ok' : 'error'" v-if="porcentajesPorTolva.usaCoextrusion || porcentajesPorTolva.A > 0">
+                                TOLVA A: {{ porcentajesPorTolva.A }}%
+                            </div>
+                            <div class="total-badge" :class="porcentajesPorTolva.B === 100 ? 'ok' : 'error'" v-if="porcentajesPorTolva.usaCoextrusion || porcentajesPorTolva.B > 0">
+                                TOLVA B: {{ porcentajesPorTolva.B }}%
+                            </div>
+                        </div>
                     </div>
                 </div>
 
+                <!-- 🚀 CONTENEDOR CON FLEX-WRAP PARA QUE NO SE SALGA DE LA PANTALLA -->
                 <div class="buscador-receta">
                     <select v-model="ingredienteSeleccionado" class="select-mp">
                         <option value="" disabled selected>🔍 Seleccionar Insumo Virgen / Master...</option>
@@ -306,6 +384,13 @@ const volver = () => {
                     </select>
                     
                     <input v-if="!mostrarCalculadora" type="number" v-model="cantidadIngrediente" placeholder="%" class="input-cant" min="0" max="100" step="0.0001">
+                    
+                    <select v-if="!mostrarCalculadora" v-model="extrusoraIngrediente" class="input-cant" style="width: 140px;">
+                        <option value="UNICA">Tolva Única</option>
+                        <option value="A">Tolva A (Capa)</option>
+                        <option value="B">Tolva B (Masa)</option>
+                    </select>
+
                     <button v-if="!mostrarCalculadora" @click="agregarIngredienteSimple" class="btn-add">➕</button>
                     
                     <button @click="mostrarCalculadora = !mostrarCalculadora" class="btn-toggle-calc" :title="mostrarCalculadora ? 'Carga Simple' : 'Usar Calculadora de Capas'">
@@ -317,56 +402,77 @@ const volver = () => {
                     <h5>🧮 Calculadora de Capas</h5>
                     <div class="calc-grid">
                         <div class="campo-calc">
-                            <label>1. % de la Capa en la Bobina</label>
+                            <label>1. Destino del Insumo</label>
+                            <select v-model="calcDestinoCalculadora" style="padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; font-weight: bold; color: #2980b9;">
+                                <option value="A">Extrusora A (Capa Externa)</option>
+                                <option value="B">Extrusora B (Masa Interna)</option>
+                                <option value="UNICA">Extrusora Única (General)</option>
+                            </select>
+                        </div>
+                        <div class="campo-calc">
+                            <label>2. % de la Capa en la Bobina</label>
                             <input type="number" v-model="calcPorcentajeCapa" placeholder="Ej: 20">
                         </div>
                         <div class="campo-calc">
-                            <label>2. % del Insumo en esa Capa</label>
+                            <label>3. % del Insumo en esa Capa</label>
                             <input type="number" v-model="calcPorcentajeInterno" placeholder="Ej: 99.92" step="0.0001">
                         </div>
                         <div class="campo-resultado">
-                            <label>Porcentaje Real Resultante:</label>
+                            <label>Porcentaje Real:</label>
                             <div class="resultado-numero">{{ porcentajeProyectado.toFixed(4) }} %</div>
                         </div>
                     </div>
-                    <button @click="agregarDesdeCalculadora" class="btn-add-calc">➕ Agregar Insumo Calculado</button>
+                    <button @click="agregarDesdeCalculadora" class="btn-add-calc">➕ Agregar Insumo a la {{ calcDestinoCalculadora === 'UNICA' ? 'Tolva Única' : 'Tolva ' + calcDestinoCalculadora }}</button>
                 </div>
 
+                <!-- 🚀 NUEVA DISTRIBUCIÓN: TABLAS SEPARADAS POR TOLVA -->
                 <div class="tabla-receta-wrapper">
-                    <table class="tabla-receta">
-                        <thead>
-                            <tr>
-                                <th>Insumo</th>
-                                <!-- 🚀 NUEVA COLUMNA EN LA TABLA VISUAL -->
-                                <th width="200" class="text-center">Tolva / Máquina</th>
-                                <th width="120" class="text-center">Porcentaje</th>
-                                <th width="40"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="(item, index) in producto.receta" :key="index">
-                                <td>{{ item.nombreInsumo }}</td>
-                                
-                                <!-- 🚀 SELECTOR DE DESTINO PARA EL USUARIO -->
-                                <td class="text-center">
-                                    <select v-model="item.extrusoraDestino" class="select-tolva">
-                                        <option value="A">Extrusora A (Capa)</option>
-                                        <option value="B">Extrusora B (Masa)</option>
-                                        <option value="UNICA">Única (General)</option>
-                                    </select>
-                                </td>
+                    <template v-for="(grupo, key) in gruposRecetaVisual" :key="key">
+                        <div v-if="grupo.items.length > 0" class="grupo-tolva-edit">
+                            <div :class="'titulo-tolva-edit tolva-' + key">
+                                <span>{{ grupo.titulo }}</span>
+                                <span>TOTAL: {{ porcentajesPorTolva[key] }}%</span>
+                            </div>
+                            <table class="tabla-receta">
+                                <thead>
+                                    <tr>
+                                        <th>Insumo</th>
+                                        <th width="180" class="text-center">Tolva / Máquina</th>
+                                        <th width="120" class="text-center">Porcentaje</th>
+                                        <th width="40"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="fila in grupo.items" :key="fila.index">
+                                        <td>{{ fila.item.nombreInsumo }}</td>
+                                        
+                                        <td class="text-center">
+                                            <select v-model="fila.item.extrusoraDestino" class="select-tolva">
+                                                <option value="A">Extrusora A (Capa)</option>
+                                                <option value="B">Extrusora B (Masa)</option>
+                                                <option value="UNICA">Única (General)</option>
+                                            </select>
+                                        </td>
 
-                                <td class="text-center font-bold">{{ item.cantidad }} %</td>
-                                <td>
-                                    <button @click="quitarIngrediente(index)" class="btn-x">×</button>
-                                </td>
-                            </tr>
-                            <tr v-if="producto.receta.length === 0">
-                                <td colspan="4" class="text-center text-muted">Aún no hay ingredientes. Agregue materias primas para completar el 100%.</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                                        <td class="text-center font-bold">
+                                            <div style="display: flex; justify-content: center; align-items: center; gap: 4px;">
+                                                <input type="number" step="0.01" min="0" v-model="fila.item.cantidad" class="input-porc-edit"/> %
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <button @click="quitarIngrediente(fila.index)" class="btn-x">×</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                    
+                    <div v-if="producto.receta.length === 0" class="empty-receta">
+                        Aún no hay ingredientes. Agregue materias primas para completar el 100%.
+                    </div>
                 </div>
+
             </div>
 
             <div class="footer-actions">
@@ -380,7 +486,7 @@ const volver = () => {
                     <button @click="guardarConfiguracion" class="btn-guardar" :disabled="!puedeGuardar">
                         <span v-if="guardando">Guardando...</span>
                         <span v-else-if="faltaPrecioCosto || faltaRubro">⚠️ Faltan Datos Obligatorios</span>
-                        <span v-else-if="!puedeGuardar">⚠️ Complete 100%</span>
+                        <span v-else-if="!puedeGuardar">⚠️ Complete 100% por Tolva</span>
                         <span v-else>💾 Guardar Cambios</span>
                     </button>
                 </div>
@@ -423,20 +529,23 @@ const volver = () => {
 .unit { position: absolute; right: 10px; color: #999; }
 .unit-left { position: absolute; left: 12px; color: #27ae60; font-weight: bold; font-size: 1.1em; }
 .header-receta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-.total-badge { font-weight: bold; padding: 5px 15px; border-radius: 20px; font-size: 0.9em; }
+.total-badge { font-weight: bold; padding: 4px 10px; border-radius: 20px; font-size: 11px; }
 .total-badge.ok { background: #27ae60; color: white; }
 .total-badge.error { background: #c0392b; color: white; animation: pulse 2s infinite; }
-.buscador-receta { display: flex; gap: 10px; margin-bottom: 15px; background: white; padding: 10px; border: 1px solid #eee; border-radius: 6px; align-items: center; }
-.select-mp { flex-grow: 1; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; }
+
+/* 🚀 BUSCADOR CON FLEX WRAP PARA QUE NO SE SALGA DE LA PANTALLA */
+.buscador-receta { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; background: white; padding: 10px; border: 1px solid #eee; border-radius: 6px; align-items: center; }
+.select-mp { flex: 1; min-width: 250px; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; }
 .input-cant { width: 100px; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; text-align: center; }
 .btn-add { background: #27ae60; color: white; border: none; border-radius: 4px; width: 50px; height: 40px; cursor: pointer; font-size: 1.4em; transition: background 0.2s; }
 .btn-add:hover { background: #219150; }
-.btn-toggle-calc { background: #34495e; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+.btn-toggle-calc { background: #34495e; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s; white-space: nowrap; }
 .btn-toggle-calc:hover { background: #2c3e50; }
+
 .caja-calculadora { background: #e8f4f8; border: 2px dashed #3498db; border-radius: 6px; padding: 15px; margin-bottom: 15px; }
 .caja-calculadora h5 { margin: 0 0 10px 0; color: #2980b9; font-size: 1em; }
-.calc-grid { display: flex; gap: 15px; margin-bottom: 10px; align-items: flex-end; }
-.campo-calc { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.calc-grid { display: flex; gap: 15px; margin-bottom: 10px; align-items: flex-end; flex-wrap: wrap; }
+.campo-calc { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 5px; }
 .campo-calc label { font-size: 0.85em; font-weight: bold; color: #555; }
 .campo-calc input { padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; }
 .campo-resultado { display: flex; flex-direction: column; gap: 5px; align-items: center; justify-content: flex-end; }
@@ -444,31 +553,27 @@ const volver = () => {
 .resultado-numero { background: #27ae60; color: white; font-weight: bold; padding: 8px 15px; border-radius: 4px; font-size: 1.1em; }
 .btn-add-calc { width: 100%; padding: 10px; background: #2980b9; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; margin-top: 5px; }
 .btn-add-calc:hover { background: #1f618d; }
-.tabla-wrapper { overflow-x: auto; min-height: 300px; }
-.tabla-receta-wrapper { border: 1px solid #dee2e6; border-radius: 4px; overflow: hidden; background: white; }
+
+/* 🚀 ESTILOS PARA LAS TABLAS SEPARADAS */
+.tabla-receta-wrapper { border: none; background: transparent; }
+.grupo-tolva-edit { margin-bottom: 15px; border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+.titulo-tolva-edit { font-size: 12px; font-weight: 900; padding: 10px 15px; display: flex; justify-content: space-between; }
+.tolva-A { background-color: #e0f2fe; color: #0369a1; border-bottom: 1px solid #bae6fd; }
+.tolva-B { background-color: #dcfce7; color: #15803d; border-bottom: 1px solid #bbf7d0; }
+.tolva-UNICA { background-color: #f1f5f9; color: #475569; border-bottom: 1px solid #cbd5e1; }
+.empty-receta { text-align: center; padding: 25px; color: #7f8c8d; font-style: italic; background: white; border: 1px dashed #bdc3c7; border-radius: 6px; }
+
 .tabla-receta { width: 100%; border-collapse: collapse; }
 .tabla-receta th { background: #34495e; color: white; padding: 12px; text-align: left; font-size: 0.9em; }
 .tabla-receta td { padding: 10px 12px; border-bottom: 1px solid #f1f1f1; }
 .btn-x { background: none; border: none; color: #c0392b; font-weight: bold; cursor: pointer; font-size: 1.4em; }
 .btn-x:hover { color: #e74c3c; transform: scale(1.1); }
 
-/* 🚀 NUEVO ESTILO PARA EL SELECTOR DE TOLVA EN LA TABLA */
-.select-tolva {
-    padding: 6px;
-    border: 1px solid #bdc3c7;
-    border-radius: 4px;
-    font-size: 0.85em;
-    font-weight: bold;
-    color: #2c3e50;
-    cursor: pointer;
-    background-color: #f8f9fa;
-    transition: all 0.2s ease;
-}
-.select-tolva:focus {
-    border-color: #3498db;
-    outline: none;
-    box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
-}
+.select-tolva { padding: 6px; border: 1px solid #bdc3c7; border-radius: 4px; font-size: 0.85em; font-weight: bold; color: #2c3e50; cursor: pointer; background-color: #f8f9fa; transition: all 0.2s ease; width: 100%; }
+.select-tolva:focus { border-color: #3498db; outline: none; box-shadow: 0 0 5px rgba(52, 152, 219, 0.3); }
+
+.input-porc-edit { width: 70px; text-align: right; border: 1px solid #bdc3c7; border-radius: 4px; padding: 4px; font-size: 12px; font-weight: bold; color: #2c3e50; background: #fff; margin-right: 4px; transition: all 0.2s; }
+.input-porc-edit:focus { border-color: #3498db; outline: none; box-shadow: 0 0 3px rgba(52, 152, 219, 0.5); }
 
 .footer-actions { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; padding-top: 20px; }
 .acciones-derecha { display: flex; gap: 15px; }

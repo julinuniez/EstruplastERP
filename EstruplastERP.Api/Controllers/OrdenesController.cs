@@ -58,10 +58,7 @@ namespace EstruplastERP.Api.Controllers
                     NumeroPedidoCliente = o.NumeroPedidoCliente,
                     ClienteId = o.ClienteId,
                     ClienteNombre = o.Cliente != null ? o.Cliente.RazonSocial : "STOCK / INTERNO",
-
-                    // 🚀 ACÁ ESTÁ EL DATO VITAL PARA QUE VUE SEPA A CUÁNTOS KILOS CORTAR
                     LimiteKilosPallet = o.Cliente != null && o.Cliente.LimiteKilosPallet > 0 ? o.Cliente.LimiteKilosPallet : 1000m,
-
                     o.Observacion,
                     o.Largo,
                     o.Ancho,
@@ -92,10 +89,10 @@ namespace EstruplastERP.Api.Controllers
                         c.CantidadKilos,
                         ClienteId = c.MateriaPrima != null ? (c.MateriaPrima.ClienteId ?? 0) : 0,
                         ClienteNombre = (c.MateriaPrima != null && c.MateriaPrima.Cliente != null) ? c.MateriaPrima.Cliente.RazonSocial : "",
-                        ExtrusoraDestino = o.Producto != null && o.Producto.Formulas != null
-                            ? (o.Producto.Formulas.FirstOrDefault(f => f.MateriaPrimaId == c.MateriaPrimaId) != null
-                                ? o.Producto.Formulas.FirstOrDefault(f => f.MateriaPrimaId == c.MateriaPrimaId).ExtrusoraDestino
-                                : "UNICA")
+
+                        // 🚀 CÓDIGO EF-FRIENDLY: Más directo para que SQL lo entienda sin colapsar
+                        ExtrusoraDestino = o.Producto != null
+                            ? (o.Producto.Formulas.Where(f => f.MateriaPrimaId == c.MateriaPrimaId).Select(f => f.ExtrusoraDestino).FirstOrDefault() ?? "UNICA")
                             : "UNICA"
                     }).ToList()
                 })

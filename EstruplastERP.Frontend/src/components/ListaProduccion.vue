@@ -8,6 +8,7 @@ import ModalDesglosePallets from './ModalDesglosePallets.vue'
 import { useConsolidacion } from '@/composables/useConsolidacion'
 import { Alertas } from '@/utils/alertas'
 import Swal from 'sweetalert2'
+import HojaImpresion from './HojaImpresion.vue'
 
 const emit = defineEmits(['imprimir-historial', 'imprimir-carga-consolidada', 'imprimir-lote-op'])
 
@@ -353,27 +354,55 @@ async function cancelarOrden(item: ProduccionItem) {
     }
 }
 
-// 🚀 REIMPRESIÓN DESDE EL MODAL
-const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], consumosMezcla: any[]) => {
+const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[]) => {
     if (!ordenesGrupo || ordenesGrupo.length === 0) return;
 
-    const recetaInyectada = consumosMezcla && consumosMezcla.length > 0 ? consumosMezcla.map(c => {
-        const kilosAImprimir = Number(c.real) > 0 ? Number(c.real) : Number(c.teorico);
-        return {
-            id: c.materiaPrimaId,
-            materiaPrimaId: c.materiaPrimaId,
-            MateriaPrimaId: c.materiaPrimaId,
-            nombreMateriaPrima: c.nombre,
-            nombreInsumo: c.nombre,
-            cantidadKilos: kilosAImprimir, 
-            CantidadKilos: kilosAImprimir, 
-            kilos: kilosAImprimir,
-            cantidad: kilosAImprimir,
-            kilosFijos: kilosAImprimir,
-            // 🚀 MAPEO EXTRUSORAS DESDE EL MODAL 
-            extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
-        };
-    }) : [];
+    const mapaInsumos = new Map();
+    
+    ordenesGrupo.forEach(orden => {
+        const desp = Number(orden.desperdicio || 0);
+        const kilosNetos = Number(orden.kilos || 0);
+        const pesoBrutoTotal = kilosNetos * (1 + (desp / 100));
+        const esKilosFijos = orden.esFinalizada || String(orden.estado).toUpperCase() === 'FINALIZADA';
+
+        if (orden.consumos && Array.isArray(orden.consumos)) {
+            orden.consumos.forEach((c: any) => {
+                const idMp = Number(c.materiaPrimaId || c.id);
+                const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
+                const key = `${idMp}-${destino}`;
+                
+                const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
+                
+                const kilosFisicosReales = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
+                
+                if (mapaInsumos.has(key)) {
+                    mapaInsumos.get(key).kilosFijos += kilosFisicosReales;
+                } else {
+                    mapaInsumos.set(key, {
+                        id: idMp,
+                        materiaPrimaId: idMp,
+                        nombreMateriaPrima: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
+                        nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
+                        extrusoraDestino: destino,
+                        ExtrusoraDestino: destino,
+                        kilosFijos: kilosFisicosReales,
+                        // 🚀 ACA PASAMOS EL CLIENTE AL PDF
+                        clienteId: c.clienteId || c.ClienteId || 0,
+                        clienteNombre: c.clienteNombre || c.ClienteNombre || ''
+                    });
+                }
+            });
+        }
+    });
+
+    const recetaInyectada = Array.from(mapaInsumos.values()).map(item => ({
+        ...item,
+        cantidadKilos: item.kilosFijos,
+        CantidadKilos: item.kilosFijos,
+        kilos: item.kilosFijos,
+        cantidad: item.kilosFijos,
+        real: item.kilosFijos
+    }));
 
     if (codigo.startsWith('HC-S')) {
         const ordenCopia = JSON.parse(JSON.stringify(ordenesGrupo[0]));
@@ -381,6 +410,7 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], c
         
         ordenCopia.consumos = recetaInyectada;
         ordenCopia.receta = recetaInyectada;
+        ordenCopia.kilosYaCalculados = true; 
         
         emit('imprimir-historial', { 
             orden: ordenCopia, 
@@ -422,6 +452,7 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[], c
         
         formObj.consumos = recetaInyectada;
         formObj.receta = recetaInyectada;
+        formObj.kilosYaCalculados = true; 
 
         const payloadImpresion = {
             form: formObj,
@@ -468,7 +499,6 @@ function inyectarAlertasFabrica(orden: any) {
 const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
     const ordenCopia = JSON.parse(JSON.stringify(orden));
 
-    // 🚀 MAPEO EXTRUSORAS PARA CARGA INDIVIDUAL DIRECTA
     if (ordenCopia.consumos && ordenCopia.consumos.length > 0) {
         ordenCopia.consumos = ordenCopia.consumos.map((c: any) => ({
             ...c,
@@ -482,7 +512,7 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
         emit('imprimir-historial', { 
             orden: ordenCopia, 
             tipo: 'carga', 
-            receta: ordenCopia.consumos, // 🚀 Mandamos los consumos con las tolvas
+            receta: ordenCopia.consumos,
             materiasPrimasBase: materiasPrimas.value,
             imprimirEnPaquetes: false
         });
@@ -572,26 +602,52 @@ async function ejecutarCargaConsolidada() {
         
         const payloadCrudo = (payload as any).form ? (payload as any).form : payload;
         const formObj = JSON.parse(JSON.stringify(payloadCrudo));
-        
-        const recetaCalculada = (payload as any).receta || [];
 
-        const recetaInyectada = recetaCalculada.map((c: any) => {
-            const kilosAImprimir = Number(c.real) > 0 ? Number(c.real) : (Number(c.teorico) > 0 ? Number(c.teorico) : Number(c.cantidad || c.kilos || 0));
-            return {
-                ...c,
-                id: c.materiaPrimaId || c.id,
-                materiaPrimaId: c.materiaPrimaId || c.id,
-                MateriaPrimaId: c.materiaPrimaId || c.id,
-                nombreMateriaPrima: c.nombre || c.nombreMateriaPrima || c.nombreInsumo,
-                nombreInsumo: c.nombre || c.nombreInsumo || c.nombreMateriaPrima,
-                cantidadKilos: kilosAImprimir, 
-                CantidadKilos: kilosAImprimir, 
-                kilos: kilosAImprimir,
-                cantidad: kilosAImprimir,
-                kilosFijos: kilosAImprimir,
-                extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
-            };
+        const mapaInsumos = new Map();
+        
+        ordenesAImprimir.forEach(orden => {
+            const desp = Number(orden.desperdicio || 0);
+            const kilosNetos = Number(orden.kilos || 0);
+            const esKilosFijos = orden.esFinalizada || String(orden.estado).toUpperCase() === 'FINALIZADA';
+
+            if (orden.consumos && Array.isArray(orden.consumos)) {
+                orden.consumos.forEach(c => {
+                    const idMp = Number(c.materiaPrimaId || c.id);
+                    const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
+                    const key = `${idMp}-${destino}`;
+                    
+                    const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
+                    const kilosFisicosReales = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
+                    
+                    if (mapaInsumos.has(key)) {
+                        mapaInsumos.get(key).kilosFijos += kilosFisicosReales;
+                    } else {
+                        mapaInsumos.set(key, {
+                            id: idMp,
+                            materiaPrimaId: idMp,
+                            MateriaPrimaId: idMp,
+                            nombreMateriaPrima: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
+                            nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
+                            extrusoraDestino: destino,
+                            ExtrusoraDestino: destino,
+                            kilosFijos: kilosFisicosReales,
+                            // 🚀 ACA PASAMOS EL CLIENTE AL PDF EN LA CARGA CONSOLIDADA
+                            clienteId: c.clienteId || c.ClienteId || 0,
+                            clienteNombre: c.clienteNombre || c.ClienteNombre || ''
+                        });
+                    }
+                });
+            }
         });
+
+        const recetaInyectada = Array.from(mapaInsumos.values()).map(item => ({
+            ...item,
+            cantidadKilos: item.kilosFijos,
+            CantidadKilos: item.kilosFijos,
+            kilos: item.kilosFijos,
+            cantidad: item.kilosFijos,
+            real: item.kilosFijos
+        }));
 
         const notasArray = ordenesAImprimir.map(o => {
             const n = o.notaPedido || o.NotaPedido;
@@ -616,7 +672,6 @@ async function ejecutarCargaConsolidada() {
         const codigoLote = getCodigoCarga(primeraOrden);
         
         formObj.observacion = `[Grupo: ${codigoLote}] [MEZCLA CONSOLIDADA] [FORZAR_CARGA]`;
-        
         formObj.producto = primeraOrden.producto || { id: primeraOrden.productoId || 9999, nombre: formObj.productoNombre, pesoEspecifico: 0, codigoSku: 'MIX' };
         formObj.cliente = primeraOrden.cliente || { id: primeraOrden.clienteId || 1, razonSocial: 'MÚLTIPLE' };
         
@@ -644,6 +699,7 @@ async function ejecutarCargaConsolidada() {
 
         formObj.consumos = recetaInyectada;
         formObj.receta = recetaInyectada;
+        formObj.kilosYaCalculados = true; 
 
         const payloadImpresion = {
             form: formObj, 
@@ -921,37 +977,30 @@ defineExpose({ cargarHistorial })
 .input-buscador { width: 220px; cursor: text; } 
 .btn-refresh { background: white; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; padding: 6px 12px; font-size: 1rem; transition: all 0.2s; }
 .btn-refresh:hover { background: #f1f5f9; border-color: #94a3b8; }
-
 .grupo-filtro-tiempo { display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 4px 12px; border-radius: 6px; border: 1px solid #cbd5e1; }
 .grupo-filtro-tiempo label { font-weight: bold; color: #475569; font-size: 0.9rem; margin: 0; }
 .select-mes, .select-anio { padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 500; color: #1e293b; outline: none; background: white; cursor: pointer; }
 .select-mes { min-width: 110px; }
-
 .filtros-produccion { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
 .btn-filtro { background-color: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease; }
 .btn-filtro:hover { background-color: #e2e8f0; color: #334155; }
 .btn-filtro.activo { background-color: #3b82f6; color: white; border-color: #3b82f6; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3); }
-
 .tabla-scroll { overflow-y: auto; flex: 1; margin-bottom: 55px; border-radius: 6px; border: 1px solid #e2e8f0; }
 .tabla-custom { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; }
 .tabla-custom th { background: #f8fafc; color: #475569; padding: 12px 10px; text-align: left; position: sticky; top: 0; z-index: 5; font-weight: 700; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
 .tabla-custom td { padding: 10px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; transition: background-color 0.2s; }
-
 tr.fila-impresa td { background-color: #d4edda; }
 tr.fila-no-impresa td { background-color: #f8d7da; }
 tr.fila-impresa:hover td { background-color: #c3e6cb; }
 tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
-
 .tabla-custom tbody tr:hover td { background-color: #f8fafc; }
 .check-orden { transform: scale(1.3); cursor: pointer; accent-color: #3498db; }
 .td-fecha { color: #64748b; font-size: 0.8rem; }
-
 .td-prod { font-weight: 700; color: #1e293b; line-height: 1.1; vertical-align: middle; }
 .prod-nombre { display: block; font-size: 0.85rem; margin-bottom: 4px; }
 .tags-produccion { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .tag-color { background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; font-size: 0.6rem; padding: 1px 4px; border-radius: 3px; font-weight: 800; letter-spacing: 0.5px; }
 .tag-extra { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; font-size: 0.6rem; padding: 1px 4px; border-radius: 3px; font-weight: 700; }
-
 .badge-cliente { background-color: #e0f2fe; color: #0369a1; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; display: inline-block; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .texto-nota { font-weight: 700; color: #334155; font-size: 0.9rem; }
 .texto-oc { color: #94a3b8; display: block; font-size: 0.7rem; margin-top: 2px; }
@@ -964,7 +1013,6 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .badge-ok { background: #ecfdf5; color: #10b981; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #a7f3d0; white-space: nowrap;}
 .badge-cancel { background: #fef2f2; color: #ef4444; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #fecaca; white-space: nowrap;}
 .badge-prep { background: #eff6ff; color: #3b82f6; padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; border: 1px solid #93c5fd; white-space: nowrap;}
-
 .td-acciones { vertical-align: middle; padding: 6px 10px !important; }
 .acciones-wrapper { display: flex; gap: 6px; justify-content: center; align-items: center; width: 100%; max-width: 230px; margin: 0 auto; }
 .btn-action { flex: 1; max-width: 38px; min-width: 30px; height: 32px; border: 1px solid #cbd5e1; background: white; border-radius: 6px; cursor: pointer; font-size: 1.05rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); padding: 0; }
@@ -974,7 +1022,6 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .btn-desglose:hover { background: #f8fafc; border-color: #94a3b8; }
 .btn-cancel { color: #ef4444; }
 .btn-cancel:hover { background: #fef2f2; border-color: #fca5a5; }
-
 .vacio { text-align: center; padding: 40px; color: #94a3b8; font-style: italic; font-size: 0.9rem; }
 .loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; background: rgba(255,255,255,0.9); z-index: 10; color: #3498db; font-weight: bold; font-size: 1.2rem; }
 .barra-flotante-consolidada { position: absolute; bottom: 0; left: 0; width: 100%; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 12px 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 15px rgba(0,0,0,0.2); z-index: 20; }
@@ -987,27 +1034,13 @@ tr.fila-no-impresa:hover td { background-color: #f5c6cb; }
 .btn-op:hover { background-color: #2980b9; }
 .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin-bottom: 10px; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
 .tag-hc { background: #8b5cf6; color: white; display: inline-block; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-top: 4px; white-space: nowrap; }
 .tag-hc.clickeable { cursor: pointer; transition: transform 0.2s; }
 .tag-hc.clickeable:hover { transform: scale(1.05); background: #7c3aed; }
-.nota-operario { 
-    font-size: 0.75rem; 
-    color: #92400e; 
-    background: #fef3c7; 
-    padding: 4px 8px; 
-    border-radius: 4px; 
-    margin-top: 6px; 
-    border-left: 3px solid #f59e0b; 
-    display: inline-block;
-    max-width: 100%;
-    word-wrap: break-word;
-}
-
+.nota-operario { font-size: 0.75rem; color: #92400e; background: #fef3c7; padding: 4px 8px; border-radius: 4px; margin-top: 6px; border-left: 3px solid #f59e0b; display: inline-block; max-width: 100%; word-wrap: break-word; }
 .btn-desplegar-pallets { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 6px; }
 .btn-desplegar-pallets:hover { background: #bae6fd; }
 .badge-mini-pallets { background: #0284c7; color: white; padding: 1px 5px; border-radius: 4px; font-size: 0.65rem; }
-
 .fila-acordeon { background: #f8fafc !important; }
 .acordeon-caja { padding: 10px 20px 20px 40px; border-left: 4px solid #3b82f6; background: #f1f5f9; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
 .tabla-pallets-interna { width: 100%; border-collapse: collapse; font-size: 0.8rem; background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }

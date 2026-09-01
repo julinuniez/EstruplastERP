@@ -25,35 +25,38 @@ export function useRecetaProduccion(
     
         recetaDinamica.value.forEach(r => r.esBase = false);
     
-        // 🚀 Tiene que ser idéntico al de la Hoja de Impresión
         const esAditivoOnTop = (item: any) => {
             if (!item) return false;
             const n = String(item.nombreInsumo || item.nombreMateriaPrima || item.nombre || '').toUpperCase();
             return n.includes('ESTEARATO') || n.includes('BRILLO') || n.includes('CRISTAL') || n.includes('777') || n.includes('555') || n.includes('UV') || n.includes('CAUCHO');
         };
     
-        // Filtramos solo los plásticos reales para ver quién es la base
-        const materialesEstructurales = recetaDinamica.value.filter(r => !esAditivoOnTop(r));
-        const arrayParaOrdenar = materialesEstructurales.length > 0 ? materialesEstructurales : recetaDinamica.value;
-    
-        const sorted = [...arrayParaOrdenar].sort((a, b) => Number(b.cantidad) - Number(a.cantidad));
-        const nuevaBase = sorted[0];
-    
-        if (nuevaBase) {
-            nuevaBase.esBase = true; 
-            
-            const sumaOtros = recetaDinamica.value.reduce((acc, item: any) => {
-                if (item === nuevaBase) return acc;
+        // 🚀 PROCESAMOS CADA TOLVA DE MANERA INDEPENDIENTE (INCLUYE LA C)
+        const tolvas = ['UNICA', 'A', 'B', 'C'];
+        
+        tolvas.forEach(tolva => {
+            const itemsEnTolva = recetaDinamica.value.filter(r => (r.extrusoraDestino || 'UNICA') === tolva);
+            if (itemsEnTolva.length === 0) return; 
+
+            const materialesEstructurales = itemsEnTolva.filter(r => !esAditivoOnTop(r));
+            const arrayParaOrdenar = materialesEstructurales.length > 0 ? materialesEstructurales : itemsEnTolva;
+        
+            const sorted = [...arrayParaOrdenar].sort((a, b) => Number(b.cantidad) - Number(a.cantidad));
+            const nuevaBase = sorted[0]; 
+        
+            if (nuevaBase) {
+                nuevaBase.esBase = true; 
                 
-                // 🔥 LA CLAVE: Si es Brillo, UV o Caucho, LO IGNORAMOS, no le quita % a la base
-                if (esAditivoOnTop(item)) return acc; 
-                
-                return acc + (parseFloat(item.cantidad?.toString() || 0));
-            }, 0);
-    
-            const nuevoPorcentajeBase = 100 - sumaOtros;
-            nuevaBase.cantidad = parseFloat(Math.max(0, nuevoPorcentajeBase).toFixed(2));
-        }
+                const sumaOtros = itemsEnTolva.reduce((acc, item: any) => {
+                    if (item === nuevaBase) return acc;
+                    if (esAditivoOnTop(item)) return acc; 
+                    return acc + (parseFloat(item.cantidad?.toString() || 0));
+                }, 0);
+        
+                const nuevoPorcentajeBase = 100 - sumaOtros;
+                nuevaBase.cantidad = parseFloat(Math.max(0, nuevoPorcentajeBase).toFixed(2));
+            }
+        });
     }
 
     function recalcularFormulaAutomatica() {
@@ -71,13 +74,18 @@ export function useRecetaProduccion(
             return true;
         });
 
-        const add = (nom: string, cant: number, tipo: string, mpId: number = 0, dens: number = DENSIDAD_DEFAULT) => {
+        // 🚀 DETECTAMOS SI HAY COEXTRUSIÓN PARA SABER DÓNDE TIRAR LOS ADITIVOS
+        const usaCoextrusion = nueva.some(r => r.extrusoraDestino === 'A' || r.extrusoraDestino === 'B' || r.extrusoraDestino === 'C');
+        const tolvaCapa = usaCoextrusion ? 'A' : 'UNICA';
+        const tolvaMasa = usaCoextrusion ? 'B' : 'UNICA';
+
+        const add = (nom: string, cant: number, tipo: string, destino: string, mpId: number = 0, dens: number = DENSIDAD_DEFAULT) => {
             let m = null;
             if (mpId === 0) m = listaTodasMateriasPrimas.value.find(x => x.nombre.toUpperCase().includes(nom));
             else m = listaTodasMateriasPrimas.value.find(x => x.id === mpId);
 
             const idBuscado = m ? m.id : mpId;
-            const existeIdx = nueva.findIndex(x => x.materiaPrimaId === idBuscado);
+            const existeIdx = nueva.findIndex(x => x.materiaPrimaId === idBuscado && (x.extrusoraDestino || 'UNICA') === destino);
             const cId = m ? Number(m.clienteId || m.ClienteId) || 0 : 0;
 
             if (existeIdx !== -1) {
@@ -93,7 +101,8 @@ export function useRecetaProduccion(
                     [tipo]: true,
                     esColor: tipo === 'esColor',
                     esEstearato: tipo === 'esEstearato',
-                    clienteId: cId
+                    clienteId: cId,
+                    extrusoraDestino: destino // 🚀 ASIGNAMOS LA TOLVA CORRECTA
                 });
             }
         };
@@ -101,17 +110,17 @@ export function useRecetaProduccion(
         if (form.value.conBrillo) {
             const idBrillo = form.value.tipoBrillo === '777' ? ID_BRILLO_777 : idCristal555.value;
             const nombreBrillo = form.value.tipoBrillo === '777' ? 'BRILLO 777' : 'CRISTAL 555';
-            add(nombreBrillo, form.value.porcBrillo, 'esBrillo', idBrillo);
+            add(nombreBrillo, form.value.porcBrillo, 'esBrillo', tolvaCapa, idBrillo);
         }
         
-        if (form.value.conEstearato) add('ESTEARATO', PORC_ESTEARATO, 'esEstearato', ID_ESTEARATO);
-        if (form.value.aditivoUV) add('UV', form.value.porcentajeUv, 'esUv', ID_UV);
-        if (form.value.aditivoCaucho) add('CAUCHO', form.value.porcentajeCaucho, 'esCaucho', ID_CAUCHO);
+        if (form.value.conEstearato) add('ESTEARATO', PORC_ESTEARATO, 'esEstearato', tolvaMasa, ID_ESTEARATO);
+        if (form.value.aditivoUV) add('UV', form.value.porcentajeUv, 'esUv', tolvaCapa, ID_UV);
+        if (form.value.aditivoCaucho) add('CAUCHO', form.value.porcentajeCaucho, 'esCaucho', tolvaMasa, ID_CAUCHO);
         if (mostrarCajaColor.value && form.value.masterbatchId) {
             const mb = listaMasterbatches.value.find(m => m.id === form.value.masterbatchId);
-            if (mb) add('COLOR', porcentajeColor, 'esColor', mb.id, mb.pesoEspecifico);
+            if (mb) add('COLOR', porcentajeColor, 'esColor', tolvaCapa, mb.id, mb.pesoEspecifico);
         }
-        if (form.value.aditivoCarga > 0) add('CARGA', form.value.aditivoCarga, 'esCarga', ID_CARGA);
+        if (form.value.aditivoCarga > 0) add('CARGA', form.value.aditivoCarga, 'esCarga', tolvaMasa, ID_CARGA);
 
         recetaDinamica.value = nueva;
         balancearBase();
@@ -124,13 +133,16 @@ export function useRecetaProduccion(
         }
     }
 
-    function agregarInsumoDesdeHijo(item: { id: number, porcentaje: number }) {
+    // 🚀 AHORA RECIBE LA TOLVA DE DESTINO Y PERMITE REPETIR MATERIALES SI ESTÁN EN TOLVAS DISTINTAS
+    function agregarInsumoDesdeHijo(item: { id: number, porcentaje: number, extrusoraDestino?: string }) {
         const mp = listaTodasMateriasPrimas.value.find(m => m.id === item.id) || 
                    listaInventarioCompleto.value.find(m => m.id === item.id);
         
         if (mp) {
-            const existe = recetaDinamica.value.find(r => r.materiaPrimaId === mp.id);
-            const cId = Number(mp.clienteId || mp.ClienteId) || 0; // 🚨 Arreglo de tipeo de C#
+            const destino = item.extrusoraDestino || 'UNICA';
+            // Busca si ya existe ESE material en ESA tolva específica
+            const existe = recetaDinamica.value.find(r => r.materiaPrimaId === mp.id && (r.extrusoraDestino || 'UNICA') === destino);
+            const cId = Number(mp.clienteId || mp.ClienteId) || 0; 
 
             if (existe) {
                 existe.cantidad = Number(existe.cantidad) + Number(item.porcentaje);
@@ -142,7 +154,8 @@ export function useRecetaProduccion(
                     cantidad: item.porcentaje,
                     densidad: mp.pesoEspecifico || 1.1,
                     esBase: false,
-                    clienteId: cId
+                    clienteId: cId,
+                    extrusoraDestino: destino // 🚀 GUARDA EL DESTINO ELEGIDO
                 });
             }
             balancearBase();

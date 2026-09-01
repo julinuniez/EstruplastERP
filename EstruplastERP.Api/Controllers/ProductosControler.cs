@@ -480,7 +480,8 @@ namespace EstruplastERP.Api.Controllers
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                return StatusCode(500, "Error al guardar: " + ex.Message);
+                string errorReal = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return StatusCode(500, new { mensaje = $"Fallo interno: {errorReal}" });
             }
         }
 
