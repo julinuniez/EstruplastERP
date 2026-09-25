@@ -28,7 +28,11 @@ namespace EstruplastERP.Api.Dtos
         public decimal EspesorMaximo { get; set; }
         public decimal PesoEspecifico { get; set; }
         public decimal StockMinimo { get; set; }
-        public string? Rubro { get; set; }
+
+        // 🚀 AHORA USAMOS EL ID RELACIONAL EN VEZ DEL TEXTO
+        public int? CategoriaInsumoId { get; set; }
+        public string? CategoriaNombre { get; set; } // Para mostrar en el Frontend
+
         public List<IngredienteDto> Receta { get; set; } = new List<IngredienteDto>();
     }
 
@@ -84,9 +88,10 @@ namespace EstruplastERP.Api.Dtos
         public bool EsPremezcla { get; set; }
         public bool EsCritico { get; set; }
         public decimal PrecioCosto { get; set; }
-        public string? Rubro { get; set; }
 
-        // Propiedad recuperada para solucionar el error:
+        // 🚀 RECIBIMOS EL ID DESDE VUE AL GUARDAR
+        public int? CategoriaInsumoId { get; set; }
+
         public decimal StockActual { get; set; }
 
         public List<IngredienteDto>? Receta { get; set; }

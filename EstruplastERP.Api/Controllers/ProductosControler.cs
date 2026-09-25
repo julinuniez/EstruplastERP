@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using EstruplastERP.Data;
 using EstruplastERP.Core;
 using EstruplastERP.Api.Dtos;
-using CsvHelper.Configuration.Attributes;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -22,6 +21,16 @@ namespace EstruplastERP.Api.Controllers
             _context = context;
         }
 
+        // 🚀 NUEVO ENDPOINT PARA LLENAR EL DESPLEGABLE EN VUE
+        [HttpGet("categorias-insumo")]
+        public async Task<IActionResult> GetCategoriasInsumo()
+        {
+            var categorias = await _context.CategoriasInsumo
+                .Select(c => new { c.Id, c.Nombre, c.RolLogico })
+                .ToListAsync();
+            return Ok(categorias);
+        }
+
         [HttpGet("inventario-completo")]
         public async Task<IActionResult> GetInventarioCompleto()
         {
@@ -29,6 +38,7 @@ namespace EstruplastERP.Api.Controllers
             {
                 var productos = await _context.Productos
                     .Include(p => p.Proveedor)
+                    .Include(p => p.CategoriaInsumo) // 🚀 Incluimos la nueva tabla
                     .Where(p => p.Activo)
                     .OrderBy(p => p.Nombre)
                     .Select(p => new
@@ -46,7 +56,10 @@ namespace EstruplastERP.Api.Controllers
                         ClienteId = p.ClienteId,
                         EsScrap = p.EsScrap,
                         ProveedorId = p.ProveedorId,
-                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.RazonSocial : null
+                        ProveedorNombre = p.Proveedor != null ? p.Proveedor.RazonSocial : null,
+                        CategoriaInsumoId = p.CategoriaInsumoId,
+                        CategoriaNombre = p.CategoriaInsumo != null ? p.CategoriaInsumo.Nombre : null,
+                        RolLogico = p.CategoriaInsumo != null ? p.CategoriaInsumo.RolLogico : null
                     })
                     .ToListAsync();
 
@@ -68,7 +81,7 @@ namespace EstruplastERP.Api.Controllers
         {
             return await _context.Productos
                 .Include(p => p.Proveedor)
-                .Include(p => p.Cliente) // 🚀 Faltaba y lo mantuvimos
+                .Include(p => p.Cliente)
                 .Where(p => p.EsMateriaPrima && p.Activo)
                 .OrderBy(p => p.Nombre)
                 .Select(p => new
@@ -81,7 +94,8 @@ namespace EstruplastERP.Api.Controllers
                     ClienteId = p.ClienteId,
                     ClienteNombre = p.Cliente != null ? p.Cliente.RazonSocial : "",
                     ProveedorNombre = p.Proveedor != null ? p.Proveedor.RazonSocial : null,
-                    p.ProveedorId
+                    p.ProveedorId,
+                    CategoriaInsumoId = p.CategoriaInsumoId // 🚀 Añadido
                 })
                 .ToListAsync();
         }
@@ -118,10 +132,10 @@ namespace EstruplastERP.Api.Controllers
             var query = _context.Productos
                 .Include(p => p.Proveedor)
                 .Include(p => p.Cliente)
+                .Include(p => p.CategoriaInsumo) // 🚀 Incluido
                 .Where(p => p.Activo)
                 .AsQueryable();
 
-            // Lógica de filtro fusionada
             if (clienteId.HasValue && clienteId.Value > 0)
             {
                 query = query.Where(p => p.ClienteId == null || p.ClienteId == clienteId);
@@ -133,7 +147,8 @@ namespace EstruplastERP.Api.Controllers
                     p.Id,
                     p.CodigoSku,
                     p.Nombre,
-                    p.Rubro,
+                    CategoriaInsumoId = p.CategoriaInsumoId,
+                    CategoriaNombre = p.CategoriaInsumo != null ? p.CategoriaInsumo.Nombre : null,
                     p.TipoMaterial,
                     p.EsMateriaPrima,
                     p.EsProductoTerminado,
@@ -163,7 +178,8 @@ namespace EstruplastERP.Api.Controllers
                 p.Id,
                 p.CodigoSku,
                 p.Nombre,
-                p.Rubro,
+                p.CategoriaInsumoId,
+                p.CategoriaNombre,
                 p.TipoMaterial,
                 p.EsMateriaPrima,
                 p.EsProductoTerminado,
@@ -190,22 +206,14 @@ namespace EstruplastERP.Api.Controllers
         public async Task<ActionResult<ProductoDetalleDto>> GetProducto(int id)
         {
             var producto = await _context.Productos
+                .Include(p => p.CategoriaInsumo) // 🚀
                 .Include(p => p.Formulas)
                 .ThenInclude(f => f.MateriaPrima)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
             if (producto == null) return NotFound("❌ Producto no encontrado.");
 
-            List<Formula> formulasFinales;
-
-            if (producto.Formulas != null && producto.Formulas.Any())
-            {
-                formulasFinales = producto.Formulas.ToList();
-            }
-            else
-            {
-                formulasFinales = new List<Formula>();
-            }
+            List<Formula> formulasFinales = producto.Formulas?.ToList() ?? new List<Formula>();
 
             var dto = new ProductoDetalleDto
             {
@@ -221,13 +229,13 @@ namespace EstruplastERP.Api.Controllers
                 EspesorMinimo = producto.EspesorMinimo ?? 0,
                 EspesorMaximo = producto.EspesorMaximo ?? 0,
                 EsGenerico = producto.EsGenerico,
-                Rubro = producto.Rubro,
+                CategoriaInsumoId = producto.CategoriaInsumoId, // 🚀
+                CategoriaNombre = producto.CategoriaInsumo?.Nombre, // 🚀
                 Receta = formulasFinales.Select(f => new IngredienteDto
                 {
                     MateriaPrimaId = f.MateriaPrimaId,
                     NombreInsumo = f.MateriaPrima?.Nombre ?? "(MP No Encontrada)",
                     Cantidad = f.Cantidad,
-                    // 🚀 LEEMOS EL DESTINO DESDE SQL Y SE LO DEVOLVEMOS A VUE
                     ExtrusoraDestino = string.IsNullOrWhiteSpace(f.ExtrusoraDestino) ? "UNICA" : f.ExtrusoraDestino
                 }).ToList()
             };
@@ -260,7 +268,8 @@ namespace EstruplastERP.Api.Controllers
                     StockActual = 0,
                     Activo = true,
                     EsGenerico = false,
-                    Rubro = !esProductoTerminado ? "MATERIA PRIMA PLASTICA" : "PRODUCTO TERMINADO",
+                    // 🚀 Al crear, si es MP le damos ID 1 (Base), si es PT queda NULL
+                    CategoriaInsumoId = !esProductoTerminado ? 1 : null,
                     ProveedorId = data.ProveedorId,
                     FechaCreacion = DateTime.Now
                 };
@@ -268,7 +277,6 @@ namespace EstruplastERP.Api.Controllers
                 _context.Productos.Add(nuevoProducto);
                 await _context.SaveChangesAsync();
 
-                // Adentro de CrearProductoConReceta...
                 if (esProductoTerminado && data.Receta != null)
                 {
                     foreach (var item in data.Receta)
@@ -278,7 +286,6 @@ namespace EstruplastERP.Api.Controllers
                             ProductoTerminadoId = nuevoProducto.Id,
                             MateriaPrimaId = item.MateriaPrimaId,
                             Cantidad = item.Cantidad,
-                            // 🚀 AGREGÁ ESTA LÍNEA ACÁ TAMBIÉN:
                             ExtrusoraDestino = string.IsNullOrWhiteSpace(item.ExtrusoraDestino) ? "UNICA" : item.ExtrusoraDestino
                         });
                     }
@@ -350,6 +357,7 @@ namespace EstruplastERP.Api.Controllers
                     PrecioCosto = 0,
                     PesoEspecifico = 1.1m,
                     Activo = true,
+                    CategoriaInsumoId = 4, // 🚀 ID 4 ES "MOLIDO / INVASOR"
                     FechaCreacion = DateTime.Now
                 };
 
@@ -383,11 +391,6 @@ namespace EstruplastERP.Api.Controllers
             producto.Nombre = data.Nombre.Trim();
             producto.CodigoSku = data.CodigoSku.Trim().ToUpper();
             producto.StockMinimo = data.StockMinimo;
-
-            // Si ProductoEditarDto lo incluye, actualizamos Color y StockActual fusionando la rama Master
-            // (Si no usas estas propiedades en el DTO, puedes eliminarlas)
-            // producto.Color = data.Color; 
-            // producto.StockActual = data.StockActual;
 
             try
             {
@@ -445,7 +448,7 @@ namespace EstruplastERP.Api.Controllers
             producto.EsProductoTerminado = dto.EsProductoTerminado;
             producto.EsFazon = dto.EsFazon;
             producto.PrecioCosto = dto.PrecioCosto;
-            producto.Rubro = dto.Rubro;
+            producto.CategoriaInsumoId = dto.CategoriaInsumoId; // 🚀
             producto.StockActual = dto.StockActual;
 
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -466,7 +469,6 @@ namespace EstruplastERP.Api.Controllers
                             ProductoTerminadoId = id,
                             MateriaPrimaId = item.MateriaPrimaId,
                             Cantidad = item.Cantidad,
-                            // 🚀 ACÁ ESTABA EL ERROR: AHORA SÍ GUARDAMOS EL DESTINO EN SQL
                             ExtrusoraDestino = string.IsNullOrWhiteSpace(item.ExtrusoraDestino) ? "UNICA" : item.ExtrusoraDestino
                         });
                     }
@@ -511,7 +513,7 @@ namespace EstruplastERP.Api.Controllers
                 EsProductoTerminado = false,
                 EsGenerico = false,
                 EsFazon = false,
-                Rubro = "MASTERBATCH",
+                CategoriaInsumoId = 2, // 🚀 ID 2 ES "MASTERBATCH / COLOR"
                 PesoEspecifico = 1.1m,
                 StockActual = dto.StockInicial,
                 StockMinimo = 0,
@@ -539,40 +541,6 @@ namespace EstruplastERP.Api.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { mensaje = "✅ Color creado exitosamente.", producto = nuevoMasterbatch });
-        }
-
-        [HttpPost("reparar-familias-v2")]
-        public async Task<IActionResult> RepararFamiliasV2()
-        {
-            var materialesCliente = await _context.Productos
-                .Where(p => p.EsMateriaPrima && p.ClienteId != null)
-                .ToListAsync();
-
-            int cambios = 0;
-
-            foreach (var mat in materialesCliente)
-            {
-                int? nuevoId = null;
-
-                if (mat.CodigoSku.Contains("AI-FIN")) nuevoId = 11;
-                else if (mat.CodigoSku.Contains("AI-GRU")) nuevoId = 12;
-                else if (mat.CodigoSku.Contains("AI-BIC")) nuevoId = 13;
-                else if (mat.CodigoSku.Contains("AI-TRI")) nuevoId = 14;
-                else if (mat.CodigoSku.Contains("ABS-GRU")) nuevoId = 21;
-                else if (mat.CodigoSku.Contains("POLI-FIN")) nuevoId = 31;
-                else if (mat.CodigoSku.Contains("POLI-GRU")) nuevoId = 32;
-                else if (mat.CodigoSku.Contains("PEAD-BIC")) nuevoId = 41;
-
-                if (nuevoId.HasValue && mat.FamiliaId != nuevoId)
-                {
-                    mat.FamiliaId = nuevoId;
-                    _context.Entry(mat).State = EntityState.Modified;
-                    cambios++;
-                }
-            }
-
-            await _context.SaveChangesAsync();
-            return Ok($"Se especificaron las familias de {cambios} materiales de clientes.");
         }
 
         [HttpGet("{id}/reservas")]
@@ -618,7 +586,7 @@ namespace EstruplastERP.Api.Controllers
                 EsProductoTerminado = false,
                 EsGenerico = false,
                 EsFazon = false,
-                Rubro = "MATERIA PRIMA PLASTICA",
+                CategoriaInsumoId = 5, // 🚀 ID 5 ES "OTROS INSUMOS" por defecto, hasta que el usuario lo cambie
                 Activo = true,
                 StockActual = 0,
                 StockMinimo = 0,

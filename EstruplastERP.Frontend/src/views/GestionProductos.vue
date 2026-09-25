@@ -13,6 +13,7 @@ import { useModalesInventario } from '@/composables/useModalesInventario';
 import ModalHistorialStock from '@/components/ModalHistorialStock.vue';
 import ModalAjusteStock from '@/components/ModalAjusteStock.vue'; 
 import ModalNuevoMasterbatch from '@/components/ModalNuevoMasterbatch.vue'; 
+import ModalNuevaMateriaPrima from '@/components/ModalNuevaMateriaPrima.vue'; // 🚀 IMPORTACIÓN NUEVA
 import { exportarInventarioExcel } from '@/composables/useExportacionInventario';
 import { Alertas } from '@/utils/alertas';
 
@@ -50,6 +51,7 @@ const mostrarModalAjuste = ref(false);
 const productoParaAjustar = ref<any>(null);
 
 const mostrarModalMasterbatch = ref(false);
+const mostrarModalNuevaMP = ref(false); // 🚀 VARIABLE LOCAL LIMPIA
 const exportando = ref(false);
 
 const mostrarResumen = ref(false);
@@ -64,9 +66,8 @@ watch(clienteFiltro, () => { materialFiltro.value = ''; });
 watch(tabActual, () => { subTabMP.value = 'VIRGEN'; });
 
 const { 
-    TIPOS_MATERIALES, clientesFazon, productosFiltrados, 
-    countMP, countPT, countCLI, getClienteId, checkEsFazon, 
-    checkEsMolido, checkEsScrap 
+    TIPOS_MATERIALES, clientesFazon, 
+    countPT, countCLI, getClienteId, checkEsFazon
 } = useFiltrosInventario(
     listaProductos, listaClientes, tabActual, subTabMP, 
     subTabCliente, clienteFiltro, materialFiltro, busqueda
@@ -74,13 +75,58 @@ const {
 
 const getNombre = (p: any) => (p.nombre || p.Nombre || '').toUpperCase();
 const getSku = (p: any) => (p.codigoSku || p.CodigoSku || '').toUpperCase();
-const esMpCliente = (p: any) => getSku(p).startsWith('MP-CLI');
-const esServicioFazon = (p: any) => getSku(p).startsWith('FAZ-');
-const esScrap = (p: any) => !!(p.esScrap || p.EsScrap) || getSku(p).startsWith('SCRAP-CLI');
+
+// 🚀 NUEVA LÓGICA DE DETECCIÓN RELACIONAL (Basada en CategoriaInsumoId)
+const esMateriaPrimaVirgen = (p: any) => p.categoriaInsumoId === 1 || p.CategoriaInsumoId === 1;
+const esMasterbatch = (p: any) => p.categoriaInsumoId === 2 || p.CategoriaInsumoId === 2;
+const esAditivo = (p: any) => p.categoriaInsumoId === 3 || p.CategoriaInsumoId === 3;
+const esScrapOMolido = (p: any) => p.categoriaInsumoId === 4 || p.CategoriaInsumoId === 4 || !!(p.esScrap || p.EsScrap);
+
+// 🚀 FILTRO COMPUTADO QUE REEMPLAZA AL DE USEFILTROSINVENTARIO PARA MATERIAS PRIMAS
+const productosMPFiltrados = computed(() => {
+    let lista = listaProductos.value.filter(p => (p.esMateriaPrima || p.EsMateriaPrima) && (getClienteId(p) === 0 || !getClienteId(p)));
+    
+    if (subTabMP.value === 'VIRGEN') {
+        lista = lista.filter(p => esMateriaPrimaVirgen(p));
+    } else if (subTabMP.value === 'MASTERBATCH') {
+        lista = lista.filter(p => esMasterbatch(p));
+    } else if (subTabMP.value === 'ADITIVOS') {
+        lista = lista.filter(p => esAditivo(p));
+    } else if (subTabMP.value === 'MOLIDO_PROPIO') {
+        lista = lista.filter(p => esScrapOMolido(p));
+    }
+
+    if (busqueda.value) {
+        const b = busqueda.value.toUpperCase();
+        lista = lista.filter(p => getNombre(p).includes(b) || getSku(p).includes(b));
+    }
+
+    return lista;
+});
+
+// 🚀 FILTRO COMPUTADO PARA PRODUCTOS TERMINADOS (Queda igual, ya que no usan Categoria)
+const productosPTFiltrados = computed(() => {
+    let lista = listaProductos.value.filter(p => p.esProductoTerminado || p.EsProductoTerminado);
+    if (busqueda.value) {
+        const b = busqueda.value.toUpperCase();
+        lista = lista.filter(p => getNombre(p).includes(b) || getSku(p).includes(b));
+    }
+    return lista;
+});
+
+// 🚀 RUTEO AL FILTRO CORRECTO SEGÚN LA PESTAÑA ACTIVA
+const productosVisibles = computed(() => {
+    if (tabActual.value === 'MP') return productosMPFiltrados.value;
+    if (tabActual.value === 'PT') return productosPTFiltrados.value;
+    return vistaFazonFiltrada.value;
+});
+
+const countMPActualizado = computed(() => listaProductos.value.filter(p => (p.esMateriaPrima || p.EsMateriaPrima) && (getClienteId(p) === 0 || !getClienteId(p))).length);
+
 
 const vistaFazonFiltrada = computed(() => {
     let lista = listaProductos.value.filter(p => 
-        getClienteId(p) > 0 || esMpCliente(p) || esServicioFazon(p) || esScrap(p)
+        getClienteId(p) > 0 || getSku(p).startsWith('MP-CLI') || getSku(p).startsWith('FAZ-') || esScrapOMolido(p)
     );
     
     if (clienteFiltro.value) {
@@ -103,12 +149,9 @@ const vistaFazonFiltrada = computed(() => {
 });
 
 const modales = useModalesInventario(cargarDatos);
-// Forzamos nuevaMP a "any" para que acepte cualquier propiedad
-const nuevaMP = modales.nuevaMP as any; 
 const { 
-    mostrarModalNuevaMP, guardandoMP, 
     mostrarModalReservas, productoSeleccionado, ordenesReserva, cargandoReservas,
-    verDetalleReserva, guardarNuevaMateriaPrima
+    verDetalleReserva
 } = modales;
 
 const getAuthConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
@@ -228,7 +271,7 @@ const toggleGrupo = (id: string) => {
 const molidosAgrupados = computed(() => {
     if (tabActual.value !== 'CLI') return [];
     const grupos: Record<string, any> = {};
-    const baseList = vistaFazonFiltrada.value.filter(p => (p.codigoSku || '').toUpperCase().includes('MOL') || checkEsMolido(p));
+    const baseList = vistaFazonFiltrada.value.filter(p => (p.codigoSku || '').toUpperCase().includes('MOL') || esScrapOMolido(p));
 
     baseList.forEach(p => {
         const sku = (p.codigoSku || '').toUpperCase();
@@ -344,7 +387,7 @@ onMounted(() => {
 
         <div class="tabs-container">
             <button class="tab-btn" :class="{ active: tabActual === 'MP' }" @click="tabActual = 'MP'">
-                🧪 Materias Primas <span class="counter">{{ countMP }}</span>
+                🧪 Materias Primas <span class="counter">{{ countMPActualizado }}</span>
             </button>
             <button class="tab-btn" :class="{ active: tabActual === 'PT' }" @click="tabActual = 'PT'">
                 🏭 Productos Terminados <span class="counter">{{ countPT }}</span>
@@ -446,7 +489,7 @@ onMounted(() => {
                 </tbody>
             </table>
 
-            <table v-else-if="(tabActual === 'CLI' && vistaFazonFiltrada.length > 0) || (tabActual !== 'CLI' && productosFiltrados.length > 0)">
+            <table v-else-if="(tabActual === 'CLI' && vistaFazonFiltrada.length > 0) || (tabActual !== 'CLI' && productosVisibles.length > 0)">
                 <thead>
                     <tr>
                         <th style="width: 140px;">SKU</th>
@@ -461,7 +504,7 @@ onMounted(() => {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="p in (tabActual === 'CLI' ? vistaFazonFiltrada : productosFiltrados)" :key="p.id" :class="{'bajo-stock': ((p.stockFisico ?? p.stockActual ?? 0) - (p.stockReservado ?? 0)) <= (p.stockMinimo || 0)}">
+                    <tr v-for="p in (tabActual === 'CLI' ? vistaFazonFiltrada : productosVisibles)" :key="p.id" :class="{'bajo-stock': ((p.stockFisico ?? p.stockActual ?? 0) - (p.stockReservado ?? 0)) <= (p.stockMinimo || 0)}">
                         <td class="sku-cell"><span>{{ p.codigoSku }}</span></td>
                         <td>
                             <div class="nombre-prod">
@@ -469,8 +512,7 @@ onMounted(() => {
                             </div>
                             <div class="tags-fila">
                                 <small v-if="checkEsFazon(p) && tabActual !== 'CLI'" class="tag-fazon">FAZON</small>
-                                <small v-if="checkEsMolido(p)" class="tag-molido">(MOLIDO)</small>
-                                <small v-else-if="checkEsScrap(p)" class="tag-scrap">(SCRAP)</small>
+                                <small v-if="esScrapOMolido(p)" class="tag-molido">(MOLIDO/SCRAP)</small>
                                 <button v-if="p.nombre.toUpperCase().includes('TUTI') && (!getClienteId(p) || getClienteId(p) === 0)" @click="abrirPantallazoGlobal(p)" class="btn-global">
                                     🌍 Ver Total Global
                                 </button>
@@ -525,45 +567,12 @@ onMounted(() => {
         </div>
     </div>
 
-    <div v-if="mostrarModalNuevaMP" class="modal-overlay" @click.self="mostrarModalNuevaMP = false">
-        <div class="modal-content" style="text-align: left; width: 450px;">
-            <h3 style="margin-top: 0; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">➕ Crear Nuevo Insumo</h3>
-            
-            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px;">
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <label style="font-size: 0.85rem; font-weight: 700; color: #475569;">Nombre del Insumo <span style="color:red">*</span></label>
-                    <input type="text" v-model="nuevaMP.nombre" class="select-chico" style="width: 100%; box-sizing: border-box;" placeholder="Ej: PEAD INYECCIÓN" />
-                </div>
-
-                <div style="display: flex; gap: 10px;">
-                    <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
-                        <label style="font-size: 0.85rem; font-weight: 700; color: #475569;">Código SKU</label>
-                        <input type="text" v-model="nuevaMP.codigoSku" class="select-chico" style="width: 100%; box-sizing: border-box;" placeholder="Ej: MP-001" />
-                    </div>
-                    
-                    <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
-                        <label style="font-size: 0.85rem; font-weight: 700; color: #475569;">Material</label>
-                        <select v-model="nuevaMP.tipoMaterial" class="select-chico" style="width: 100%; box-sizing: border-box;">
-                            <option value="">-- Seleccionar --</option>
-                            <option v-for="mat in TIPOS_MATERIALES" :key="mat" :value="mat">{{ mat }}</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <label style="font-size: 0.85rem; font-weight: 700; color: #475569;">Stock Físico Inicial (Kg)</label>
-                    <input type="number" v-model="nuevaMP.stockActual" class="select-chico" style="width: 100%; box-sizing: border-box;" placeholder="0.00" />
-                </div>
-            </div>
-
-            <div style="display: flex; gap: 10px; margin-top: 25px;">
-                <button class="btn-cerrar" @click="mostrarModalNuevaMP = false" style="background: #94a3b8; flex: 1; margin-top: 0;">Cancelar</button>
-                <button class="btn-cerrar" @click="guardarNuevaMateriaPrima" :disabled="guardandoMP || !nuevaMP.nombre" style="background: #10b981; flex: 1; margin-top: 0;">
-                    {{ guardandoMP ? '⏳ Guardando...' : '💾 Guardar Insumo' }}
-                </button>
-            </div>
-        </div>
-    </div>
+    <!-- 🚀 AHORA EL MODAL DE MP SE IMPORTA LIMPIO COMO EL DE MASTERBATCH -->
+    <ModalNuevaMateriaPrima 
+        :visible="mostrarModalNuevaMP" 
+        @close="mostrarModalNuevaMP = false" 
+        @creado="cargarDatos(true)" 
+    />
 
     <div v-if="mostrarModalReservas" class="modal-overlay" @click.self="mostrarModalReservas = false">
         <div class="modal-content modal-reserva">

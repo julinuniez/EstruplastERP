@@ -18,7 +18,7 @@ const producto = ref({
     pesoEspecifico: 1.1,
     stockMinimo: 0,
     precioCosto: 0,
-    rubro: '',
+    categoriaInsumoId: '', // 🚀 REEMPLAZA AL VIEJO "RUBRO"
     stockActual: 0,
     esMateriaPrima: false,
     esProductoTerminado: false,
@@ -28,13 +28,12 @@ const producto = ref({
 
 const ingredienteSeleccionado = ref('');
 const cantidadIngrediente = ref('');
-const extrusoraIngrediente = ref('A'); // 🚀 DESTINO PARA EL INGREDIENTE MANUAL
+const extrusoraIngrediente = ref('A'); 
 const mostrarCalculadora = ref(false);
 const calcPorcentajeCapa = ref(20);
 const calcPorcentajeInterno = ref(99.92);
-const calcDestinoCalculadora = ref('A'); // 🚀 DESTINO DESDE LA CALCULADORA
+const calcDestinoCalculadora = ref('A'); 
 
-// 🚀 AHORA LA LÓGICA DE VALIDACIÓN SEPARA POR TOLVAS
 const porcentajesPorTolva = computed(() => {
     let sumas = { UNICA: 0, A: 0, B: 0 };
     let tieneCoextrusion = false;
@@ -60,7 +59,6 @@ const porcentajesPorTolva = computed(() => {
     };
 });
 
-// 🚀 VERIFICA SI HAY ALGÚN ERROR EN ALGUNA TOLVA
 const errorBasePorcentaje = computed(() => {
     const p = porcentajesPorTolva.value;
     if (p.usaCoextrusion) {
@@ -82,7 +80,6 @@ const errorBasePorcentaje = computed(() => {
     }
 });
 
-// 🚀 AGRUPADOR VISUAL PARA LAS TABLAS SEPARADAS
 const gruposRecetaVisual = computed(() => {
     const grupos = {
         A: { titulo: '🟦 EXTRUSORA A (Capa Externa)', items: [] },
@@ -92,7 +89,6 @@ const gruposRecetaVisual = computed(() => {
 
     producto.value.receta.forEach((item, index) => {
         const dest = item.extrusoraDestino || 'UNICA';
-        // Guardamos el item y su index original para que el botón "Eliminar" funcione bien
         if (dest === 'A') grupos.A.items.push({ item, index });
         else if (dest === 'B') grupos.B.items.push({ item, index });
         else grupos.UNICA.items.push({ item, index });
@@ -108,11 +104,11 @@ const porcentajeProyectado = computed(() => {
 });
 
 const faltaPrecioCosto = computed(() => producto.value.esMateriaPrima && (!producto.value.precioCosto || producto.value.precioCosto <= 0));
-const faltaRubro = computed(() => producto.value.esMateriaPrima && !producto.value.rubro);
+const faltaCategoria = computed(() => producto.value.esMateriaPrima && !producto.value.categoriaInsumoId);
 
 const puedeGuardar = computed(() => {
     if (guardando.value) return false;
-    if (producto.value.esMateriaPrima && (faltaPrecioCosto.value || faltaRubro.value)) return false;
+    if (producto.value.esMateriaPrima && (faltaPrecioCosto.value || faltaCategoria.value)) return false;
     if (producto.value.esProductoTerminado && producto.value.receta.length > 0) {
         return errorBasePorcentaje.value === null; 
     }
@@ -125,15 +121,11 @@ const setTipoProducto = (tipo) => {
     if (tipo === 'MP') producto.value.receta = [];
 };
 
-const getSku = (p) => (p.codigoSku || p.CodigoSku || '').toUpperCase();
 const getNombre = (p) => (p.nombre || p.Nombre || '').toUpperCase();
 
+// 🚀 AHORA DETECTA EL MOLIDO DIRECTAMENTE POR SU ID (4)
 const isRecuperado = (p) => {
-    const sku = getSku(p);
-    const nom = getNombre(p);
-    return !!(p.esScrap || p.EsScrap) || 
-           sku.includes('SCRAP') || sku.includes('MOLIDO') || sku.includes('PELET') ||
-           nom.includes('SCRAP') || nom.includes('MOLIDO') || nom.includes('PELET');
+    return p.categoriaInsumoId === 4 || p.CategoriaInsumoId === 4 || !!(p.esScrap || p.EsScrap);
 };
 
 onMounted(async () => {
@@ -145,12 +137,13 @@ onMounted(async () => {
         producto.value = resProd.data;
         if (!producto.value.receta) producto.value.receta = [];
         
-        producto.value.rubro = resProd.data.rubro || resProd.data.Rubro || '';
+        // 🚀 MAPEAMOS LA NUEVA CATEGORIA
+        producto.value.categoriaInsumoId = resProd.data.categoriaInsumoId || resProd.data.CategoriaInsumoId || '';
         producto.value.precioCosto = resProd.data.precioCosto || resProd.data.PrecioCosto || 0;
 
         producto.value.receta = producto.value.receta.map(r => ({
             ...r,
-            extrusoraDestino: r.extrusoraDestino || 'UNICA' 
+            extrusoraDestino: r.extrusoraDestino || 'UNICA'
         }));
 
         const resTodos = await api.get('/Productos');
@@ -230,8 +223,8 @@ const guardarConfiguracion = async () => {
     if (producto.value.esProductoTerminado && producto.value.receta.length > 0 && errorBasePorcentaje.value !== null) {
         return Alertas.advertencia(errorBasePorcentaje.value);
     }
-    if (producto.value.esMateriaPrima && (!producto.value.rubro || producto.value.precioCosto <= 0)) {
-        return Alertas.advertencia(`⚠️ Por favor complete el Rubro y el Precio de Costo.`);
+    if (producto.value.esMateriaPrima && (!producto.value.categoriaInsumoId || producto.value.precioCosto <= 0)) {
+        return Alertas.advertencia(`⚠️ Por favor complete el Rol del Insumo y el Precio de Costo.`);
     }
 
     guardando.value = true;
@@ -240,7 +233,7 @@ const guardarConfiguracion = async () => {
             stockMinimo: Number(producto.value.stockMinimo),
             pesoEspecifico: producto.value.esProductoTerminado ? Number(producto.value.pesoEspecifico) : 0,
             precioCosto: Number(producto.value.precioCosto),
-            rubro: producto.value.rubro,
+            categoriaInsumoId: producto.value.esMateriaPrima ? Number(producto.value.categoriaInsumoId) : null, // 🚀 SE ENVÍA EL ID
             stockActual: Number(producto.value.stockActual),
             esMateriaPrima: producto.value.esMateriaPrima,
             esProductoTerminado: producto.value.esProductoTerminado,
@@ -310,16 +303,17 @@ const volver = () => {
                     </div>
                     
                     <div class="campo">
-                        <label>🏷️ Rubro <span v-if="producto.esMateriaPrima" style="color:red">*</span></label>
-                        <select v-model="producto.rubro" :class="{'input-error': faltaRubro}">
-                            <option value="" disabled>-- Seleccionar Rubro --</option>
-                            <option value="MATERIA PRIMA">Materia Prima Virgen</option>
-                            <option value="ADITIVO">Aditivo</option>
-                            <option value="MASTERBATCH">Masterbatch / Color</option>
-                            <option value="PRODUCTO TERMINADO">Producto Terminado</option>
-                            <option value="OTROS">Otros / Insumos Generales</option>
+                        <label>🏷️ Rol del Insumo <span v-if="producto.esMateriaPrima" style="color:red">*</span></label>
+                        <!-- 🚀 SELECTOR INTELIGENTE RELACIONAL -->
+                        <select v-model="producto.categoriaInsumoId" :class="{'input-error': faltaCategoria}" :disabled="producto.esProductoTerminado">
+                            <option value="" disabled>-- Seleccionar Rol --</option>
+                            <option :value="1">Materia Prima Virgen (BASE)</option>
+                            <option :value="2">Masterbatch / Color (DEPENDIENTE)</option>
+                            <option :value="3">Aditivo UV/Deslizante (DEPENDIENTE)</option>
+                            <option :value="4">Molido / Recuperado / Scrap (INVASOR)</option>
+                            <option :value="5">Otros / Insumos Generales</option>
                         </select>
-                        <small v-if="faltaRubro" class="text-error">El rubro es obligatorio</small>
+                        <small v-if="faltaCategoria" class="text-error">La categoría es obligatoria</small>
                     </div>
 
                     <div class="campo">
@@ -357,9 +351,8 @@ const volver = () => {
             <div v-if="producto.esProductoTerminado" class="seccion-box">
                 <div class="header-receta">
                     <div style="display: flex; flex-direction: column;">
-                        <h4 style="margin-bottom: 5px; border-bottom: none;">📝 Fórmula (Porcentajes)</h4>
+                        <h4 style="margin-bottom: 5px; border-bottom: none;">📝 Fórmula MATRIZ Base (Porcentajes)</h4>
                         
-                        <!-- 🚀 INDICADORES DE TOLVAS INDEPENDIENTES -->
                         <div style="display: flex; gap: 10px; font-size: 11px;">
                             <div class="total-badge" :class="porcentajesPorTolva.UNICA === 100 ? 'ok' : 'error'" v-if="!porcentajesPorTolva.usaCoextrusion">
                                 ÚNICA: {{ porcentajesPorTolva.UNICA }}%
@@ -374,10 +367,9 @@ const volver = () => {
                     </div>
                 </div>
 
-                <!-- 🚀 CONTENEDOR CON FLEX-WRAP PARA QUE NO SE SALGA DE LA PANTALLA -->
                 <div class="buscador-receta">
                     <select v-model="ingredienteSeleccionado" class="select-mp">
-                        <option value="" disabled selected>🔍 Seleccionar Insumo Virgen / Master...</option>
+                        <option value="" disabled selected>🔍 Seleccionar Virgen / Master...</option>
                         <option v-for="mp in listaMateriasPrimas" :key="mp.id" :value="mp.id">
                             {{ mp.codigoSku || mp.CodigoSku }} - {{ mp.nombre || mp.Nombre }}
                         </option>
@@ -425,7 +417,6 @@ const volver = () => {
                     <button @click="agregarDesdeCalculadora" class="btn-add-calc">➕ Agregar Insumo a la {{ calcDestinoCalculadora === 'UNICA' ? 'Tolva Única' : 'Tolva ' + calcDestinoCalculadora }}</button>
                 </div>
 
-                <!-- 🚀 NUEVA DISTRIBUCIÓN: TABLAS SEPARADAS POR TOLVA -->
                 <div class="tabla-receta-wrapper">
                     <template v-for="(grupo, key) in gruposRecetaVisual" :key="key">
                         <div v-if="grupo.items.length > 0" class="grupo-tolva-edit">
@@ -436,9 +427,9 @@ const volver = () => {
                             <table class="tabla-receta">
                                 <thead>
                                     <tr>
-                                        <th>Insumo</th>
-                                        <th width="180" class="text-center">Tolva / Máquina</th>
-                                        <th width="120" class="text-center">Porcentaje</th>
+                                        <th>Insumo Matriz</th>
+                                        <th width="150" class="text-center">Tolva / Máquina</th>
+                                        <th width="100" class="text-center">Porcentaje</th>
                                         <th width="40"></th>
                                     </tr>
                                 </thead>
@@ -485,7 +476,7 @@ const volver = () => {
                     
                     <button @click="guardarConfiguracion" class="btn-guardar" :disabled="!puedeGuardar">
                         <span v-if="guardando">Guardando...</span>
-                        <span v-else-if="faltaPrecioCosto || faltaRubro">⚠️ Faltan Datos Obligatorios</span>
+                        <span v-else-if="faltaPrecioCosto || faltaCategoria">⚠️ Faltan Datos Obligatorios</span>
                         <span v-else-if="!puedeGuardar">⚠️ Complete 100% por Tolva</span>
                         <span v-else>💾 Guardar Cambios</span>
                     </button>
@@ -497,7 +488,7 @@ const volver = () => {
 
 <style scoped>
 .container-edit { display: flex; justify-content: center; padding: 20px; background: #f4f6f8; min-height: 100vh; font-family: 'Segoe UI', sans-serif; }
-.card-edit { background: white; width: 900px; max-width: 95vw; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+.card-edit { background: white; width: 950px; max-width: 95vw; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
 .header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
 .header h2 { margin: 0; color: #2c3e50; }
 .subtitle { color: #7f8c8d; margin-top: 5px; font-weight: bold; font-size: 1.1em; }
@@ -533,7 +524,6 @@ const volver = () => {
 .total-badge.ok { background: #27ae60; color: white; }
 .total-badge.error { background: #c0392b; color: white; animation: pulse 2s infinite; }
 
-/* 🚀 BUSCADOR CON FLEX WRAP PARA QUE NO SE SALGA DE LA PANTALLA */
 .buscador-receta { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; background: white; padding: 10px; border: 1px solid #eee; border-radius: 6px; align-items: center; }
 .select-mp { flex: 1; min-width: 250px; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; }
 .input-cant { width: 100px; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; text-align: center; }
@@ -554,7 +544,6 @@ const volver = () => {
 .btn-add-calc { width: 100%; padding: 10px; background: #2980b9; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; margin-top: 5px; }
 .btn-add-calc:hover { background: #1f618d; }
 
-/* 🚀 ESTILOS PARA LAS TABLAS SEPARADAS */
 .tabla-receta-wrapper { border: none; background: transparent; }
 .grupo-tolva-edit { margin-bottom: 15px; border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
 .titulo-tolva-edit { font-size: 12px; font-weight: 900; padding: 10px 15px; display: flex; justify-content: space-between; }
@@ -585,7 +574,6 @@ const volver = () => {
 .btn-guardar:disabled { background: #bdc3c7; cursor: not-allowed; }
 .btn-guardar:hover:not(:disabled) { background: #2980b9; }
 .text-center { text-align: center; }
-.text-muted { color: #999; font-style: italic; padding: 20px; }
 .font-bold { font-weight: bold; color: #2c3e50; }
 @media (max-width: 768px) {
     .grid-3 { grid-template-columns: 1fr; }

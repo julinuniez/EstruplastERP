@@ -8,7 +8,6 @@ import ModalDesglosePallets from './ModalDesglosePallets.vue'
 import { useConsolidacion } from '@/composables/useConsolidacion'
 import { Alertas } from '@/utils/alertas'
 import Swal from 'sweetalert2'
-import HojaImpresion from './HojaImpresion.vue'
 
 const emit = defineEmits(['imprimir-historial', 'imprimir-carga-consolidada', 'imprimir-lote-op'])
 
@@ -360,23 +359,17 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[]) =
     const mapaInsumos = new Map();
     
     ordenesGrupo.forEach(orden => {
-        const desp = Number(orden.desperdicio || 0);
-        const kilosNetos = Number(orden.kilos || 0);
-        const pesoBrutoTotal = kilosNetos * (1 + (desp / 100));
-        const esKilosFijos = orden.esFinalizada || String(orden.estado).toUpperCase() === 'FINALIZADA';
-
         if (orden.consumos && Array.isArray(orden.consumos)) {
             orden.consumos.forEach((c: any) => {
                 const idMp = Number(c.materiaPrimaId || c.id);
                 const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
                 const key = `${idMp}-${destino}`;
                 
+                // 🚀 MATEMÁTICA PURA: Se toma SOLO lo que dice la Base de Datos.
                 const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
                 
-                const kilosFisicosReales = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
-                
                 if (mapaInsumos.has(key)) {
-                    mapaInsumos.get(key).kilosFijos += kilosFisicosReales;
+                    mapaInsumos.get(key).kilosFijos += valorDB;
                 } else {
                     mapaInsumos.set(key, {
                         id: idMp,
@@ -385,8 +378,7 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[]) =
                         nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
                         extrusoraDestino: destino,
                         ExtrusoraDestino: destino,
-                        kilosFijos: kilosFisicosReales,
-                        // 🚀 ACA PASAMOS EL CLIENTE AL PDF
+                        kilosFijos: valorDB, // Viaja limpio
                         clienteId: c.clienteId || c.ClienteId || 0,
                         clienteNombre: c.clienteNombre || c.ClienteNombre || ''
                     });
@@ -606,21 +598,17 @@ async function ejecutarCargaConsolidada() {
         const mapaInsumos = new Map();
         
         ordenesAImprimir.forEach(orden => {
-            const desp = Number(orden.desperdicio || 0);
-            const kilosNetos = Number(orden.kilos || 0);
-            const esKilosFijos = orden.esFinalizada || String(orden.estado).toUpperCase() === 'FINALIZADA';
-
             if (orden.consumos && Array.isArray(orden.consumos)) {
                 orden.consumos.forEach(c => {
                     const idMp = Number(c.materiaPrimaId || c.id);
                     const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
                     const key = `${idMp}-${destino}`;
                     
+                    // 🚀 MATEMÁTICA PURA: Se toma SOLO lo que dice la Base de Datos (Ya es bruto).
                     const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
-                    const kilosFisicosReales = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
                     
                     if (mapaInsumos.has(key)) {
-                        mapaInsumos.get(key).kilosFijos += kilosFisicosReales;
+                        mapaInsumos.get(key).kilosFijos += valorDB;
                     } else {
                         mapaInsumos.set(key, {
                             id: idMp,
@@ -630,8 +618,7 @@ async function ejecutarCargaConsolidada() {
                             nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
                             extrusoraDestino: destino,
                             ExtrusoraDestino: destino,
-                            kilosFijos: kilosFisicosReales,
-                            // 🚀 ACA PASAMOS EL CLIENTE AL PDF EN LA CARGA CONSOLIDADA
+                            kilosFijos: valorDB, // Viaja limpio
                             clienteId: c.clienteId || c.ClienteId || 0,
                             clienteNombre: c.clienteNombre || c.ClienteNombre || ''
                         });

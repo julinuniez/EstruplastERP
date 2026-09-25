@@ -4,6 +4,10 @@ using EstruplastERP.Core;
 using EstruplastERP.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace EstruplastERP.Api.Controllers
 {
@@ -135,7 +139,7 @@ namespace EstruplastERP.Api.Controllers
 
             var stocksDisponibles = await _context.Productos
                 .Where(p => p.ClienteId == clienteId
-                            && p.EsScrap == true
+                            && p.CategoriaInsumoId == 4 // 🚀 NUEVA VALIDACIÓN RELACIONAL (4 = Molido/Scrap)
                             && p.TipoMaterial == materialNecesario
                             && p.StockActual > 0)
                 .OrderByDescending(p => p.StockActual)
@@ -205,7 +209,7 @@ namespace EstruplastERP.Api.Controllers
                     {
                         CodigoSku = skuRecuperado,
                         Nombre = nombreFinal,
-                        Rubro = "MATERIA PRIMA RECUPERADA",
+                        CategoriaInsumoId = 4, // 🚀 ID 4 ES MOLIDO / RECUPERADO
                         TipoMaterial = productoScrap.TipoMaterial,
                         ClienteId = request.ClienteId,
                         EsScrap = false,
@@ -295,13 +299,12 @@ namespace EstruplastERP.Api.Controllers
                              && o.FechaFin.Value.Year == anio)
                     .Select(o => new
                     {
-                        FechaInicio = o.FechaCreacion, // 👈 Agregamos el inicio
+                        FechaInicio = o.FechaCreacion,
                         FechaCierre = o.FechaFin,
                         ClienteNombre = o.Cliente != null ? o.Cliente.RazonSocial : "Stock / Interno",
                         ProductoNombre = o.Producto != null ? o.Producto.Nombre : "Sin Producto",
                         KilosProducidos = o.KilosEstimados,
                         Observacion = o.Observacion
-                        // Eliminamos Id y Desperdicio
                     })
                     .OrderBy(o => o.FechaCierre)
                     .ToListAsync();
@@ -320,7 +323,6 @@ namespace EstruplastERP.Api.Controllers
             var query = _context.Ordenes
                 .Include(o => o.Producto)
                 .Include(o => o.Cliente)
-                // 🚨 MAGIA 1: Filtramos las canceladas desde SQL. ¡No viajan más al frontend!
                 .Where(o => o.Estado != EstadoOrden.Cancelada)
                 .AsQueryable();
 
@@ -348,17 +350,12 @@ namespace EstruplastERP.Api.Controllers
                     {
                         o.Id,
                         Producto = o.Producto != null ? o.Producto.Nombre : "Desconocido",
-                        Medidas = $"{o.Ancho}mm x {o.Espesor} micrones", // Queda por las dudas
-
-                        // 🚨 MAGIA 2: Enviamos las variables reales separadas
+                        Medidas = $"{o.Ancho}mm x {o.Espesor} micrones",
                         Largo = o.Largo,
                         Ancho = o.Ancho,
                         Espesor = o.Espesor,
-
-                        // 🚨 MAGIA 3: Detectamos si es bobina en el backend
                         EsBobina = o.Largo == 0 || (o.Producto != null && o.Producto.Nombre.ToUpper().Contains("BOBINA")),
                         KilosPorBobina = (o.Largo == 0 && o.Cantidad > 0) ? Math.Round(o.KilosEstimados / o.Cantidad, 2) : 0,
-
                         Estado = o.Estado.ToString(),
                         o.Cantidad
                     }).ToList()

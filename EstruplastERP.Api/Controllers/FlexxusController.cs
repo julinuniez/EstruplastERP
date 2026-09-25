@@ -63,8 +63,18 @@ namespace EstruplastERP.Api.Controllers
                         if (string.IsNullOrWhiteSpace(nombre)) nombre = "SIN NOMBRE";
 
                         bool esMP = rubro.Contains("MATERIA PRIMA") || rubro.Contains("MASTERBATCH") || rubro.Contains("INSUMO");
-
                         string tipoDetectado = esMP ? "MATERIA PRIMA" : "OTRO";
+
+                        // 🚀 TRADUCTOR INTELIGENTE: De Texto a CategoriaInsumoId
+                        int categoriaId = 5; // Por defecto: Otros Insumos
+                        if (rubro.Contains("MOLIDO") || rubro.Contains("SCRAP") || nombre.ToUpper().Contains("MOLIDO"))
+                            categoriaId = 4; // Invasor
+                        else if (rubro.Contains("MASTERBATCH") || rubro.Contains("COLOR") || nombre.ToUpper().Contains(" MB "))
+                            categoriaId = 2; // Masterbatch
+                        else if (rubro.Contains("ADITIVO"))
+                            categoriaId = 3; // Aditivo
+                        else if (rubro.Contains("MATERIA PRIMA"))
+                            categoriaId = 1; // Base Virgen
 
                         var prod = productosDb.FirstOrDefault(p =>
                             p.CodigoSku != null &&
@@ -81,9 +91,10 @@ namespace EstruplastERP.Api.Controllers
                                 huboCambios = true;
                             }
 
-                            if (prod.Rubro != rubro)
+                            // 🚀 ACTUALIZAMOS LA CATEGORIA RELACIONAL EN VEZ DEL TEXTO
+                            if (prod.CategoriaInsumoId != categoriaId)
                             {
-                                prod.Rubro = rubro;
+                                prod.CategoriaInsumoId = categoriaId;
                                 prod.EsMateriaPrima = esMP;
                                 prod.EsProductoTerminado = !esMP;
                                 huboCambios = true;
@@ -107,11 +118,11 @@ namespace EstruplastERP.Api.Controllers
                             {
                                 CodigoSku = skuCrudo,
                                 Nombre = nombre,
-                                Rubro = rubro,
+                                CategoriaInsumoId = categoriaId, // 🚀 SE ASIGNA EL ID
                                 TipoMaterial = tipoDetectado,
                                 EsMateriaPrima = esMP,
                                 EsProductoTerminado = !esMP,
-                                EsScrap = false,
+                                EsScrap = (categoriaId == 4), // 🚀 Si es 4, es Scrap
                                 StockActual = 0,
                                 StockMinimo = 100,
                                 Activo = true,
@@ -322,6 +333,7 @@ namespace EstruplastERP.Api.Controllers
                 prod.EsScrap = esModoScrap;
                 prod.EsMateriaPrima = true;
                 prod.Activo = true;
+                prod.CategoriaInsumoId = esModoScrap ? 4 : 1; // 🚀 4: Molido, 1: Virgen Base
 
                 if (prod.Id > 0) _context.Entry(prod).State = EntityState.Modified;
                 return true;
@@ -334,7 +346,7 @@ namespace EstruplastERP.Api.Controllers
                 {
                     CodigoSku = skuSistema,
                     Nombre = nombreFinal,
-                    Rubro = esModoScrap ? "MOLIDO CLIENTE" : "MATERIA PRIMA CLIENTE",
+                    CategoriaInsumoId = esModoScrap ? 4 : 1, // 🚀 SE ASIGNA EL ID EN VEZ DEL RUBRO
                     TipoMaterial = descripcionExcel,
                     ClienteId = clienteId,
                     EsScrap = esModoScrap,

@@ -10,20 +10,20 @@ const loading = ref(false);
 const mensaje = ref('');
 const advertencia = ref(''); 
 
-const variantesEstandar = [
-    'BLANCO', 'NEGRO', 'NATURAL', 'GRAL'
-];
-
 const form = ref({
     clienteId: '',
     materialBaseId: '',
     variedad: '',
+    nuevaVariedadPersonalizada: '',
     kilos: 0,
     productoExistenteId: null as number | null 
 });
 
 watch(() => form.value.variedad, () => {
-    form.value.productoExistenteId = null; 
+    form.value.productoExistenteId = null;
+    if (form.value.variedad !== 'NUEVO') {
+        form.value.nuevaVariedadPersonalizada = '';
+    }
 });
 
 onMounted(async () => {
@@ -39,13 +39,42 @@ onMounted(async () => {
             "PAI", "PEAD", "POLIPROPILENO", "ABS", "RESISTENTE AL FREON", "POLIETILENO"
         ];
 
-        // Filtramos para que solo traiga las familias base que creamos por SQL
         materialesBase.value = resProd.data.filter((p: any) => 
-            p.nombre && nombresExactos.includes(p.nombre.toUpperCase().trim()) && p.rubro === 'FAMILIA BASE'
+            p.nombre && nombresExactos.includes(p.nombre.toUpperCase().trim()) && (p.esMateriaPrima || p.EsMateriaPrima)
         );
         
     } catch (e) { console.error(e); }
 });
+
+const limpiarNombreVariedad = (nombreOriginal: string, nombreBaseAQuitar: string = '') => {
+    let limpio = (nombreOriginal || '').toUpperCase().trim();
+
+    limpio = limpio.replace('[MOLIDO]', '').replace('MOLIDO', '').trim();
+
+    const prefijosMB = ['MASTERBATCH ', 'MASTER ', 'MB ', 'MB. ', 'COLOR '];
+    for (const prefijo of prefijosMB) {
+        if (limpio.startsWith(prefijo)) {
+            limpio = limpio.substring(prefijo.length).trim();
+            break; 
+        }
+    }
+
+    if (nombreBaseAQuitar) {
+        limpio = limpio.replace(nombreBaseAQuitar, '').trim();
+    }
+
+    limpio = limpio.replace(/\(\s*(PAI\vert{}PEAD\vert{}POLIPROPILENO\vert{}ABS\vert{}FREON\vert{}POLIETILENO\vert{}PP\vert{}KG\vert{}KGS\vert{}KG\.\vert{}KGS\.)\s*\)/g, '');
+
+    limpio = limpio
+        .replace(/\bKGS?\.?\b/g, '')
+        .replace(/\(\s*\)/g, '')
+        .replace(/[-]/g, ' ')
+        .replace(/^\s*-\s*/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return limpio;
+};
 
 const variantesExistentes = computed(() => {
     if (!form.value.materialBaseId) return [];
@@ -56,48 +85,85 @@ const variantesExistentes = computed(() => {
 
     return todosLosProductos.value
         .filter(p => {
-            // Filtra por el cliente seleccionado (o stock propio si no elige cliente)
             const esDeCliente = form.value.clienteId 
                 ? p.clienteId === Number(form.value.clienteId)
-                : p.clienteId === null;
+                : (!p.clienteId || p.clienteId === 0 || p.clienteId === 1);
             
             const nombre = p.nombre.toUpperCase();
+            const catId = Number(p.categoriaInsumoId || p.CategoriaInsumoId || 0);
             
-            // 🚨 NUEVA LÓGICA: Busca solo Materia Prima que sea molienda
-            const esMolido = p.esMateriaPrima === true && 
-                             (nombre.includes("MOLIDO") || p.rubro === 'MOLIDO' || p.rubro === 'MOLIDO CLIENTE');
+            const esMolido = (p.esMateriaPrima === true || p.EsMateriaPrima === true) && 
+                             (catId === 4 || nombre.includes("MOLIDO") || nombre.includes("SCRAP"));
                              
             return esDeCliente && esMolido && nombre.includes(nombreBase);
         })
         .map(p => {
-            // Limpia el nombre para mostrar solo la "Variedad" en los botoncitos
-            let variedad = p.nombre.toUpperCase()
-                .replace('[MOLIDO]', '')
-                .replace('MOLIDO', '')
-                .replace(nombreBase, '')
-                .replace(/^\s*-\s*/, '')
-                .trim();
+            let variedad = limpiarNombreVariedad(p.nombre, nombreBase);
             
             return {
                 id: p.id,
-                variedad: variedad || '(GENÉRICO)',
-                stock: p.stockActual
+                variedad: variedad || 'GENÉRICO',
+                stock: p.stockActual ?? 0
             };
         })
         .filter(v => v.variedad.length > 0)
-        .sort((a, b) => b.stock - a.stock);
+        .sort((a, b) => a.variedad.localeCompare(b.variedad)); // 🚀 ORDEN ALFABÉTICO (Antes era por stock)
+});
+
+const nombresVariedadesSugeridas = computed(() => {
+    const nombresUnicos = new Set<string>();
+    
+    variantesExistentes.value.forEach(v => nombresUnicos.add(v.variedad));
+
+    todosLosProductos.value.forEach(p => {
+        const catId = Number(p.categoriaInsumoId || p.CategoriaInsumoId || 0);
+        
+        if (catId === 2) {
+            const esGlobal = !p.clienteId || p.clienteId === 0 || p.clienteId === 1;
+            const esDelCliente = form.value.clienteId ? (p.clienteId === Number(form.value.clienteId)) : false;
+
+            if (esGlobal || esDelCliente) {
+                let nombreLimpio = limpiarNombreVariedad(p.nombre);
+                    
+                if (nombreLimpio && nombreLimpio.length >= 2) {
+                    nombresUnicos.add(nombreLimpio);
+                }
+            }
+        }
+    });
+
+    if (nombresUnicos.size === 0) {
+        nombresUnicos.add('BLANCO');
+        nombresUnicos.add('NEGRO');
+        nombresUnicos.add('NATURAL');
+        nombresUnicos.add('GENÉRICO');
+    }
+
+    // 🚀 ORDEN ALFABÉTICO PERFECTO PARA EL DESPLEGABLE
+    return Array.from(nombresUnicos).sort((a, b) => a.localeCompare(b));
 });
 
 const usarVariante = (variedad: string, id: number) => {
-    form.value.variedad = variedad === '(GENÉRICO)' ? '' : variedad;
+    form.value.variedad = variedad;
     setTimeout(() => {
         form.value.productoExistenteId = id; 
     }, 50); 
 };
 
+const matchIdExistente = computed(() => {
+    const match = variantesExistentes.value.find(v => v.variedad === form.value.variedad);
+    return match ? match.id : null;
+});
+
 const guardar = async () => {
     if (!form.value.materialBaseId || form.value.kilos <= 0) {
         return Alertas.advertencia("⚠️ Faltan datos: Seleccione la Familia y cargue los Kilos.");
+    }
+    
+    const variedadFinal = form.value.variedad === 'NUEVO' ? form.value.nuevaVariedadPersonalizada.trim() : form.value.variedad;
+
+    if (!variedadFinal) {
+        return Alertas.advertencia("⚠️ Debe seleccionar o escribir un color/variedad para el molido.");
     }
 
     loading.value = true;
@@ -107,22 +173,20 @@ const guardar = async () => {
         const payload = {
             ClienteId: form.value.clienteId ? Number(form.value.clienteId) : null,
             MaterialBaseId: Number(form.value.materialBaseId),
-            Variedad: form.value.variedad,
+            Variedad: variedadFinal === 'GENÉRICO' ? '' : variedadFinal,
             Kilos: Number(form.value.kilos),
-            ProductoExistenteId: form.value.productoExistenteId 
+            ProductoExistenteId: matchIdExistente.value || form.value.productoExistenteId 
         };
 
-        // 🚨 Le pega a la ruta que configuramos en el backend
         const res = await api.post('/Movimientos/ingresar-molido', payload);
         
         mensaje.value = `✅ ÉXITO: Ingresados ${form.value.kilos}kg a "${res.data.producto}"`;
         
-        // Resetea el formulario para la próxima carga
         form.value.kilos = 0; 
         form.value.productoExistenteId = null; 
         form.value.variedad = ''; 
+        form.value.nuevaVariedadPersonalizada = '';
 
-        // Refresca el stock para que las sugerencias se actualicen
         const resProd = await api.get('/Productos');
         todosLosProductos.value = resProd.data;
 
@@ -133,7 +197,6 @@ const guardar = async () => {
     }
 };
 </script>
-
 <template>
     <div class="contenedor-scrap-plano">
         <label>1️⃣ Origen (Dueño del Material):</label>
@@ -148,52 +211,62 @@ const guardar = async () => {
             <option v-for="m in materialesBase" :key="m.id" :value="m.id">{{ m.nombre }}</option>
         </select>
 
-        <div class="seccion-variedad">
-            <label>3️⃣ Variedad / Detalle:</label>
+        <div class="seccion-variedad" v-if="form.materialBaseId">
+            <label>3️⃣ Variedad / Color del Molido:</label>
             
-            <div v-if="variantesExistentes.length > 0" class="sugerencias">
-                <small>Variantes existentes (Clic para sumar stock al mismo lote):</small>
+            <select v-model="form.variedad" class="select-variedad">
+                <option value="" disabled>Seleccione Color...</option>
+                <option v-for="v in nombresVariedadesSugeridas" :key="v" :value="v">
+                    {{ v }}
+                </option>
+                <option disabled>────────────────────</option>
+                <option value="NUEVO">✨ + Crear Nuevo Color / Variedad...</option>
+            </select>
+
+            <div v-if="form.variedad === 'NUEVO'" style="margin-top: 10px;">
+                <input 
+                    type="text" 
+                    v-model="form.nuevaVariedadPersonalizada" 
+                    placeholder="Escriba el nombre del nuevo color (Ej: ROJO FUEGO)"
+                    class="input-variedad"
+                    style="border-color: #3498db; background-color: #ebf5fb;"
+                >
+            </div>
+
+            <div v-if="variantesExistentes.length > 0 && form.variedad !== 'NUEVO'" class="sugerencias">
+                <small style="display:block; margin-top: 10px; margin-bottom: 5px; color: #7f8c8d;">
+                    Lotes de molido de este cliente que ya existen en el sistema:
+                </small>
                 <div class="chips-container">
                     <button 
                         v-for="v in variantesExistentes" 
                         :key="v.id"
                         @click="usarVariante(v.variedad, v.id)" 
                         class="chip"
-                        :class="{ 'activo': form.productoExistenteId === v.id }"
+                        :class="{ 'activo': form.variedad === v.variedad }"
                         type="button"
                     >
-                        {{ v.variedad }} 
+                        {{ v.variedad }}
                     </button>
                 </div>
             </div>
-
-            <input 
-                type="text" 
-                v-model="form.variedad" 
-                placeholder="Ej: Rojo, Sillas, Baldes..."
-                class="input-variedad"
-                list="lista-sugerencias"
-            >
-            <datalist id="lista-sugerencias">
-                <option v-for="v in variantesEstandar" :key="v" :value="v"></option>
-            </datalist>
         </div>
 
-        <div class="preview" v-if="form.materialBaseId">
-            <div v-if="form.productoExistenteId">
+        <div class="preview" v-if="form.materialBaseId && form.variedad">
+            <div v-if="matchIdExistente">
                 ✅ <strong>SUMANDO STOCK A:</strong><br> 
-                {{ variantesExistentes.find(v => v.id === form.productoExistenteId)?.variedad || 'Selección Existente' }}
+                {{ variantesExistentes.find(v => v.id === matchIdExistente)?.variedad || 'Selección Existente' }}
             </div>
             <div v-else>
                 🏷️ <strong>NUEVO MATERIAL MOLIDO A CREAR:</strong><br>
-                [MOLIDO] {{ form.variedad ? form.variedad.toUpperCase() : 'GRAL' }} ({{ materialesBase.find(m => m.id == Number(form.materialBaseId))?.nombre }})
+                [MOLIDO] {{ form.variedad === 'NUEVO' ? form.nuevaVariedadPersonalizada.toUpperCase() : form.variedad.toUpperCase() }} ({{ materialesBase.find(m => m.id == Number(form.materialBaseId))?.nombre }})
             </div>
         </div>
 
         <label>4️⃣ Peso (Kg):</label>
         <input type="number" v-model="form.kilos" class="input-kilos" min="0">
 
-        <button @click="guardar" :disabled="loading" class="btn-guardar">
+        <button @click="guardar" :disabled="loading || (!form.variedad) || (form.variedad === 'NUEVO' && !form.nuevaVariedadPersonalizada)" class="btn-guardar">
             {{ loading ? '⏳ Guardando...' : '📥 INGRESAR MOLIENDA' }}
         </button>
 
@@ -205,9 +278,10 @@ const guardar = async () => {
 .contenedor-scrap-plano { display: flex; flex-direction: column; width: 100%; max-width: 600px; margin: 0 auto; }
 label { display: block; font-weight: 700; margin-top: 15px; margin-bottom: 5px; color: #34495e; }
 select, input { width: 100%; padding: 12px; border: 1px solid #dcdcdc; border-radius: 6px; font-size: 1rem; box-sizing: border-box; }
-.input-variedad { width: 100%; box-sizing: border-box; } 
+.input-variedad { width: 100%; box-sizing: border-box; font-weight: bold; } 
+.select-variedad { font-weight: bold; color: #2c3e50; cursor: pointer; }
 .seccion-variedad { background: #f4f6f7; padding: 15px; border-radius: 8px; border: 1px dashed #bdc3c7; margin-top: 15px; }
-.chips-container { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.chips-container { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 5px; }
 .chip { background: white; border: 1px solid #2980b9; color: #2980b9; padding: 5px 10px; border-radius: 15px; cursor: pointer; font-size: 0.8rem; }
 .chip:hover { background: #ebf5fb; }
 .chip.activo { background: #2980b9; color: white; border-width: 2px; font-weight: bold; }

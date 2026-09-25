@@ -139,6 +139,7 @@ export function useImpresionProduccion(
             loading.value = true;
             imprimiendoHistorial.value = true;
             
+            form.value.id = orden.id; 
             form.value.esConsolidado = orden?.esConsolidado || tipoLimpio.includes('consolidada');
             form.value.productoTerminadoId = orden.productoId;
             form.value.clienteId = orden.clienteId;
@@ -160,13 +161,12 @@ export function useImpresionProduccion(
             form.value.color = orden.color || orden.colorTexto || '';
             form.value.colorTexto = orden.colorTexto || orden.color || '';
             form.value.Color = orden.color || '';
+            form.value.kilosYaCalculados = orden.kilosYaCalculados || false;
             
             const desp = Number(orden.desperdicio || 0);
             form.value.merma = desp;
             form.value.kilosTotales = orden.kilos;
             form.value.imprimirEnPaquetes = imprimirEnPaquetes || false;
-
-            const pesoBrutoTotal = orden.kilos * (1 + (desp / 100));
 
             const esHojaCargaOMezlca = 
                 tipoLimpio.includes('carga') || 
@@ -181,57 +181,31 @@ export function useImpresionProduccion(
                 ocultarFormula.value = false; 
             }
 
-            const esKilosFijos = orden.esFinalizada || String(orden.estado).toUpperCase() === 'FINALIZADA' || orden.kilosYaCalculados;
-
-            // 🚀 DEDUCIMOS LOS PORCENTAJES REALES DE LAS TOLVAS DESDE LA BASE DE DATOS
-            let pesoA = 0; let pesoB = 0; let pesoC = 0; let pesoTotalPuros = 0;
+            let pesoTotalPuros = 0;
 
             orden.consumos.forEach((c: any) => {
-                const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
-                const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
-                
-                // 🚀 MATEMÁTICA CORRECTA: Si es pendiente (aún no se consumió en stock físico), le agregamos la merma al peso neto.
-                let kilos = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
                 const n = String(c.nombreMateriaPrima || c.nombreInsumo || '').toUpperCase();
                 const esAditivo = n.includes('ESTEARATO') || n.includes('BRILLO') || n.includes('UV') || n.includes('CAUCHO');
                 
                 if (!esAditivo) {
-                    if (destino === 'A') pesoA += kilos;
-                    else if (destino === 'B') pesoB += kilos;
-                    else if (destino === 'C') pesoC += kilos;
-                    pesoTotalPuros += kilos;
+                    // 🚀 MATEMÁTICA PURA
+                    pesoTotalPuros += Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
                 }
             });
-
-            if (pesoTotalPuros > 0) {
-                form.value.porcentajeTolvaA = Math.round((pesoA / pesoTotalPuros) * 100);
-                form.value.porcentajeTolvaB = Math.round((pesoB / pesoTotalPuros) * 100);
-                form.value.porcentajeTolvaC = Math.round((pesoC / pesoTotalPuros) * 100);
-            } else {
-                form.value.porcentajeTolvaA = 100; form.value.porcentajeTolvaB = 0; form.value.porcentajeTolvaC = 0;
-            }
 
             recetaDinamica.value = orden.consumos.map((c: any) => {
                 const idBuscado = Number(c.materiaPrimaId || c.id);
                 const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
-                const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
                 
-                // 🚀 MATEMÁTICA CORRECTA
-                const kilosFisicosReales = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
-
-                let pesoDeEstaTolva = pesoTotalPuros;
-                if (destino === 'A') pesoDeEstaTolva = pesoA;
-                if (destino === 'B') pesoDeEstaTolva = pesoB;
-                if (destino === 'C') pesoDeEstaTolva = pesoC;
+                // 🚀 MATEMÁTICA LIMPIA: La Base de Datos ya tiene el Peso Bruto Exacto
+                const kilosFisicosReales = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
 
                 const n = String(c.nombreMateriaPrima || c.nombreInsumo || '').toUpperCase();
                 const esAditivo = n.includes('ESTEARATO') || n.includes('BRILLO') || n.includes('UV') || n.includes('CAUCHO');
 
                 let porcentajeLocal = 0;
-                if (esAditivo || esHojaCargaOMezlca) {
-                    porcentajeLocal = pesoBrutoTotal > 0 ? (kilosFisicosReales / pesoBrutoTotal) * 100 : 0;
-                } else {
-                    porcentajeLocal = pesoDeEstaTolva > 0 ? (kilosFisicosReales / pesoDeEstaTolva) * 100 : 0;
+                if (!esAditivo && pesoTotalPuros > 0) {
+                    porcentajeLocal = (kilosFisicosReales / pesoTotalPuros) * 100;
                 }
 
                 return {
@@ -241,11 +215,10 @@ export function useImpresionProduccion(
                     cantidad: porcentajeLocal.toFixed(2), 
                     kilosFijos: kilosFisicosReales.toFixed(2), 
                     clienteId: determinarDuenioMaterial(idBuscado, c),
-                    extrusoraDestino: destino
+                    extrusoraDestino: destino,
+                    esOriginal: false 
                 };
             });
-
-            if (!form.value.esConsolidado && typeof balancearBase === 'function') balancearBase();
 
             const debaPreguntarPallets = !esHojaCargaOMezlca && tipoLimpio === 'orden' && Number(orden?.kilos || 0) > limiteKilos;
 
@@ -307,6 +280,7 @@ export function useImpresionProduccion(
             const contenedorLote = document.createElement('div');
 
             for (const orden of ordenesArray) {
+                form.value.id = orden.id; 
                 form.value.esConsolidado = false;
                 form.value.productoTerminadoId = orden.productoId;
                 form.value.clienteId = orden.clienteId;
@@ -331,33 +305,23 @@ export function useImpresionProduccion(
                 form.value.Color = orden.color || '';
 
                 form.value.imprimirEnPaquetes = false;
-                
-                const desp = Number(orden.desperdicio || 0);
-                const pesoBrutoTotal = orden.kilos * (1 + (desp / 100));
-                const esKilosFijos = orden.esFinalizada || String(orden.estado).toUpperCase() === 'FINALIZADA' || orden.kilosYaCalculados;
 
                 if (orden.consumos) {
                     recetaDinamica.value = orden.consumos.map((c: any) => {
                         const idBuscado = Number(c.materiaPrimaId || c.id);
-                        const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
-                        
-                        // 🚀 MATEMÁTICA CORRECTA PARA LOS LOTES
-                        const kilosFisicosReales = esKilosFijos ? valorDB : (valorDB * (1 + (desp / 100)));
-                        const porcentajeVisible = pesoBrutoTotal > 0 ? (kilosFisicosReales / pesoBrutoTotal) * 100 : 0;
+                        const kilosFisicosReales = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0); // 🚀 MATEMÁTICA LIMPIA
                         
                         return {
                             id: Math.random(),
                             materiaPrimaId: idBuscado,
                             nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo,
-                            cantidad: porcentajeVisible.toFixed(2),
                             kilosFijos: kilosFisicosReales.toFixed(2), 
                             clienteId: determinarDuenioMaterial(idBuscado, c),
-                            extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
+                            extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA',
+                            esOriginal: false
                         };
                     });
                 }
-                
-                if (typeof balancearBase === 'function') balancearBase();
                 
                 await nextTick();
                 await new Promise(r => setTimeout(r, 60));

@@ -3,6 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using EstruplastERP.Data;
 using EstruplastERP.Core;
 using EstruplastERP.Api.Dtos;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace EstruplastERP.Api.Controllers
 {
@@ -26,7 +30,6 @@ namespace EstruplastERP.Api.Controllers
                             m.Fecha.Year == anio &&
                             m.Cantidad > 0 &&
                             m.TipoMovimiento != null &&
-                            // 🚀 FILTRO INTELIGENTE: Atrapa cualquier variante de Compra/Ingreso
                             (m.TipoMovimiento.Contains("COMPRA") || m.TipoMovimiento == "INGRESO"))
                 .OrderByDescending(m => m.Id)
                 .Select(m => new {
@@ -40,8 +43,6 @@ namespace EstruplastERP.Api.Controllers
 
             return Ok(ingresos);
         }
-
-        // --- MÉTODOS DE CONSULTA Y AJUSTE MANUAL ---
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetHistorial()
@@ -147,7 +148,7 @@ namespace EstruplastERP.Api.Controllers
                         StockActual = 0,
                         EsMateriaPrima = true,
                         EsFazon = (dto.ClienteId != null && dto.ClienteId > 0),
-                        Rubro = "RECUPERADO",
+                        CategoriaInsumoId = 4, // 🚀 ID 4: MOLIDO / RECUPERADO / SCRAP
                         TipoMaterial = "RECUPERADO",
                         FechaCreacion = DateTime.Now,
                         EspesorMinimo = 0,
@@ -211,7 +212,7 @@ namespace EstruplastERP.Api.Controllers
                         Nombre = nombreFinal,
                         ClienteId = dto.ClienteId,
                         StockActual = 0,
-                        Rubro = productoBase.Rubro,
+                        CategoriaInsumoId = productoBase.CategoriaInsumoId, // 🚀 HEREDA LA CATEGORÍA DE LA BASE
                         TipoMaterial = productoBase.TipoMaterial,
                         EsMateriaPrima = true,
                         EsFazon = (dto.ClienteId != null && dto.ClienteId > 0),
@@ -311,7 +312,7 @@ namespace EstruplastERP.Api.Controllers
                             CodigoSku = sku,
                             ClienteId = request.ClienteId,
                             StockActual = 0,
-                            Rubro = request.ClienteId.HasValue ? "MOLIDO CLIENTE" : "MOLIDO",
+                            CategoriaInsumoId = 4, // 🚀 ID 4: MOLIDO / INVASOR
                             TipoMaterial = materialBase.TipoMaterial,
                             EsScrap = true,
                             EsMateriaPrima = true,

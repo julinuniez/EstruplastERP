@@ -81,18 +81,6 @@ const kilosNetosExactos = computed(() => {
     return Number(props.form?.kilosTotales) || Number(props.form?.kilosEstimados) || Number(props.form?.kilos) || 0;
 });
 
-const pesoBrutoExacto = computed(() => {
-    const porcentajeDesperdicio = Number(props.form?.merma) || Number(props.form?.desperdicio) || 0; 
-    const resultado = kilosNetosExactos.value * (1 + (porcentajeDesperdicio / 100));
-    return isNaN(resultado) ? 0 : resultado;
-});
-
-const ceilKilos = (valor: number, decimales = 3) => {
-    const num = Number(valor) || 0;
-    const factor = Math.pow(10, decimales);
-    return Math.ceil(num * factor) / factor;
-};
-
 const insumosParaImprimir = computed(() => {
     if (props.receta && props.receta.length > 0) return props.receta;
     if (props.form?.consumos && props.form.consumos.length > 0) return props.form.consumos;
@@ -179,19 +167,43 @@ const recetaVisual = computed(() => {
     });
 });
 
+const esVirgen = (r: any) => {
+    // 1. Detección inmediata si ya viene marcado
+    if (r.esBase) return true;
+    
+    // 2. Detección infalible consultando el ID lógico en el inventario (1 = Virgen)
+    const mpId = Number(r.materiaPrimaId || r.id);
+    const mpMaestra = props.materiasPrimas?.find((m: any) => m.id === mpId);
+    if (mpMaestra && Number(mpMaestra.categoriaInsumoId || mpMaestra.CategoriaInsumoId) === 1) {
+        return true;
+    }
+
+    // 3. Detección de respaldo por nombre (ahora incluye "ALTO IMPACTO")
+    const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
+    const esFamilia = n.includes('PAI') || n.includes('ALTO IMPACTO') || n.includes('PEAD') || n.includes('ABS') || n.includes('POLIPROPILENO') || n.includes('PP ') || n.includes('FREON');
+    const esReciclado = n.includes('MOLIDO') || n.includes('SCRAP') || n.includes('RECUPERADO');
+    
+    return esFamilia && !esReciclado;
+};
+
+const obtenerKilosFila = (r: any) => {
+    let k = Number(r.kilosFijos || r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0);
+    
+    // 🚀 MAGIA: Si es Virgen y estamos en Hoja de Carga, lo redondea para arriba a la bolsa de 25 más cercana
+    if (esVirgen(r) && !props.ocultarFormula && k > 0) {
+        k = Math.ceil(k / 25) * 25;
+    }
+    
+    return k.toFixed(2);
+};
+
 const kilosCabeceraRedondeado = computed(() => {
     if (props.ocultarFormula) {
         return Math.ceil(kilosNetosExactos.value);
     }
     let sumaFisica = 0;
     recetaVisual.value.forEach((r: any) => {
-        if (modoCargaLimpia.value) {
-            sumaFisica += Number(r.kilosFijos || r.cantidadKilos || r.CantidadKilos || r.real || 0);
-        } else {
-            sumaFisica += r.kilosFijos 
-                ? Number(r.kilosFijos) 
-                : ceilKilos((pesoBrutoExacto.value * (Number(r.cantidad) || 0)) / 100);
-        }
+        sumaFisica += Number(obtenerKilosFila(r));
     });
     return Math.round(sumaFisica); 
 });
@@ -222,7 +234,6 @@ const esInsumoFijo = (r: any) => {
     return false;
 };
 
-// 🚀 ACÁ ESTÁ LA LÓGICA DE LAS TOLVAS MÚLTIPLES
 const gruposReceta = computed<Record<string, any>>(() => {
     const porcA = props.form?.porcentajeTolvaA || 100;
     const porcB = props.form?.porcentajeTolvaB || 0;
@@ -310,9 +321,17 @@ const solicitarAgregar = () => {
 };
 
 const solicitarQuitar = (item: any) => { 
-    const indexReal = props.receta.findIndex((r: any) => r.materiaPrimaId === item.materiaPrimaId || r.id === item.id);
-    if (indexReal !== -1) {
-        emit('remove-insumo', indexReal); 
+    emit('remove-insumo', item.materiaPrimaId || item.id);
+};
+
+const solicitarModificarDestino = (item: any, event: Event) => {
+    const target = event.target as HTMLSelectElement | null;
+    if (target) {
+        emit('add-insumo', { 
+            id: item.materiaPrimaId || item.id, 
+            porcentaje: Number(item.cantidad),
+            extrusoraDestino: target.value 
+        });
     }
 };
 
@@ -408,7 +427,6 @@ const tipoCorona = computed(() => {
     return validarCorona(val) ? String(val).toUpperCase() : null;
 });
 
-// 🚀 ACÁ ESTÁ LA FUNCIÓN PARA LIMPIAR LA NOTA DE PEDIDO
 const notasPedidoVisibles = computed(() => {
     try {
         let notas: string[] = [];
@@ -518,7 +536,6 @@ const notasPedidoVisibles = computed(() => {
                 <span style="float:right; font-size: 0.8em; color: #333" v-if="!modoCargaLimpia" class="ocultar-en-impresion">Total: {{ Number(totalPorcentaje).toFixed(2) }}%</span>
             </div>
 
-            <!-- 🚀 TOLVAS MÚLTIPLES -->
             <div class="contenedor-tolvas">
                 <template v-for="grupoKey in ['A', 'B', 'C', 'UNICA']" :key="grupoKey">
                     <div v-if="gruposReceta[grupoKey].items.length > 0" class="grupo-tolva">
@@ -563,12 +580,7 @@ const notasPedidoVisibles = computed(() => {
                                         
                                         <td style="text-align:right; font-size: 1.1em; width:120px;">
                                             <strong :style="{ color: esInsumoFijo(r) ? '#2980b9' : 'inherit' }">
-                                                {{ modoCargaLimpia 
-                                                    ? parseFloat(r.kilosFijos || r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0).toFixed(2) 
-                                                    : (r.kilosFijos 
-                                                        ? parseFloat(r.kilosFijos).toFixed(2) 
-                                                        : ceilKilos((pesoBrutoExacto * (parseFloat(r.cantidad?.toString()) || 0)) / 100).toFixed(2)) 
-                                                }} kg
+                                                {{ obtenerKilosFila(r) }} kg
                                             </strong>
                                         </td>
                                         
@@ -658,14 +670,6 @@ const notasPedidoVisibles = computed(() => {
             <div class="caja-firma-responsable">
                 <div class="linea-firma-pdf">Firma Responsable Calidad</div>
             </div>
-
-            <div class="barcode-impresion">
-                <img 
-                    v-if="ocultarFormula && valorCodigoBarra && !valorCodigoBarra.includes('undefined')" 
-                    :src="generarCodigoDirecto(valorCodigoBarra)" 
-                    alt="Código de Barras OP" 
-                />
-            </div>
         </div>
         <div v-if="cantidadCopias === 2 && n === 1" class="linea-corte-pdf"><span>✂️ CORTAR AQUÍ</span></div>
     </div>
@@ -696,56 +700,35 @@ const notasPedidoVisibles = computed(() => {
 .valor-tech-pdf { font-size: 14px; font-weight: bold; margin-top: 2px; display: block; }
 .seccion-receta-pdf { margin-top: 10px; border: 2px solid black; font-size: 14px; }
 .titulo-receta-pdf { background: #e0e0e0; padding: 5px; font-weight: 900; text-align: center; border-bottom: 2px solid black; font-size: 14px; }
-
 .contenedor-tolvas { display: flex; flex-direction: column; gap: 0px; }
 .titulo-tolva { font-size: 11px; font-weight: 900; padding: 4px 8px; border-bottom: 2px solid black; border-top: 2px solid black; text-align: center; }
 .tolva-A { background-color: #e0f2fe; color: #0369a1; }
 .tolva-B { background-color: #dcfce7; color: #15803d; }
 .tolva-C { background-color: #fef08a; color: #854d0e; }
 .tolva-UNICA { background-color: #f1f5f9; color: #475569; }
-
 .tabla-receta-pdf { width: 100%; border-collapse: collapse; }
 .tabla-receta-pdf th { border-right: 1px solid black; border-bottom: 2px solid black; padding: 5px; background: #f4f4f4; font-size: 11px; text-align: left; }
 .tabla-receta-pdf th:last-child { border-right: none; }
 .tabla-receta-pdf td { border-right: 1px solid black; padding: 5px; font-size: 12px; border-bottom: 1px solid #ccc; }
 .tabla-receta-pdf td:last-child { border-right: none; }
-
 .fila-lotes-pdf { display: flex; gap: 15px; margin-top: 5px; margin-bottom: 10px; }
 .mitad-pdf { flex: 1; }
 .recuadro-gigante-pdf { border: 2px solid black; height: 35px; font-size: 20px; display: flex; align-items: center; justify-content: center; margin-top: 2px; font-weight: 900; overflow: hidden; white-space: nowrap; }
-
-.observacion-wrap-pdf {
-    white-space: pre-wrap !important; 
-    height: auto !important;
-    min-height: 35px;
-    padding: 6px 12px;
-    font-size: 12px !important;
-    line-height: 1.3;
-    justify-content: flex-start !important;
-    align-items: flex-start !important;
-    text-align: left !important;
-    word-break: break-word !important;
-    overflow-wrap: break-word !important;
-}
-
+.observacion-wrap-pdf { white-space: pre-wrap !important; height: auto !important; min-height: 35px; padding: 6px 12px; font-size: 12px !important; line-height: 1.3; justify-content: flex-start !important; align-items: flex-start !important; text-align: left !important; word-break: break-word !important; overflow-wrap: break-word !important; }
 .pie-firma-pdf { margin-top: auto; padding-top: 15px; display: flex; justify-content: space-between; align-items: flex-end; }
 .caja-firmas-operarios { width: 33%; display: flex; flex-direction: column; gap: 8px; }
 .opcion-firma { display: flex; align-items: center; font-size: 12px; font-weight: bold; }
 .box-firma { width: 16px; height: 16px; border: 2px solid black; margin-right: 8px; display: inline-block; background-color: white; }
-
 .caja-firma-responsable { width: 33%; display: flex; justify-content: center; padding-bottom: 5px; }
 .linea-firma-pdf { border-top: 2px solid black; width: 100%; text-align: center; font-size: 11px; padding-top: 2px; font-weight: bold; }
-
 .barcode-impresion { width: 33%; display: flex; justify-content: flex-end; align-items: flex-end; }
 .barcode-impresion img { max-height: 55px; max-width: 100%; object-fit: contain; }
-
 .seccion-totales-manuales { margin-top: 10px; border: 2px solid black; background-color: #fff; }
 .titulo-totales-manuales { background-color: #e0e0e0; font-size: 9px; font-weight: 900; text-align: center; border-bottom: 2px solid black; padding: 2px; }
 .contenedor-columnas-totales { display: flex; justify-content: space-around; padding: 10px 5px; }
 .columna-total { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .etiqueta-manual { font-size: 11px; font-weight: 900; }
 .linea-llenado { width: 80%; border-bottom: 2px solid black; height: 20px; }
-
 .marca-agua { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 50px; color: rgba(0,0,0,0.03); font-weight: 900; border: 5px solid rgba(0,0,0,0.03); padding: 10px 40px; border-radius: 20px; z-index: 0; pointer-events: none; }
 .linea-corte-pdf { position: absolute; bottom: -12px; left: 0; width: 100%; text-align: center; font-size: 10px; color: #999; z-index: 10; }
 .linea-corte-pdf span { background: white; padding: 0 10px; }
@@ -755,23 +738,14 @@ const notasPedidoVisibles = computed(() => {
 .buscador-wrapper { position: relative; width: 400px; }
 .input-buscador { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
 .lista-resultados { position: absolute; bottom: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; max-height: 150px; overflow-y: auto; z-index: 999; box-shadow: 0 -4px 6px rgba(0,0,0,0.1); margin-bottom: 2px; border-radius: 4px; }
-
 .item-resultado { padding: 8px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
 .item-resultado:hover { background-color: #f1f2f6; }
 .nombre-insumo-lista { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; text-align: left; }
 .badge-mini-cliente { background: #f39c12; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; letter-spacing: 0.5px; }
 .badge-mini-propio { background: #3498db; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; letter-spacing: 0.5px; }
-
-.input-porc-edit {
-    width: 60px; text-align: right; border: 1px solid #bdc3c7; border-radius: 4px; padding: 4px; font-size: 12px; font-weight: bold; color: #2c3e50; background: #fff; margin-right: 4px; transition: all 0.2s;
-}
+.input-porc-edit { width: 60px; text-align: right; border: 1px solid #bdc3c7; border-radius: 4px; padding: 4px; font-size: 12px; font-weight: bold; color: #2c3e50; background: #fff; margin-right: 4px; transition: all 0.2s; }
 .input-porc-edit:focus { border-color: #3498db; outline: none; box-shadow: 0 0 3px rgba(52, 152, 219, 0.5); }
-
-@media print {
-    .ocultar-en-impresion { display: none !important; }
-}
-
-input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+@media print { .ocultar-en-impresion { display: none !important; } }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 </style>

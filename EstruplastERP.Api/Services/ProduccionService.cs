@@ -78,8 +78,6 @@ namespace EstruplastERP.Api.Services
                 }).ToList();
             }
 
-            // Ya no explotamos recetas porque se removió la propiedad EsPremezcla de la base de datos
-
             if (request.ClienteId.GetValueOrDefault() > 0)
             {
                 itemsParaVerificar = await AplicarSustitucionFazon(request.ClienteId.Value, itemsParaVerificar);
@@ -105,7 +103,6 @@ namespace EstruplastERP.Api.Services
 
                     var stockLibre = mp.StockActual - retenidoPorOtras;
 
-                    // APLICAMOS TOLERANCIA TAMBIÉN EN LA VERIFICACIÓN
                     decimal cantidadAjustada = AplicarToleranciaStock(item.CantidadKilos, stockLibre);
 
                     if (stockLibre < cantidadAjustada)
@@ -162,8 +159,6 @@ namespace EstruplastERP.Api.Services
                     }).ToList();
                 }
 
-                // Ya no explotamos recetas porque se removió la propiedad EsPremezcla de la base de datos
-
                 if (request.ClienteId.GetValueOrDefault() > 0)
                 {
                     consumosCalculados = await AplicarSustitucionFazon(request.ClienteId.Value, consumosCalculados);
@@ -173,11 +168,9 @@ namespace EstruplastERP.Api.Services
                 {
                     foreach (var item in consumosCalculados)
                     {
-                        // BUSCAMOS EL STOCK ACTUAL PARA EL REDONDEO
                         var mp = await _context.Productos.FindAsync(item.MateriaPrimaId);
                         decimal stockActualMP = mp?.StockActual ?? 0;
 
-                        // APLICAMOS LA TRABA DE TOLERANCIA
                         decimal cantidadFinal = AplicarToleranciaStock(item.CantidadKilos, stockActualMP);
 
                         nuevaOrden.Consumos.Add(new ConsumoOrden
@@ -203,56 +196,45 @@ namespace EstruplastERP.Api.Services
 
         public async Task<List<ItemFormulaVisualDto>> ObtenerRecetaProyectada(int productoId, int clienteId, decimal kilosAProducir)
         {
-            var productoTerminado = await _context.Productos.FindAsync(productoId);
-            var recetaDb = await _context.Formulas.Include(f => f.MateriaPrima).Where(f => f.ProductoTerminadoId == productoId).ToListAsync();
-            var materialesCliente = await _context.Productos.Where(p => p.ClienteId == clienteId && p.EsMateriaPrima && p.FamiliaId != null).ToListAsync();
+            var recetaDb = await _context.Formulas
+                .Include(f => f.MateriaPrima)
+                .Where(f => f.ProductoTerminadoId == productoId)
+                .ToListAsync();
+
+            var consumosOriginales = recetaDb.Select(r => new DetalleConsumoDto
+            {
+                MateriaPrimaId = r.MateriaPrimaId,
+                CantidadKilos = (kilosAProducir * r.Cantidad) / 100M
+            }).ToList();
+
+            // 🚀 SE USA EL MISMO METODO DE VERIFICAR STOCK EN VEZ DEL HARDCODEO VIEJO
+            var consumosFinales = await AplicarSustitucionFazon(clienteId, consumosOriginales);
 
             var listaVisual = new List<ItemFormulaVisualDto>();
 
-            foreach (var itemReceta in recetaDb)
+            for (int i = 0; i < consumosOriginales.Count; i++)
             {
-                int idFinal = itemReceta.MateriaPrimaId;
-                string nombreFinal = itemReceta.MateriaPrima.Nombre;
-                bool esSustitucion = false;
-                int familiaBuscada = itemReceta.MateriaPrima.FamiliaId ?? 0;
+                var original = consumosOriginales[i];
+                var final = consumosFinales[i];
+                bool esSustitucion = original.MateriaPrimaId != final.MateriaPrimaId;
 
-                if (productoTerminado != null)
+                string nombreFinal = "";
+                if (esSustitucion)
                 {
-                    string nombrePT = productoTerminado.Nombre.ToUpper();
-
-                    if (familiaBuscada == 10)
-                    {
-                        if (nombrePT.Contains("FINO")) familiaBuscada = 11;
-                        else if (nombrePT.Contains("GRUESO")) familiaBuscada = 12;
-                        else if (nombrePT.Contains("BICAPA")) familiaBuscada = 13;
-                        else if (nombrePT.Contains("TRICAPA")) familiaBuscada = 14;
-                    }
-                    else if (familiaBuscada == 20)
-                    {
-                        if (nombrePT.Contains("GRUESO")) familiaBuscada = 21;
-                    }
-                    else if (familiaBuscada == 30 || familiaBuscada == 40)
-                    {
-                        if (nombrePT.Contains("FINO")) familiaBuscada = 31;
-                        else if (nombrePT.Contains("GRUESO")) familiaBuscada = 32;
-                        else if (nombrePT.Contains("BICAPA")) familiaBuscada = 41;
-                    }
+                    var mpNueva = await _context.Productos.FindAsync(final.MateriaPrimaId);
+                    nombreFinal = mpNueva?.Nombre ?? "Material Sustituto";
                 }
-
-                var sustituto = materialesCliente.FirstOrDefault(m => m.FamiliaId == familiaBuscada);
-
-                if (sustituto != null)
+                else
                 {
-                    idFinal = sustituto.Id;
-                    nombreFinal = sustituto.Nombre;
-                    esSustitucion = true;
+                    var mpOriginal = recetaDb.First(r => r.MateriaPrimaId == original.MateriaPrimaId).MateriaPrima;
+                    nombreFinal = mpOriginal.Nombre;
                 }
 
                 listaVisual.Add(new ItemFormulaVisualDto
                 {
-                    MateriaPrimaId = idFinal,
+                    MateriaPrimaId = final.MateriaPrimaId,
                     Nombre = nombreFinal,
-                    CantidadRequerida = (kilosAProducir * itemReceta.Cantidad) / 100M,
+                    CantidadRequerida = final.CantidadKilos,
                     EsSustitucion = esSustitucion
                 });
             }

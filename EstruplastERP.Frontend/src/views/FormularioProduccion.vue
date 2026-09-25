@@ -6,14 +6,14 @@ import { ProduccionAPI } from '@/services/produccionService'
 import { useCalculosProduccion } from '@/composables/useCalculosProduccion';
 import { useBorradorProduccion } from '@/composables/useBorradorProduccion';
 import { useImpresionProduccion } from '@/composables/useImpresionProduccion';
-import { useRecetaProduccion } from '@/composables/useRecetaProduccion';
 import { useFiltrosProduccion } from '@/composables/useFiltrosProduccion';
 import { useFazonProduccion } from '@/composables/useFazonProduccion';
 import { useGuardadoProduccion } from '@/composables/useGuardadoProduccion';
 
 interface Producto {
     id: number; nombre: string; codigoSku: string; esProductoTerminado: boolean;
-    esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; esScrap?: boolean; rubro?: string;
+    esGenerico: boolean; esFazon?: boolean; esMateriaPrima?: boolean; esScrap?: boolean; 
+    categoriaInsumoId?: number; 
     largo: number; ancho: number; espesor: number; pesoEspecifico: number; color?: string;
     receta?: any[]; espesorMinimo?: number; espesorMaximo?: number; clienteId?: number;
     tipoMaterial?: string;
@@ -34,13 +34,13 @@ interface ItemReceta {
     esFazonInput?: boolean; materialBase?: string;
     kilosFijos?: number | string;
     extrusoraDestino?: string;
+    cantidadOriginal?: number;
+    esOriginal?: boolean;
+    agregadoPorCajaColor?: boolean;
 }
 
 const apiUrl = import.meta.env.VITE_API_URL || '/api'; 
 const DENSIDAD_DEFAULT = 1.1;
-const ID_MASTERBATCH_GENERICO = 90; 
-const PESO_LATA_KG = 0.150;        
-const KILOS_BASE_LATA = 25;
 
 const loading = ref(false);
 const guardando = ref(false); 
@@ -61,13 +61,12 @@ const limiteMaximo = ref(0);
 const mensaje = ref('');
 const error = ref('');
 const uiLlevaImpresion = ref(false);
-const idProduccionGenerada = ref(false);
 const ocultarFormula = ref(false);
+const idProduccionGenerada = ref(false); 
 const cantidadPalletsUsuario = ref(1);
 const notaPedidoSugerida = ref<string>('');
 
 const tipoSalidaVisual = ref<'NORMAL' | 'NATURAL'>('NORMAL');
-
 const emit = defineEmits(['guardado'])
 
 const form = ref({
@@ -118,9 +117,9 @@ const espesorValido = computed(() => {
 
 const productoSeleccionado = computed(() => productos.value.find(p => p.id === Number(form.value.productoTerminadoId)) || null);
 const clienteSeleccionado = computed(() => clientes.value.find(c => c.id === Number(form.value.clienteId)) || null);
-
 const densidadPT = computed(() => productoSeleccionado.value?.pesoEspecifico || 1.1);
 
+// 🚀 REEMPLAZA RUBROS TEXTUALES POR LOS NUEVOS IDS DE CATEGORÍA
 const porcentajesPorTolva = computed(() => {
     let sumas = { UNICA: 0, A: 0, B: 0, C: 0 };
     let tieneCoextrusion = false;
@@ -129,14 +128,15 @@ const porcentajesPorTolva = computed(() => {
         const mpId = r.materiaPrimaId || r.id;
         const mpInfo = listaTodasMateriasPrimas.value.find(m => m.id === mpId) || listaInventarioCompleto.value.find(m => m.id === mpId);
         
-        const rubro = mpInfo ? String(mpInfo.rubro || mpInfo.Rubro || '').toUpperCase() : '';
+        const catId = mpInfo ? Number(mpInfo.categoriaInsumoId || mpInfo.CategoriaInsumoId || 0) : 0;
         const nombreMaterial = mpInfo ? String(mpInfo.nombre || mpInfo.Nombre || '').toUpperCase() : '';
         const esCargaFisica = r.esCarga || nombreMaterial.includes('CARGA') || nombreMaterial.includes('CARBONATO') || nombreMaterial.includes('TIZA');
 
         const destino = r.extrusoraDestino || r.ExtrusoraDestino || 'UNICA';
         if (destino === 'A' || destino === 'B' || destino === 'C') tieneCoextrusion = true;
 
-        if ((rubro !== 'ADITIVO' && rubro !== 'OTROS') || esCargaFisica) {
+        // Categoría 3 = Aditivos. Categoría 5 = Otros.
+        if ((catId !== 3 && catId !== 5) || esCargaFisica) {
             if (destino === 'A') sumas.A += Number(r.cantidad || 0);
             else if (destino === 'B') sumas.B += Number(r.cantidad || 0);
             else if (destino === 'C') sumas.C += Number(r.cantidad || 0);
@@ -177,9 +177,7 @@ const errorBasePorcentaje = computed(() => {
     }
 });
 
-const porcentajeSoloBase = computed(() => {
-    return errorBasePorcentaje.value ? 0 : 100;
-});
+const porcentajeSoloBase = computed(() => errorBasePorcentaje.value ? 0 : 100);
 
 const { factorMerma } = useCalculosProduccion(form, recetaDinamica, productoSeleccionado);
 
@@ -197,24 +195,19 @@ const kilosCalculados = computed(() => form.value.kilosTotales);
 
 const kilosEstearato = computed(() => {
     let kilosBase = Number(form.value.kilosTotales);
-    if (isNaN(kilosBase) || kilosBase <= 0) {
-        kilosBase = Number(kilosCalculados.value);
-    }
+    if (isNaN(kilosBase) || kilosBase <= 0) kilosBase = Number(kilosCalculados.value);
     return kilosBase * 0.0008;
 });
 
 const recetaConExtrasParaVista = computed(() => {
     if (imprimiendoHistorial.value) {
-        return recetaDinamica.value.map(r => {
-            return {
-                ...r,
-                cantidad: Number(r.cantidad || 0).toFixed(2),
-                kilosFijos: Number(r.kilosFijos || 0).toFixed(2)
-            };
-        });
+        return recetaDinamica.value.map(r => ({
+            ...r,
+            cantidad: Number(r.cantidad || 0).toFixed(2),
+            kilosFijos: Number(r.kilosFijos || 0).toFixed(2)
+        }));
     }
 
-    // 🚀 CLONACIÓN VITAL PARA EVITAR BUCLE INFINITO AL IMPRIMIR
     const recetaLimpia = recetaDinamica.value
         .filter(r => {
             const n = (r.nombreInsumo || '').toUpperCase();
@@ -222,20 +215,23 @@ const recetaConExtrasParaVista = computed(() => {
         })
         .map(r => ({ ...r })); 
 
-    const kilosBase = form.value.kilosTotales > 0 ? form.value.kilosTotales : 1;
+    const kilosNetos = form.value.kilosTotales > 0 ? form.value.kilosTotales : 1;
+    const desp = Number(form.value.merma || 8);
+    const kilosBrutos = kilosNetos * (1 + (desp / 100)); 
+
     const usaCoextrusion = usaCoextrusionCalculado.value;
     
     const porcA = usaCoextrusion ? Number(form.value.porcentajeTolvaA) : 100;
     const porcB = usaCoextrusion ? Number(form.value.porcentajeTolvaB) : 100;
     const porcC = usaCoextrusion ? Number(form.value.porcentajeTolvaC) : 100;
 
-    const kilosCapaA = kilosBase * (porcA / 100);
-    const kilosMasaB = kilosBase * (porcB / 100);
-    const kilosCapaC = kilosBase * (porcC / 100);
+    const kilosCapaA = kilosBrutos * (porcA / 100);
+    const kilosMasaB = kilosBrutos * (porcB / 100);
+    const kilosCapaC = kilosBrutos * (porcC / 100);
 
     recetaLimpia.forEach(r => {
         const destino = r.extrusoraDestino || 'UNICA';
-        let kilosDeLaTolva = kilosBase;
+        let kilosDeLaTolva = kilosBrutos;
         
         if (destino === 'A') kilosDeLaTolva = kilosCapaA;
         if (destino === 'B') kilosDeLaTolva = kilosMasaB;
@@ -249,13 +245,9 @@ const recetaConExtrasParaVista = computed(() => {
 
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
     if (est && kilosEstearato.value > 0) {
-        const valorKilos = kilosEstearato.value.toFixed(2);
         recetaLimpia.push({
             id: 'estearato-fijo', materiaPrimaId: est.id, nombreInsumo: `🧪 ${est.nombre}`,
-            densidad: est.pesoEspecifico || 1, esEstearato: true, 
-            cantidad: 0.08, 
-            kilosFijos: valorKilos,
-            extrusoraDestino: tolvaMasa
+            densidad: est.pesoEspecifico || 1, esEstearato: true, cantidad: 0.08, kilosFijos: kilosEstearato.value.toFixed(2), extrusoraDestino: tolvaMasa
         });
     }
     
@@ -263,14 +255,11 @@ const recetaConExtrasParaVista = computed(() => {
         const keywordBrillo = form.value.tipoBrillo === '555' ? '555' : '777';
         let mpBrillo = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes(`BRILLO ${keywordBrillo}`)) || listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('BRILLO'));
         if (mpBrillo) {
-            const baseParaBrillo = tolvaCapa === 'A' ? kilosCapaA : kilosBase;
+            const baseParaBrillo = tolvaCapa === 'A' ? kilosCapaA : kilosBrutos;
             const kilosAditivo = ((baseParaBrillo * form.value.porcBrillo) / 100).toFixed(2);
             recetaLimpia.push({
                 id: 'brillo-fijo', materiaPrimaId: mpBrillo.id, nombreInsumo: `✨ ${mpBrillo.nombre}`,
-                densidad: mpBrillo.pesoEspecifico || 1, 
-                cantidad: form.value.porcBrillo,
-                kilosFijos: kilosAditivo,
-                extrusoraDestino: tolvaCapa
+                densidad: mpBrillo.pesoEspecifico || 1, cantidad: form.value.porcBrillo, kilosFijos: kilosAditivo, extrusoraDestino: tolvaCapa
             });
         }
     }
@@ -278,14 +267,11 @@ const recetaConExtrasParaVista = computed(() => {
     if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
         const mpUV = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('UV'));
         if (mpUV) {
-            const baseParaUv = tolvaCapa === 'A' ? kilosCapaA : kilosBase;
+            const baseParaUv = tolvaCapa === 'A' ? kilosCapaA : kilosBrutos; 
             const kilosAditivo = ((baseParaUv * form.value.porcentajeUv) / 100).toFixed(2);
             recetaLimpia.push({
                 id: 'uv-fijo', materiaPrimaId: mpUV.id, nombreInsumo: `☀️ ${mpUV.nombre}`,
-                densidad: mpUV.pesoEspecifico || 1, 
-                cantidad: form.value.porcentajeUv,
-                kilosFijos: kilosAditivo,
-                extrusoraDestino: tolvaCapa
+                densidad: mpUV.pesoEspecifico || 1, cantidad: form.value.porcentajeUv, kilosFijos: kilosAditivo, extrusoraDestino: tolvaCapa
             });
         }
     }
@@ -293,23 +279,16 @@ const recetaConExtrasParaVista = computed(() => {
     if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
         const mpCaucho = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('CAUCHO'));
         if (mpCaucho) {
-            const baseParaCaucho = tolvaMasa === 'B' ? kilosMasaB : kilosBase;
+            const baseParaCaucho = tolvaMasa === 'B' ? kilosMasaB : kilosBrutos; 
             const kilosAditivo = ((baseParaCaucho * form.value.porcentajeCaucho) / 100).toFixed(2);
             recetaLimpia.push({
                 id: 'caucho-fijo', materiaPrimaId: mpCaucho.id, nombreInsumo: `🚜 ${mpCaucho.nombre}`,
-                densidad: mpCaucho.pesoEspecifico || 1, 
-                cantidad: form.value.porcentajeCaucho,
-                kilosFijos: kilosAditivo,
-                extrusoraDestino: tolvaMasa
+                densidad: mpCaucho.pesoEspecifico || 1, cantidad: form.value.porcentajeCaucho, kilosFijos: kilosAditivo, extrusoraDestino: tolvaMasa
             });
         }
     }
 
-    return recetaLimpia.map(r => {
-        let c = Number(r.cantidad || 0).toFixed(2);
-        let k = Number(r.kilosFijos || 0).toFixed(2);
-        return { ...r, cantidad: c, kilosFijos: k };
-    });
+    return recetaLimpia.map(r => ({ ...r, cantidad: Number(r.cantidad || 0).toFixed(2), kilosFijos: Number(r.kilosFijos || 0).toFixed(2) }));
 });
 
 const { 
@@ -326,19 +305,188 @@ const {
     kilosCalculados, factorMerma, limiteMinimo, limiteMaximo
 );
 
-const { 
-    balancearBase, recalcularFormulaAutomatica, quitarInsumoManual, agregarInsumoDesdeHijo 
-} = useRecetaProduccion(
-    form, recetaDinamica, listaTodasMateriasPrimas, listaInventarioCompleto, 
-    listaMasterbatches, idCristal555, mostrarCajaColor
-);
+// 🚀 NUEVO MOTOR MATEMÁTICO DE MATRIZ Y CAJAS COMPRIMIBLES (EL CAMINO 2)
+const getCategoriaId = (idMp: number) => {
+    const mp = listaTodasMateriasPrimas.value.find(m => m.id === idMp) || listaInventarioCompleto.value.find(m => m.id === idMp);
+    if (!mp) return 5;
+    
+    const catId = Number(mp.categoriaInsumoId || mp.CategoriaInsumoId || 0);
+    if (catId > 0 && catId !== 5) return catId;
+
+    // 🚀 SALVAVIDAS: Si el material es viejo y la DB no tiene el ID 4 asignado, lo forzamos por nombre.
+    const nombre = String(mp.nombre || mp.Nombre || '').toUpperCase();
+    if (nombre.includes('MOLIDO') || nombre.includes('SCRAP') || mp.esScrap || mp.EsScrap) return 4;
+    if (nombre.includes('MB ') || nombre.includes('MASTER') || nombre.includes('COLOR')) return 2;
+    if (nombre.includes('ADITIVO') || nombre.includes('UV') || nombre.includes('BRILLO')) return 3;
+    if (nombre.includes('BASE') || mp.esMateriaPrima || mp.EsMateriaPrima) return 1;
+    
+    return 5;
+};
+
+const recalcularMatrizYProporciones = () => {
+    if (mutandoParaGuardar.value || imprimiendoHistorial.value) return;
+    if (!recetaDinamica.value || recetaDinamica.value.length === 0) return;
+
+    // 1. Inyectar Color Elegido reemplazando el Genérico
+    if (form.value.masterbatchId && (mostrarCajaColor.value || form.value.esProductoColor)) {
+        const mpColorElegido = listaTodasMateriasPrimas.value.find(m => m.id === form.value.masterbatchId);
+        
+        if (mpColorElegido) {
+            // Buscamos en la receta el "hueco" reservado para el color (categoría 2 o nombre genérico)
+            let itemColorBase = recetaDinamica.value.find(r => 
+                r.agregadoPorCajaColor || // Si ya lo habíamos reemplazado antes en esta misma sesión
+                getCategoriaId(Number(r.materiaPrimaId || r.id)) === 2 || // Si la base de datos lo marca como Masterbatch
+                String(r.nombreInsumo).toUpperCase().includes('COLORES VARIOS') ||
+                String(r.nombreInsumo).toUpperCase().includes('COLOR')
+            );
+
+            if (itemColorBase) {
+                // 🚀 MAGIA: Reemplaza los datos del material, PERO mantiene intacta la extrusoraDestino y cantidad original!
+                itemColorBase.materiaPrimaId = mpColorElegido.id;
+                itemColorBase.nombreInsumo = mpColorElegido.nombre;
+                itemColorBase.densidad = mpColorElegido.pesoEspecifico || 1.1;
+                itemColorBase.agregadoPorCajaColor = true;
+            } else {
+                // Si la receta original no traía un hueco de color, lo creamos inteligentemente
+                // Si usan coextrusión, lo mandamos a la Tolva A (capa exterior). Sino a la UNICA.
+                let destinoSugerido = recetaDinamica.value.some(r => r.extrusoraDestino === 'A') ? 'A' : 'UNICA';
+                
+                recetaDinamica.value.push({
+                    id: 'color_caja_' + Date.now(),
+                    materiaPrimaId: mpColorElegido.id,
+                    nombreInsumo: mpColorElegido.nombre,
+                    cantidadOriginal: 2, // Lo inyecta al 2% por defecto si no existía
+                    cantidad: 2, 
+                    densidad: mpColorElegido.pesoEspecifico || 1.1,
+                    agregadoPorCajaColor: true,
+                    extrusoraDestino: destinoSugerido,
+                    esOriginal: true 
+                });
+            }
+        }
+    } else {
+        // Si el usuario "apaga" el interruptor de color, quitamos la capa de Masterbatch
+        // (El motor matemático luego se encarga de inflar el material Virgen al 100% para cubrir el hueco)
+        recetaDinamica.value = recetaDinamica.value.filter(r => !r.agregadoPorCajaColor);
+    }
+
+    console.groupCollapsed("🐞 DEBUG: COMPRESIÓN DE LA MATRIZ");
+
+    // 2. Procesar cada Tolva Independiente
+    const tolvas = ['UNICA', 'A', 'B', 'C'];
+    
+    tolvas.forEach(tolva => {
+        const itemsTolva = recetaDinamica.value.filter(r => (r.extrusoraDestino || 'UNICA') === tolva);
+        if (itemsTolva.length === 0) return;
+
+        // Separar Invasores (ID 4: Scrap/Molido) de la Matriz (Resto)
+        const invasores = itemsTolva.filter(r => getCategoriaId(Number(r.materiaPrimaId || r.id)) === 4);
+        const matriz = itemsTolva.filter(r => getCategoriaId(Number(r.materiaPrimaId || r.id)) !== 4);
+
+        let sumaInvasores = 0;
+        invasores.forEach(inv => {
+            if (inv.cantidadOriginal === undefined) inv.cantidadOriginal = Number(inv.cantidad || 0);
+            sumaInvasores += Number(inv.cantidadOriginal);
+            inv.cantidad = Number(inv.cantidadOriginal).toFixed(2); // El Invasor no se achica
+        });
+
+        // Calcular espacio libre para la Matriz
+        sumaInvasores = Math.min(sumaInvasores, 99.99); // Evitar cero absoluto
+        const espacioLibre = 100 - sumaInvasores;
+
+        console.log(`Tolva ${tolva}: Molido ocupa ${sumaInvasores}%. Espacio libre para la Caja Matriz: ${espacioLibre}%`);
+
+        // Balanceo interno de la Matriz (Base = 100 - Dependientes)
+        let sumaDependientes = 0;
+        const bases = matriz.filter(r => getCategoriaId(Number(r.materiaPrimaId || r.id)) === 1);
+        const dependientes = matriz.filter(r => getCategoriaId(Number(r.materiaPrimaId || r.id)) !== 1);
+
+        dependientes.forEach(dep => {
+            if (dep.cantidadOriginal === undefined) dep.cantidadOriginal = Number(dep.cantidad || 0);
+            sumaDependientes += Number(dep.cantidadOriginal);
+        });
+
+        if (bases.length > 0) {
+            const restoParaBase = Math.max(0, 100 - sumaDependientes);
+            
+            let sumaBasesOrig = bases.reduce((acc, b) => acc + Number(b.cantidadOriginal || 0), 0);
+            if (sumaBasesOrig > 0) {
+                bases.forEach(b => {
+                    const peso = Number(b.cantidadOriginal || 0) / sumaBasesOrig;
+                    b.cantidadOriginal = restoParaBase * peso;
+                });
+            } else {
+                if (bases[0]) {
+                    bases[0].cantidadOriginal = restoParaBase;
+                }
+            }
+        }
+
+        // 3. Aplicar la Compresión de la Matriz al Espacio Libre
+        matriz.forEach(item => {
+            const cat = getCategoriaId(Number(item.materiaPrimaId || item.id));
+            const porcentajeEnMatriz = Number(item.cantidadOriginal || 0);
+            const valorComprimido = (porcentajeEnMatriz / 100) * espacioLibre;
+            item.cantidad = valorComprimido.toFixed(2);
+            
+            console.log(` - [Cat ${cat}] ${item.nombreInsumo}: Era ${porcentajeEnMatriz}% de su caja -> Queda en ${valorComprimido.toFixed(2)}% de la tolva.`);
+        });
+    });
+    
+    console.groupEnd();
+};
+
+const todosLosMasterbatches = computed(() => {
+    return listaTodasMateriasPrimas.value
+        .filter(mp => 
+            Number(mp.categoriaInsumoId || mp.CategoriaInsumoId) === 2 || 
+            String(mp.nombre).toUpperCase().includes('MASTERBATCH') || 
+            String(mp.nombre).toUpperCase().includes('MB ') ||
+            String(mp.nombre).toUpperCase().includes('COLOR ')
+        )
+        .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+});
+
+const onAgregarInsumo = (insumo: any) => {
+    const idMp = Number(insumo.id);
+    const destino = insumo.extrusoraDestino || 'UNICA';
+    const index = recetaDinamica.value.findIndex(r => Number(r.materiaPrimaId) === idMp && (r.extrusoraDestino || 'UNICA') === destino);
+    
+    // 🚀 FIX 3: Validación TypeScript extra en el array
+    if (index !== -1 && recetaDinamica.value[index]) {
+        recetaDinamica.value[index].cantidadOriginal = Number(insumo.porcentaje);
+    } else {
+        const mp = listaTodasMateriasPrimas.value.find(m => m.id === idMp) || listaInventarioCompleto.value.find(m => m.id === idMp);
+        recetaDinamica.value.push({
+            id: 'extra_' + Date.now(),
+            materiaPrimaId: idMp,
+            nombreInsumo: mp ? (mp.nombre || mp.Nombre) : 'Insumo',
+            cantidadOriginal: Number(insumo.porcentaje),
+            cantidad: Number(insumo.porcentaje).toFixed(2),
+            densidad: mp ? (mp.pesoEspecifico || 1.1) : 1.1,
+            extrusoraDestino: destino,
+            esOriginal: false
+        });
+    }
+    recalcularMatrizYProporciones(); 
+};
+
+const onQuitarInsumo = (idInsumo: number) => {
+    const index = recetaDinamica.value.findIndex(r => Number(r.materiaPrimaId) === Number(idInsumo) || r.id === idInsumo);
+    if (index !== -1) {
+        recetaDinamica.value.splice(index, 1);
+        recalcularMatrizYProporciones(); 
+    }
+};
+
+const onActualizarReceta = () => { recalcularMatrizYProporciones(); };
 
 const { 
     detectarMaterial, actualizarRecetaFazonConCliente, alCambiarLoteFazon, aplicarLoteFazonAReceta 
 } = useFazonProduccion(
     recetaDinamica, listaInventarioCompleto, listaTodasMateriasPrimas,
     listaLotesCliente, loteFazonSeleccionadoId, stockFazonDetectado, 
-    clienteTieneFazonActivo, balancearBase
+    clienteTieneFazonActivo, recalcularMatrizYProporciones // 🚀 Llama a la nueva función
 );
 
 const { 
@@ -351,18 +499,9 @@ const {
 );
 
 const { imprimirDesdeHistorial, imprimirLoteOPsDesdeHistorial } = useImpresionProduccion(
-    form, 
-    recetaDinamica, 
-    ocultarFormula, 
-    imprimiendoHistorial, 
-    cantidadPalletsUsuario,
-    mensaje, 
-    error, 
-    loading, 
-    listaProduccionRef, 
-    balancearBase, 
-    limpiarFormulario,
-    listaInventarioCompleto 
+    form, recetaDinamica, ocultarFormula, imprimiendoHistorial, cantidadPalletsUsuario,
+    mensaje, error, loading, listaProduccionRef, recalcularMatrizYProporciones, 
+    limpiarFormulario, listaInventarioCompleto 
 );
 
 async function CargarProductosFiltrados(clienteId: number | string = '') {
@@ -385,30 +524,21 @@ async function CargarDatosProductos(id: number) {
         const prod = await ProduccionAPI.obtenerProductoPorId(id);
 
         if (prod.receta && Array.isArray(prod.receta) && prod.receta.length > 0) {
-            
             const tieneA = prod.receta.some((r: any) => (r.extrusoraDestino || 'UNICA') === 'A');
             const tieneB = prod.receta.some((r: any) => (r.extrusoraDestino || 'UNICA') === 'B');
             const tieneC = prod.receta.some((r: any) => (r.extrusoraDestino || 'UNICA') === 'C');
 
             if (tieneA && tieneB && !tieneC) {
-                form.value.porcentajeTolvaA = 20;
-                form.value.porcentajeTolvaB = 80;
-                form.value.porcentajeTolvaC = 0;
+                form.value.porcentajeTolvaA = 20; form.value.porcentajeTolvaB = 80; form.value.porcentajeTolvaC = 0;
             } else if (tieneA && tieneB && tieneC) {
-                form.value.porcentajeTolvaA = 10;
-                form.value.porcentajeTolvaB = 80;
-                form.value.porcentajeTolvaC = 10;
+                form.value.porcentajeTolvaA = 10; form.value.porcentajeTolvaB = 80; form.value.porcentajeTolvaC = 10;
             } else {
-                form.value.porcentajeTolvaA = 100;
-                form.value.porcentajeTolvaB = 0;
-                form.value.porcentajeTolvaC = 0;
+                form.value.porcentajeTolvaA = 100; form.value.porcentajeTolvaB = 0; form.value.porcentajeTolvaC = 0;
             }
 
             recetaDinamica.value = prod.receta.map((r: any) => {
                 const mpId = r.materiaPrimaId || r.id;
-                const mp = listaTodasMateriasPrimas.value.find(m => m.id === mpId) || 
-                           listaInventarioCompleto.value.find(m => m.id === mpId);
-                
+                const mp = listaTodasMateriasPrimas.value.find(m => m.id === mpId) || listaInventarioCompleto.value.find(m => m.id === mpId);
                 const idDuenioReal = mp ? Number(mp.clienteId || mp.ClienteId || 0) : Number(r.clienteId || 0);
                 const destino = r.extrusoraDestino || r.ExtrusoraDestino || 'UNICA';
 
@@ -418,39 +548,30 @@ async function CargarDatosProductos(id: number) {
                     nombreInsumo: r.nombreInsumo || r.nombreMateriaPrima || mp?.nombre,
                     cantidad: Number(r.cantidad || r.porcentaje || 0).toFixed(2),
                     densidad: r.densidad || r.pesoEspecifico || 1.1,
-                    esBase: r.esBase || false,
                     clienteId: idDuenioReal,
-                    extrusoraDestino: destino
+                    extrusoraDestino: destino,
+                    cantidadOriginal: Number(r.cantidad || r.porcentaje || 0), // 🚀 Fija el peso inicial
+                    esOriginal: true 
                 };
             });
             
-            if (typeof balancearBase === 'function') balancearBase();
+            recalcularMatrizYProporciones();
         }
 
         if (!form.value.largo || form.value.largo === 0) {
             form.value.esBobina = (prod.nombre || '').toUpperCase().includes('BOBINA');
             form.value.largo = form.value.esBobina ? 0 : Number(prod.largo || prod.Largo || 0);
         }
-        
-        if (!form.value.ancho || form.value.ancho === 0) {
-            form.value.ancho = Number(prod.ancho || prod.Ancho || 0);
-        }
-        
-        if (!form.value.espesor || form.value.espesor === 0) {
-            form.value.espesor = Number(prod.espesor || prod.Espesor || 0);
-        }
+        if (!form.value.ancho || form.value.ancho === 0) form.value.ancho = Number(prod.ancho || prod.Ancho || 0);
+        if (!form.value.espesor || form.value.espesor === 0) form.value.espesor = Number(prod.espesor || prod.Espesor || 0);
 
         limiteMinimo.value = Number(prod.espesorMinimo || prod.EspesorMinimo || 0);
         limiteMaximo.value = Number(prod.espesorMaximo || prod.EspesorMaximo || 0);
 
-    } catch (e) { 
-        console.error("Error cargando datos maestros:", e); 
-    }
+    } catch (e) { console.error("Error cargando datos maestros:", e); }
 }
 
-watch(mostrarCajaColor, (v) => {
-    if (!v) form.value.masterbatchId = '';
-});
+watch(mostrarCajaColor, (v) => { if (!v) form.value.masterbatchId = ''; });
 
 watch(() => form.value.porcentajeTolvaA, (newVal) => {
     if (!usaCoextrusionCalculado.value || imprimiendoHistorial.value) return;
@@ -473,9 +594,7 @@ const cargarLotesFazonSeguro = async () => {
         return;
     }
     const prodFinal = productos.value.find(p => p.id === Number(form.value.productoTerminadoId));
-    if (prodFinal) {
-        await actualizarRecetaFazonConCliente(Number(form.value.clienteId), prodFinal);
-    }
+    if (prodFinal) await actualizarRecetaFazonConCliente(Number(form.value.clienteId), prodFinal);
 };
 
 watch(() => form.value.clienteId, async (nuevoCli) => {
@@ -490,7 +609,6 @@ watch(() => form.value.clienteId, async (nuevoCli) => {
 
 watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
     if (form.value.esConsolidado) return;
-    
     form.value.merma = 8;
     tipoSalidaVisual.value = 'NORMAL';
     
@@ -513,7 +631,7 @@ watch(() => listaInventarioCompleto.value?.length, (nuevoLargo) => {
     }
 });
 
-// 🚀 ESCUDO CONTRA EL BUCLE INFINITO
+// 🚀 AHORA EL WATCH DEL COLOR TAMBIÉN LLAMA AL COMPRESOR DE MATRIZ
 watch(
     [
         () => form.value.masterbatchId, () => form.value.aditivoCarga, 
@@ -524,7 +642,7 @@ watch(
     ],
     () => {
         if (imprimiendoHistorial.value || mutandoParaGuardar.value) return;
-        recalcularFormulaAutomatica();
+        recalcularMatrizYProporciones();
     }
 );
 
@@ -532,13 +650,7 @@ watch(() => form.value.espesor, (v) => { if (v < 1) form.value.conBrillo = false
 watch(() => form.value.conBrillo, (v) => { if (!v) form.value.llevaFilm = false; });
 
 watch(
-    [
-        () => form.value.ancho, 
-        () => form.value.espesor, 
-        () => form.value.kilosPorBobina,
-        () => densidadPT.value,
-        () => form.value.esBobina
-    ], 
+    [ () => form.value.ancho, () => form.value.espesor, () => form.value.kilosPorBobina, () => densidadPT.value, () => form.value.esBobina ], 
     () => {
         if (form.value.esBobina && form.value.ancho > 0 && form.value.espesor > 0 && densidadPT.value > 0 && form.value.kilosPorBobina > 0) {
             const largoDespejado = (form.value.kilosPorBobina * 1000000) / (form.value.ancho * form.value.espesor * densidadPT.value);
@@ -549,14 +661,7 @@ watch(
 );
 
 watch(
-    [
-        () => form.value.largo, 
-        () => form.value.ancho, 
-        () => form.value.espesor, 
-        () => form.value.cantidad, 
-        () => form.value.esBobina, 
-        () => form.value.kilosPorBobina
-    ], 
+    [ () => form.value.largo, () => form.value.ancho, () => form.value.espesor, () => form.value.cantidad, () => form.value.esBobina, () => form.value.kilosPorBobina ], 
     () => {
         if (!form.value.esConsolidado && !imprimiendoHistorial.value) {
             if (form.value.esBobina) {
@@ -593,7 +698,7 @@ watch(
 
 watch(imprimiendoHistorial, (estaImprimiendo) => {
     if (!estaImprimiendo && recetaDinamica.value.length > 0 && !form.value.esConsolidado) {
-        balancearBase();
+        recalcularMatrizYProporciones(); 
     }
 });
 
@@ -634,9 +739,7 @@ const procesarGuardado = async () => {
     mostrarOpcionMismoPedido.value = false; 
     
     mutandoParaGuardar.value = true;
-
     const copiaProfundaOriginal = JSON.parse(JSON.stringify(recetaDinamica.value));
-    
     const usaCoextrusion = usaCoextrusionCalculado.value;
     const tolvaCapa = usaCoextrusion ? 'A' : 'UNICA';
     const tolvaMasa = usaCoextrusion ? 'B' : 'UNICA';
@@ -686,13 +789,9 @@ const procesarGuardado = async () => {
     const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
     if (est && !recetaDinamica.value.some(r => r.materiaPrimaId === est.id)) {
         recetaDinamica.value.push({
-            id: 0,
-            materiaPrimaId: est.id,
-            nombreInsumo: est.nombre,
+            id: 0, materiaPrimaId: est.id, nombreInsumo: est.nombre,
             cantidad: Number((kilosEstearato.value / (form.value.kilosTotales > 0 ? form.value.kilosTotales : 1) * 100).toFixed(2)), 
-            densidad: est.pesoEspecifico || 1,
-            esEstearato: true,
-            extrusoraDestino: tolvaMasa
+            densidad: est.pesoEspecifico || 1, esEstearato: true, extrusoraDestino: tolvaMasa
         });
     }
 
@@ -705,12 +804,8 @@ const procesarGuardado = async () => {
             const factor = tolvaCapa === 'A' ? (form.value.porcentajeTolvaA / 100) : 1;
             const cantidadGlobal = (Number(form.value.porcBrillo) * factor).toFixed(2);
             recetaDinamica.value.push({
-                id: 0,
-                materiaPrimaId: mpBrillo.id,
-                nombreInsumo: mpBrillo.nombre,
-                cantidad: cantidadGlobal,
-                densidad: mpBrillo.pesoEspecifico || 1,
-                extrusoraDestino: tolvaCapa
+                id: 0, materiaPrimaId: mpBrillo.id, nombreInsumo: mpBrillo.nombre,
+                cantidad: cantidadGlobal, densidad: mpBrillo.pesoEspecifico || 1, extrusoraDestino: tolvaCapa
             });
         }
     }
@@ -721,12 +816,8 @@ const procesarGuardado = async () => {
             const factor = tolvaCapa === 'A' ? (form.value.porcentajeTolvaA / 100) : 1;
             const cantidadGlobal = (Number(form.value.porcentajeUv) * factor).toFixed(2);
             recetaDinamica.value.push({
-                id: 0, 
-                materiaPrimaId: mpUV.id, 
-                nombreInsumo: mpUV.nombre,
-                cantidad: cantidadGlobal,
-                densidad: mpUV.pesoEspecifico || 1,
-                extrusoraDestino: tolvaCapa
+                id: 0, materiaPrimaId: mpUV.id, nombreInsumo: mpUV.nombre,
+                cantidad: cantidadGlobal, densidad: mpUV.pesoEspecifico || 1, extrusoraDestino: tolvaCapa
             });
         }
     }
@@ -737,30 +828,20 @@ const procesarGuardado = async () => {
             const factor = tolvaMasa === 'B' ? (form.value.porcentajeTolvaB / 100) : 1;
             const cantidadGlobal = (Number(form.value.porcentajeCaucho) * factor).toFixed(2);
             recetaDinamica.value.push({
-                id: 0, 
-                materiaPrimaId: mpCaucho.id, 
-                nombreInsumo: mpCaucho.nombre,
-                cantidad: cantidadGlobal,
-                densidad: mpCaucho.pesoEspecifico || 1,
-                extrusoraDestino: tolvaMasa
+                id: 0, materiaPrimaId: mpCaucho.id, nombreInsumo: mpCaucho.nombre,
+                cantidad: cantidadGlobal, densidad: mpCaucho.pesoEspecifico || 1, extrusoraDestino: tolvaMasa
             });
         }
     }
 
-    ultimoPedidoGuardado.value = {
-        clienteId: form.value.clienteId,
-        numeroPedidoCliente: form.value.numeroPedidoCliente,
-        notaPedido: form.value.notaPedido
-    };
+    ultimoPedidoGuardado.value = { clienteId: form.value.clienteId, numeroPedidoCliente: form.value.numeroPedidoCliente, notaPedido: form.value.notaPedido };
 
     await registrarProduccion();
     
     recetaDinamica.value = copiaProfundaOriginal;
     mutandoParaGuardar.value = false;
 
-    if (!error.value) {
-        mostrarOpcionMismoPedido.value = true;
-    }
+    if (!error.value) mostrarOpcionMismoPedido.value = true;
 };
 
 const continuarMismoPedido = () => {
@@ -793,9 +874,9 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     :materiasPrimas="listaTodasMateriasPrimas" 
                     :ocultarFormula="ocultarFormula" 
                     :tipoSalidaVisual="tipoSalidaVisual"
-                    @add-insumo="agregarInsumoDesdeHijo" 
-                    @remove-insumo="quitarInsumoManual" 
-                    @update-receta="balancearBase"  
+                    @add-insumo="onAgregarInsumo" 
+                    @remove-insumo="onQuitarInsumo" 
+                    @update-receta="onActualizarReceta"  
                 />
             </div>
         </div>
@@ -854,7 +935,6 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                 </option>
             </select>
 
-            <!-- 🚀 REPARTICIÓN AUTOMÁTICA DE PORCENTAJES A, B y C -->
             <div v-if="usaCoextrusionCalculado" class="fila-input" style="margin-top: 15px; border-top: 1px dashed #7f8c8d; padding-top: 10px; background: #e8f4f8; padding: 10px; border-radius: 6px; border: 1px solid #bde0fe; flex-wrap: wrap;">
                 <div style="flex:1; min-width: 80px;" v-if="porcentajesPorTolva.A > 0 || form.porcentajeTolvaA > 0">
                     <label style="color:#2980b9; font-weight: bold; margin-top: 0;">🟦 Capa A (%)</label>
@@ -904,23 +984,24 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
                     </select>
                 </div>
 
-                <div v-if="mostrarCajaColor" class="box-color">
-                    <label style="color: #f39c12;">🎨 Seleccione Color:</label>
-                    <select v-model="form.masterbatchId">
-                        <option disabled value="">-- Elegir Masterbatch --</option>
-                        <option v-for="mb in listaMasterbatches" :key="mb.id" :value="mb.id">{{ mb.nombre }}</option>
-                    </select>
-                </div>
+                <div style="margin-top: 15px; border-bottom: 1px dashed #7f8c8d; padding-bottom: 5px; margin-bottom: 10px;">
+    <label class="check-container" style="color: #f39c12; margin: 0 !important;">
+        <input type="checkbox" v-model="form.esProductoColor" /> 🎨 Lleva Masterbatch
+    </label>
+</div>
+
+<div v-if="mostrarCajaColor || form.esProductoColor" class="box-color">
+    <label style="color: #f39c12;">🎨 Seleccione Color:</label>
+    <select v-model="form.masterbatchId">
+        <option disabled value="">Elegir Masterbatch</option>
+        <option v-for="mb in todosLosMasterbatches" :key="mb.id" :value="mb.id">{{ mb.nombre }}</option>
+    </select>
+</div>
 
                 <div class="fila-input" style="margin-top: 5px;">
                     <div style="flex:1">
                         <label style="color:#3498db;">✏️ Texto Color (Opcional):</label>
-                        <input 
-                            type="text" 
-                            v-model="form.colorTexto" 
-                            placeholder="Ej: AZUL PANTONE..."
-                            style="font-weight:bold; color:#2980b9;"
-                        />
+                        <input type="text" v-model="form.colorTexto" placeholder="Ej: AZUL PANTONE..." style="font-weight:bold; color:#2980b9;" />
                     </div>
                 </div>
 
@@ -1177,7 +1258,6 @@ defineExpose({ form, error, mensaje, registrarProduccion, recetaDinamica });
 </template>
 
 <style scoped>
-/* CSS Idéntico - No se toca */
 .contenedor-principal-produccion { display: flex; flex-direction: column; width: 100%; min-height: 100vh; font-family: 'Segoe UI', sans-serif; background-color: #ecf0f1; }
 .bloque-superior { display: flex; width: 100%; flex-wrap: wrap; }
 .panel-izquierdo { flex: 1; background-color: #e0e6ed; display: flex; justify-content: center; align-items: flex-start; padding: 20px; border-right: 1px solid #bdc3c7; overflow: hidden; min-width: 400px; }

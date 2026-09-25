@@ -2,6 +2,8 @@
 using Microsoft.EntityFrameworkCore;
 using EstruplastERP.Data;
 using EstruplastERP.Core;
+using System.Threading.Tasks;
+using System;
 
 namespace EstruplastERP.Controllers
 {
@@ -36,7 +38,7 @@ namespace EstruplastERP.Controllers
                     Nombre = $"SCRAP SUCIO - {cliente.RazonSocial.ToUpper()}",
                     CodigoSku = skuScrap,
                     ClienteId = cliente.Id,
-                    Rubro = "SCRAP", // Importante para filtros
+                    CategoriaInsumoId = 4, // 🚀 ID 4 ES "MOLIDO / INVASOR"
                     EsMateriaPrima = false, // No se puede usar para producir directo
                     EsProductoTerminado = false,
                     StockActual = 0,
@@ -100,7 +102,7 @@ namespace EstruplastERP.Controllers
                     Nombre = $"MP RECUPERADO - {cliente.RazonSocial}",
                     CodigoSku = skuLimpio,
                     ClienteId = dto.ClienteId,
-                    Rubro = "MATERIA PRIMA RECUPERADA",
+                    CategoriaInsumoId = 4, // 🚀 ID 4 ES "MOLIDO / INVASOR"
                     EsMateriaPrima = true, // Ya se puede usar en recetas
                     EsProductoTerminado = false,
                     StockActual = 0,

@@ -13,12 +13,17 @@ namespace EstruplastERP.Core
 
         // Identificación
         [MaxLength(50)]
-        public string? CodigoSku { get; set; } 
+        public string? CodigoSku { get; set; }
 
-        public string? Rubro { get; set; }
         public string? TipoMaterial { get; set; }
         public bool EsFazon { get; set; } = false;
         public bool EsScrap { get; set; } = false;
+
+        // 🚀 NUEVA COLUMNA RELACIONAL
+        public int? CategoriaInsumoId { get; set; }
+        [ForeignKey("CategoriaInsumoId")]
+        public CategoriaInsumo? CategoriaInsumo { get; set; }
+
         public decimal? EspesorMinimo { get; set; }
         public decimal? EspesorMaximo { get; set; }
 
@@ -33,25 +38,23 @@ namespace EstruplastERP.Core
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal PrecioCosto { get; set; }
+
         public int? ProveedorId { get; set; }
         [ForeignKey("ProveedorId")]
         public Proveedor? Proveedor { get; set; }
 
-        // Datos Multimedia
         public int? ClienteId { get; set; }
-        public int? FamiliaId { get; set; }
 
         [System.Text.Json.Serialization.JsonIgnore]
         public Cliente? Cliente { get; set; }
 
         // Lógica de Negocio
         public bool EsGenerico { get; set; }
-        public bool EsMateriaPrima { get; set; }      
+        public bool EsMateriaPrima { get; set; }
         public bool EsProductoTerminado { get; set; }
         public bool Activo { get; set; } = true;
 
         public DateTime FechaCreacion { get; set; } = DateTime.Now;
         public ICollection<Formula> Formulas { get; set; } = new List<Formula>();
-
     }
 }
