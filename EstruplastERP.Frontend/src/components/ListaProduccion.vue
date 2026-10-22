@@ -41,6 +41,8 @@ export interface ProduccionItem {
     hojaCargaId?: number | null;
     pallets?: any[]; 
     imprimirEnPaquetes?: boolean;
+    esBobina?: boolean;
+    kilosPorBobina?: number;
 }
 
 const producciones = ref<ProduccionItem[]>([])
@@ -365,23 +367,33 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[]) =
                 const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
                 const key = `${idMp}-${destino}`;
                 
-                // 🚀 MATEMÁTICA PURA: Se toma SOLO lo que dice la Base de Datos.
-                const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
+                let valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || c.kilosFijos || 0);
                 
-                if (mapaInsumos.has(key)) {
-                    mapaInsumos.get(key).kilosFijos += valorDB;
-                } else {
-                    mapaInsumos.set(key, {
-                        id: idMp,
-                        materiaPrimaId: idMp,
-                        nombreMateriaPrima: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
-                        nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
-                        extrusoraDestino: destino,
-                        ExtrusoraDestino: destino,
-                        kilosFijos: valorDB, // Viaja limpio
-                        clienteId: c.clienteId || c.ClienteId || 0,
-                        clienteNombre: c.clienteNombre || c.ClienteNombre || ''
-                    });
+                // 🚀 INTERCEPTOR: Si la orden está FINALIZADA, usamos el consumo REAL
+                if (orden.estado === 'Finalizada') {
+                    if (c.real !== undefined && c.real !== null) valorDB = Number(c.real);
+                    else if (c.consumoReal !== undefined && c.consumoReal !== null) valorDB = Number(c.consumoReal);
+                    else if (c.cantidadReal !== undefined && c.cantidadReal !== null) valorDB = Number(c.cantidadReal);
+                    else if (c.kilosReales !== undefined && c.kilosReales !== null) valorDB = Number(c.kilosReales);
+                }
+                
+                // 🚀 Solo listamos materiales que realmente se usaron (> 0 kg)
+                if (valorDB > 0) {
+                    if (mapaInsumos.has(key)) {
+                        mapaInsumos.get(key).kilosFijos += valorDB;
+                    } else {
+                        mapaInsumos.set(key, {
+                            id: idMp,
+                            materiaPrimaId: idMp,
+                            nombreMateriaPrima: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
+                            nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
+                            extrusoraDestino: destino,
+                            ExtrusoraDestino: destino,
+                            kilosFijos: valorDB, 
+                            clienteId: c.clienteId || c.ClienteId || 0,
+                            clienteNombre: c.clienteNombre || c.ClienteNombre || ''
+                        });
+                    }
                 }
             });
         }
@@ -400,6 +412,9 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[]) =
         const ordenCopia = JSON.parse(JSON.stringify(ordenesGrupo[0]));
         ordenCopia.observacion = (ordenCopia.observacion ? ordenCopia.observacion + ' ' : '') + `[Grupo: HC-S${ordenCopia.id}] [FORZAR_CARGA]`;
         
+        const nombreProdCopia = String(ordenCopia.producto || '').toUpperCase();
+        ordenCopia.esBobina = nombreProdCopia.includes('BOBINA') || nombreProdCopia.includes('ROLLO');
+
         ordenCopia.consumos = recetaInyectada;
         ordenCopia.receta = recetaInyectada;
         ordenCopia.kilosYaCalculados = true; 
@@ -416,9 +431,7 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[]) =
         
         const notasArray = ordenesGrupo.map(o => {
             const n = o.notaPedido || o.NotaPedido;
-            if (n && String(n).toLowerCase() !== 'undefined' && String(n).toLowerCase() !== 'null') {
-                return String(n).trim();
-            }
+            if (n && String(n).toLowerCase() !== 'undefined' && String(n).toLowerCase() !== 'null') return String(n).trim();
             return String(o.id);
         });
         const notasAgrupadas = [...new Set(notasArray)].join(' | ');
@@ -429,6 +442,10 @@ const manejarImpresionDesdeModal = async (codigo: string, ordenesGrupo: any[]) =
         const formObj = JSON.parse(JSON.stringify(ordenesGrupo[0]));
         
         formObj.productoNombre = nombresUnicos.length === 1 ? nombresUnicos[0] : "MEZCLA CONSOLIDADA";
+        
+        const nombreProdConsolidado = String(formObj.productoNombre).toUpperCase();
+        formObj.esBobina = nombreProdConsolidado.includes('BOBINA') || nombreProdConsolidado.includes('ROLLO');
+
         formObj.esConsolidado = true;
         formObj.cantidad = totalUnidades;
         formObj.kilosTotales = totalKilos;
@@ -491,11 +508,36 @@ function inyectarAlertasFabrica(orden: any) {
 const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga') => {
     const ordenCopia = JSON.parse(JSON.stringify(orden));
 
+    const nombreProd = String(ordenCopia.producto || '').toUpperCase();
+    ordenCopia.esBobina = nombreProd.includes('BOBINA') || nombreProd.includes('ROLLO');
+
     if (ordenCopia.consumos && ordenCopia.consumos.length > 0) {
-        ordenCopia.consumos = ordenCopia.consumos.map((c: any) => ({
-            ...c,
-            extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
-        }));
+        ordenCopia.consumos = ordenCopia.consumos.map((c: any) => {
+            let kilosAFijar = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || c.kilosFijos || 0);
+
+            // 🚀 INTERCEPTOR INDIVIDUAL DE CIERRE
+            if (ordenCopia.estado === 'Finalizada') {
+                if (c.real !== undefined && c.real !== null) kilosAFijar = Number(c.real);
+                else if (c.consumoReal !== undefined && c.consumoReal !== null) kilosAFijar = Number(c.consumoReal);
+                else if (c.cantidadReal !== undefined && c.cantidadReal !== null) kilosAFijar = Number(c.cantidadReal);
+                else if (c.kilosReales !== undefined && c.kilosReales !== null) kilosAFijar = Number(c.kilosReales);
+            }
+
+            return {
+                ...c,
+                kilosFijos: kilosAFijar,
+                cantidadKilos: kilosAFijar,
+                CantidadKilos: kilosAFijar,
+                kilos: kilosAFijar,
+                real: kilosAFijar, // Forzamos la verdad absoluta
+                extrusoraDestino: c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA'
+            };
+        });
+        
+        // 🚀 Limpiar lo que no se usó físicamente
+        if (ordenCopia.estado === 'Finalizada') {
+            ordenCopia.consumos = ordenCopia.consumos.filter((c: any) => c.kilosFijos > 0);
+        }
     }
 
     if (tipo === 'carga') {
@@ -522,7 +564,7 @@ const solicitarImpresion = async (orden: ProduccionItem, tipo: 'orden' | 'carga'
     }
 
     let enPaquetes = false;
-    if (ordenCopia.cantidad >= 10) {
+    if (ordenCopia.cantidad >= 10 && !ordenCopia.esBobina) { 
         const divisorMsg = ordenCopia.cantidad >= 200 ? 20 : 10;
         const resp = await Swal.fire({
             title: '¿Imprimir en Paquetes?',
@@ -574,6 +616,10 @@ async function imprimirLoteOP() {
 
     const ordenesAImprimir = ordenesBase.map(orden => {
         const copia = JSON.parse(JSON.stringify(orden));
+        
+        const nombreProd = String(copia.producto || '').toUpperCase();
+        copia.esBobina = nombreProd.includes('BOBINA') || nombreProd.includes('ROLLO');
+
         inyectarAlertasFabrica(copia);
         copia.imprimirEnPaquetes = false; 
         return copia;
@@ -604,24 +650,33 @@ async function ejecutarCargaConsolidada() {
                     const destino = String(c.extrusoraDestino || c.ExtrusoraDestino || 'UNICA').toUpperCase();
                     const key = `${idMp}-${destino}`;
                     
-                    // 🚀 MATEMÁTICA PURA: Se toma SOLO lo que dice la Base de Datos (Ya es bruto).
-                    const valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || 0);
+                    let valorDB = Number(c.cantidadKilos || c.CantidadKilos || c.cantidad || c.kilosFijos || 0);
                     
-                    if (mapaInsumos.has(key)) {
-                        mapaInsumos.get(key).kilosFijos += valorDB;
-                    } else {
-                        mapaInsumos.set(key, {
-                            id: idMp,
-                            materiaPrimaId: idMp,
-                            MateriaPrimaId: idMp,
-                            nombreMateriaPrima: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
-                            nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
-                            extrusoraDestino: destino,
-                            ExtrusoraDestino: destino,
-                            kilosFijos: valorDB, // Viaja limpio
-                            clienteId: c.clienteId || c.ClienteId || 0,
-                            clienteNombre: c.clienteNombre || c.ClienteNombre || ''
-                        });
+                    // 🚀 INTERCEPTOR REAL MASIVO PARA CARGAS MÚLTIPLES
+                    if (orden.estado === 'Finalizada') {
+                        if (c.real !== undefined && c.real !== null) valorDB = Number(c.real);
+                        else if (c.consumoReal !== undefined && c.consumoReal !== null) valorDB = Number(c.consumoReal);
+                        else if (c.cantidadReal !== undefined && c.cantidadReal !== null) valorDB = Number(c.cantidadReal);
+                        else if (c.kilosReales !== undefined && c.kilosReales !== null) valorDB = Number(c.kilosReales);
+                    }
+                    
+                    if (valorDB > 0) {
+                        if (mapaInsumos.has(key)) {
+                            mapaInsumos.get(key).kilosFijos += valorDB;
+                        } else {
+                            mapaInsumos.set(key, {
+                                id: idMp,
+                                materiaPrimaId: idMp,
+                                MateriaPrimaId: idMp,
+                                nombreMateriaPrima: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
+                                nombreInsumo: c.nombreMateriaPrima || c.nombreInsumo || 'Insumo',
+                                extrusoraDestino: destino,
+                                ExtrusoraDestino: destino,
+                                kilosFijos: valorDB,
+                                clienteId: c.clienteId || c.ClienteId || 0,
+                                clienteNombre: c.clienteNombre || c.ClienteNombre || ''
+                            });
+                        }
                     }
                 });
             }
@@ -638,9 +693,7 @@ async function ejecutarCargaConsolidada() {
 
         const notasArray = ordenesAImprimir.map(o => {
             const n = o.notaPedido || o.NotaPedido;
-            if (n && String(n).toLowerCase() !== 'undefined' && String(n).toLowerCase() !== 'null') {
-                return String(n).trim();
-            }
+            if (n && String(n).toLowerCase() !== 'undefined' && String(n).toLowerCase() !== 'null') return String(n).trim();
             return String(o.id);
         });
         const notasAgrupadas = [...new Set(notasArray)].join(' | ');
@@ -650,6 +703,9 @@ async function ejecutarCargaConsolidada() {
         } else {
             formObj.productoNombre = "MEZCLA CONSOLIDADA"
         }
+
+        const nombreProdMix = String(formObj.productoNombre).toUpperCase();
+        formObj.esBobina = nombreProdMix.includes('BOBINA') || nombreProdMix.includes('ROLLO');
 
         formObj.esConsolidado = true;
 
@@ -723,7 +779,6 @@ onMounted(() => {
 
 defineExpose({ cargarHistorial })
 </script>
-
 <template>
   <div class="historial-wrapper">
     <div class="header-tabla">

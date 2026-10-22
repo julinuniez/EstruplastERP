@@ -81,12 +81,67 @@ const kilosNetosExactos = computed(() => {
     return Number(props.form?.kilosTotales) || Number(props.form?.kilosEstimados) || Number(props.form?.kilos) || 0;
 });
 
+// 🚀 DEDUCCIÓN GEOMÉTRICA INFALIBLE: Detecta bobinas sin importar cómo se llamen
+const esBobinaReal = computed(() => {
+    if (props.form?.esBobina === true || String(props.form?.esBobina) === 'true') return true;
+    
+    const n1 = String(props.form?.productoNombre || '').toUpperCase();
+    const n2 = String(props.producto?.nombre || '').toUpperCase();
+    const n3 = String(props.form?.producto || '').toUpperCase();
+    if (n1.includes('BOBINA') || n1.includes('ROLLO') || n2.includes('BOBINA') || n3.includes('BOBINA')) return true;
+
+    // Si el largo supera los 5 metros (5000 mm), físicamente es una bobina.
+    if (Number(props.form?.largo) > 5000) return true;
+
+    return false;
+});
+
+const kilosBobinaPDF = computed(() => {
+    const kBob = Number(props.form?.kilosPorBobina);
+    if (kBob > 0) return kBob;
+    
+    const lrg = Number(props.form?.largo) || 0;
+    const anc = Number(props.form?.ancho) || 0;
+    const esp = Number(props.form?.espesor) || 0;
+    const den = densidadReal.value > 0 ? densidadReal.value : 1.1;
+
+    // 🚀 INGENIERÍA INVERSA: Recupera los kilos originales desde las dimensiones (ej: 37258 mm -> 50 kg)
+    if (lrg > 5000 && anc > 0 && esp > 0) {
+         const kilosRecuperados = (lrg * anc * esp * den) / 1000000;
+         return Math.round(kilosRecuperados); 
+    }
+
+    const total = Number(kilosNetosExactos.value) || 0;
+    const cant = Number(props.form?.cantidad) || 1;
+    
+    if (total > 0 && cant > 0) return parseFloat((total / cant).toFixed(2));
+    
+    return 0;
+});
+
 const insumosParaImprimir = computed(() => {
     if (props.receta && props.receta.length > 0) return props.receta;
     if (props.form?.consumos && props.form.consumos.length > 0) return props.form.consumos;
     if (props.form?.receta && props.form.receta.length > 0) return props.form.receta;
     return [];
 });
+
+const esVirgen = (r: any) => {
+    if (r.esBase) return true;
+    const mpId = Number(r.materiaPrimaId || r.id);
+    const mpMaestra = props.materiasPrimas?.find((m: any) => m.id === mpId);
+    if (mpMaestra && Number(mpMaestra.categoriaInsumoId || mpMaestra.CategoriaInsumoId) === 1) {
+        return true;
+    }
+
+    const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
+    if (n.includes('TUTI') || n.includes('MOLIDO') || n.includes('SCRAP') || n.includes('RECUPERADO')) {
+        return false;
+    }
+    
+    const esFamilia = n.includes('PAI') || n.includes('ALTO IMPACTO') || n.includes('PEAD') || n.includes('ABS') || n.includes('POLIPROPILENO') || n.includes('PP ') || n.includes('FREON');
+    return esFamilia;
+};
 
 const recetaVisual = computed(() => {
     let lista = JSON.parse(JSON.stringify(insumosParaImprimir.value));
@@ -167,33 +222,8 @@ const recetaVisual = computed(() => {
     });
 });
 
-const esVirgen = (r: any) => {
-    // 1. Detección inmediata si ya viene marcado
-    if (r.esBase) return true;
-    
-    // 2. Detección infalible consultando el ID lógico en el inventario (1 = Virgen)
-    const mpId = Number(r.materiaPrimaId || r.id);
-    const mpMaestra = props.materiasPrimas?.find((m: any) => m.id === mpId);
-    if (mpMaestra && Number(mpMaestra.categoriaInsumoId || mpMaestra.CategoriaInsumoId) === 1) {
-        return true;
-    }
-
-    // 3. Detección de respaldo por nombre (ahora incluye "ALTO IMPACTO")
-    const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
-    const esFamilia = n.includes('PAI') || n.includes('ALTO IMPACTO') || n.includes('PEAD') || n.includes('ABS') || n.includes('POLIPROPILENO') || n.includes('PP ') || n.includes('FREON');
-    const esReciclado = n.includes('MOLIDO') || n.includes('SCRAP') || n.includes('RECUPERADO');
-    
-    return esFamilia && !esReciclado;
-};
-
 const obtenerKilosFila = (r: any) => {
     let k = Number(r.kilosFijos || r.cantidadKilos || r.CantidadKilos || r.real || r.kilos || 0);
-    
-    // 🚀 MAGIA: Si es Virgen y estamos en Hoja de Carga, lo redondea para arriba a la bolsa de 25 más cercana
-    if (esVirgen(r) && !props.ocultarFormula && k > 0) {
-        k = Math.ceil(k / 25) * 25;
-    }
-    
     return k.toFixed(2);
 };
 
@@ -215,6 +245,22 @@ const densidadReal = computed(() => {
     return Number(props.densidad) || 0;
 });
 
+const tituloDocumento = computed(() => {
+    if (props.ocultarFormula) return 'ORDEN DE PRODUCCIÓN';
+    if (modoCargaLimpia.value) {
+        return esConsolidadoReal.value ? 'HOJA DE CARGA MÚLTIPLE' : 'HOJA DE CARGA INDIVIDUAL';
+    }
+    return 'HOJA DE CARGA';
+});
+
+const tituloReceta = computed(() => {
+    if (props.ocultarFormula) return 'INSUMOS Y MATERIALES REQUERIDOS';
+    if (modoCargaLimpia.value) {
+        return esConsolidadoReal.value ? 'RESUMEN DE MEZCLA CONSOLIDADA' : 'RECETA DE CARGA A BATEA';
+    }
+    return densidadReal.value > 0 ? `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(densidadReal.value.toFixed(3))})` : 'FÓRMULA DE MEZCLA';
+});
+
 const obtenerEtiquetaOrigen = (itemReceta: any) => {
     const idDuenio = Number(itemReceta.clienteId || itemReceta.ClienteId || 0);
     const nombreDuenio = itemReceta.clienteNombre || itemReceta.ClienteNombre || '';
@@ -230,7 +276,7 @@ const esInsumoFijo = (r: any) => {
     
     const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
     if (n.includes('ESTEARATO') || n.includes('BRILLO') || n.includes('CRISTAL') || 
-        n.includes('777') || n.includes('555') || n.includes('UV') || n.includes('CAUCHO')) return true;
+        n.includes('777') || n.includes('555') || n.includes('UV') || n.includes('CAUCHO') || n.includes('CARGA')) return true;
     return false;
 };
 
@@ -467,7 +513,7 @@ const notasPedidoVisibles = computed(() => {
             <div class="logo-area"><img :src="logoImg" class="logo-central" /></div>
             
             <div class="datos-orden">
-                <h3>{{ modoCargaLimpia ? (esConsolidadoReal ? 'HOJA DE CARGA MÚLTIPLE' : 'HOJA DE CARGA INDIVIDUAL') : (ocultarFormula ? 'ORDEN DE PRODUCCIÓN' : 'HOJA DE CARGA') }}</h3>
+                <h3>{{ tituloDocumento }}</h3>
                 
                 <div v-if="modoCargaLimpia" class="lote-mezcla-resaltado">
                     LOTE N°: {{ codigoLoteVisible }} 
@@ -480,7 +526,7 @@ const notasPedidoVisibles = computed(() => {
         </div>
         
         <div class="fila-pdf" v-if="!esConsolidadoReal">
-            <div><strong>CLIENTE:</strong> <span class="dato-relleno">{{ cliente?.razonSocial || form.clienteNombre || 'STOCK / INTERNO' }}</span></div>
+            <div><strong>CLIENTE:</strong> <span class="dato-relleno">{{ cliente?.razonSocial || form?.clienteNombre || 'STOCK / INTERNO' }}</span></div>
         </div>
 
         <div class="caja-producto-pdf">
@@ -491,12 +537,21 @@ const notasPedidoVisibles = computed(() => {
 
         <div class="ficha-tecnica-pdf">
             <div class="dato-box-pdf" v-if="!esConsolidadoReal"><span class="label-tech-pdf">COLOR</span><span class="valor-tech-pdf">{{ colorFinal || form?.color || form?.Color || '-' }}</span></div>
+            
             <div class="dato-box-pdf" v-if="!esConsolidadoReal">
-                <span class="label-tech-pdf">{{ form.esBobina ? 'FORMATO' : 'LARGO' }}</span>
-                <span class="valor-tech-pdf">{{ form.esBobina ? 'BOBINA (' + (form.kilosPorBobina || 0) + ' Kg)' : (form.largo || 0) + ' mm' }}</span>
-            </div>
-            <div class="dato-box-pdf" v-if="!esConsolidadoReal"><span class="label-tech-pdf">ANCHO</span><span class="valor-tech-pdf">{{ form.ancho }} mm</span></div>
-            <div class="dato-box-pdf" v-if="!esConsolidadoReal"><span class="label-tech-pdf">ESPESOR</span><span class="valor-tech-pdf">{{ form.espesor }} mm</span></div>
+    <span class="label-tech-pdf">{{ esBobinaReal ? 'FORMATO' : 'LARGO' }}</span>
+    
+    <span class="valor-tech-pdf" v-if="esBobinaReal">
+        BOBINA ({{ kilosBobinaPDF }} Kg)
+    </span>
+    
+    <span class="valor-tech-pdf" v-else>
+        {{ form?.largo || 0 }} mm
+    </span>
+</div>
+
+            <div class="dato-box-pdf" v-if="!esConsolidadoReal"><span class="label-tech-pdf">ANCHO</span><span class="valor-tech-pdf">{{ form?.ancho }} mm</span></div>
+            <div class="dato-box-pdf" v-if="!esConsolidadoReal"><span class="label-tech-pdf">ESPESOR</span><span class="valor-tech-pdf">{{ form?.espesor }} mm</span></div>
             <div class="dato-box-pdf">
                 <span class="label-tech-pdf">{{ ocultarFormula ? 'TOTAL KILOS (NETO)' : 'TOTAL MEZCLA (BRUTO)' }}</span>
                 <span class="valor-tech-pdf">{{ kilosCabeceraRedondeado }} kg</span>
@@ -532,8 +587,8 @@ const notasPedidoVisibles = computed(() => {
 
         <div v-show="!ocultarFormula" class="seccion-receta-pdf">
             <div class="titulo-receta-pdf">
-                {{ modoCargaLimpia ? (esConsolidadoReal ? 'RESUMEN DE MEZCLA CONSOLIDADA' : 'RECETA DE CARGA A BATEA') : (densidadReal > 0 ? `FÓRMULA DE MEZCLA (Densidad: ${parseFloat(densidadReal.toFixed(3))})` : 'FÓRMULA DE MEZCLA') }}
-                <span style="float:right; font-size: 0.8em; color: #333" v-if="!modoCargaLimpia" class="ocultar-en-impresion">Total: {{ Number(totalPorcentaje).toFixed(2) }}%</span>
+                {{ tituloReceta }}
+                <span style="float:right; font-size: 0.8em; color: #333" v-if="!modoCargaLimpia && !ocultarFormula" class="ocultar-en-impresion">Total: {{ Number(totalPorcentaje).toFixed(2) }}%</span>
             </div>
 
             <div class="contenedor-tolvas">
@@ -630,9 +685,9 @@ const notasPedidoVisibles = computed(() => {
                 <strong>CANTIDAD (UNIDADES):</strong>
                 
                 <div class="recuadro-gigante-pdf" style="font-size: 16px;">
-                    {{ form.cantidad }}
-                    <span v-if="form.cantidad >= 10 && !form.esBobina" style="font-size: 13px; color: #333; margin-left: 6px; font-weight: bold;">
-                        | {{ Math.floor(form.cantidad / (form.cantidad >= 200 ? 20 : 10)) }} paq. de {{ form.cantidad >= 200 ? 20 : 10 }}<span v-if="form.cantidad % (form.cantidad >= 200 ? 20 : 10) > 0"> y 1 de {{ form.cantidad % (form.cantidad >= 200 ? 20 : 10) }}</span>
+                    {{ form?.cantidad }}
+                    <span v-if="form?.cantidad >= 10 && !form?.esBobina" style="font-size: 13px; color: #333; margin-left: 6px; font-weight: bold;">
+                        | {{ Math.floor(form?.cantidad / (form?.cantidad >= 200 ? 20 : 10)) }} paq. de {{ form?.cantidad >= 200 ? 20 : 10 }}<span v-if="form?.cantidad % (form?.cantidad >= 200 ? 20 : 10) > 0"> y 1 de {{ form?.cantidad % (form?.cantidad >= 200 ? 20 : 10) }}</span>
                     </span>
                 </div>
             </div>
@@ -662,16 +717,16 @@ const notasPedidoVisibles = computed(() => {
         
         <div class="pie-firma-pdf">
             <div class="caja-firmas-operarios">
-                <div class="opcion-firma"><div class="box-firma"></div> Acuña/Rodriguez</div>
-                <div class="opcion-firma"><div class="box-firma"></div> Saavedra/Ayala</div>
+                <div class="opcion-firma" v-if="!ocultarFormula"><div class="box-firma"></div> Acuña/Rodriguez</div>
+                <div class="opcion-firma" v-if="!ocultarFormula"><div class="box-firma"></div> Saavedra/Ayala</div>
                 <div class="opcion-firma" v-if="!ocultarFormula"><div class="box-firma"></div> Marcori</div>
             </div>
             
             <div class="caja-firma-responsable">
-                <div class="linea-firma-pdf">Firma Responsable Calidad</div>
+                <div class="linea-firma-pdf">Firma Responsable {{ ocultarFormula ? 'Producción' : 'Calidad' }}</div>
             </div>
         </div>
-        <div v-if="cantidadCopias === 2 && n === 1" class="linea-corte-pdf"><span>✂️ CORTAR AQUÍ</span></div>
+        <div v-if="cantidadCopias === 2 && n === 1" class="linea-corte-pdf"><span>✂ CORTAR AQUÍ</span></div>
     </div>
   </div>
 </template>

@@ -143,13 +143,19 @@ export function useFiltrosProduccion(
         const factor = factorMerma.value;
 
         recetaDinamica.value.forEach(item => {
-            const porcentajeInsumo = parseFloat(item.cantidad.toString()) || 0;
+            // 🚀 ARREGLO CRÍTICO: Se quitó el .toString() peligroso
+            const cantidadCruda = item.cantidad || item.cantidadOriginal || 0;
+            const porcentajeInsumo = Number(cantidadCruda) || 0;
+            
             const pesoNetoInsumo = (kilosNetos * porcentajeInsumo) / 100;
             const consumoReal = Number((pesoNetoInsumo * factor).toFixed(3));
-            const idMaterial = Number(item.materiaPrimaId);
+            const idMaterial = Number(item.materiaPrimaId || item.id);
+
+            // Si es un ítem de interfaz sin ID válido, lo ignoramos para no tirar error
+            if (!idMaterial || idMaterial === 0) return;
 
             let stockDisponible = 0;
-            let nombreMaterial = item.nombreInsumo;
+            let nombreMaterial = item.nombreInsumo || 'Material Desconocido';
 
             if (idMaterial >= 990 && idMaterial <= 999) {
                 stockDisponible = 0;

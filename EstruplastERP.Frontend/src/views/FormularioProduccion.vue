@@ -199,97 +199,6 @@ const kilosEstearato = computed(() => {
     return kilosBase * 0.0008;
 });
 
-const recetaConExtrasParaVista = computed(() => {
-    if (imprimiendoHistorial.value) {
-        return recetaDinamica.value.map(r => ({
-            ...r,
-            cantidad: Number(r.cantidad || 0).toFixed(2),
-            kilosFijos: Number(r.kilosFijos || 0).toFixed(2)
-        }));
-    }
-
-    const recetaLimpia = recetaDinamica.value
-        .filter(r => {
-            const n = (r.nombreInsumo || '').toUpperCase();
-            return !n.includes('ESTEARATO') && !n.includes('BRILLO') && !n.includes('UV') && !n.includes('CAUCHO');
-        })
-        .map(r => ({ ...r })); 
-
-    const kilosNetos = form.value.kilosTotales > 0 ? form.value.kilosTotales : 1;
-    const desp = Number(form.value.merma || 8);
-    const kilosBrutos = kilosNetos * (1 + (desp / 100)); 
-
-    const usaCoextrusion = usaCoextrusionCalculado.value;
-    
-    const porcA = usaCoextrusion ? Number(form.value.porcentajeTolvaA) : 100;
-    const porcB = usaCoextrusion ? Number(form.value.porcentajeTolvaB) : 100;
-    const porcC = usaCoextrusion ? Number(form.value.porcentajeTolvaC) : 100;
-
-    const kilosCapaA = kilosBrutos * (porcA / 100);
-    const kilosMasaB = kilosBrutos * (porcB / 100);
-    const kilosCapaC = kilosBrutos * (porcC / 100);
-
-    recetaLimpia.forEach(r => {
-        const destino = r.extrusoraDestino || 'UNICA';
-        let kilosDeLaTolva = kilosBrutos;
-        
-        if (destino === 'A') kilosDeLaTolva = kilosCapaA;
-        if (destino === 'B') kilosDeLaTolva = kilosMasaB;
-        if (destino === 'C') kilosDeLaTolva = kilosCapaC;
-        
-        r.kilosFijos = ((kilosDeLaTolva * Number(r.cantidad)) / 100).toFixed(2);
-    });
-
-    const tolvaCapa = usaCoextrusion ? 'A' : 'UNICA';
-    const tolvaMasa = usaCoextrusion ? 'B' : 'UNICA';
-
-    const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
-    if (est && kilosEstearato.value > 0) {
-        recetaLimpia.push({
-            id: 'estearato-fijo', materiaPrimaId: est.id, nombreInsumo: `🧪 ${est.nombre}`,
-            densidad: est.pesoEspecifico || 1, esEstearato: true, cantidad: 0.08, kilosFijos: kilosEstearato.value.toFixed(2), extrusoraDestino: tolvaMasa
-        });
-    }
-    
-    if (form.value.conBrillo && form.value.porcBrillo > 0) {
-        const keywordBrillo = form.value.tipoBrillo === '555' ? '555' : '777';
-        let mpBrillo = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes(`BRILLO ${keywordBrillo}`)) || listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('BRILLO'));
-        if (mpBrillo) {
-            const baseParaBrillo = tolvaCapa === 'A' ? kilosCapaA : kilosBrutos;
-            const kilosAditivo = ((baseParaBrillo * form.value.porcBrillo) / 100).toFixed(2);
-            recetaLimpia.push({
-                id: 'brillo-fijo', materiaPrimaId: mpBrillo.id, nombreInsumo: `✨ ${mpBrillo.nombre}`,
-                densidad: mpBrillo.pesoEspecifico || 1, cantidad: form.value.porcBrillo, kilosFijos: kilosAditivo, extrusoraDestino: tolvaCapa
-            });
-        }
-    }
-
-    if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
-        const mpUV = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('UV'));
-        if (mpUV) {
-            const baseParaUv = tolvaCapa === 'A' ? kilosCapaA : kilosBrutos; 
-            const kilosAditivo = ((baseParaUv * form.value.porcentajeUv) / 100).toFixed(2);
-            recetaLimpia.push({
-                id: 'uv-fijo', materiaPrimaId: mpUV.id, nombreInsumo: `☀️ ${mpUV.nombre}`,
-                densidad: mpUV.pesoEspecifico || 1, cantidad: form.value.porcentajeUv, kilosFijos: kilosAditivo, extrusoraDestino: tolvaCapa
-            });
-        }
-    }
-    
-    if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
-        const mpCaucho = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('CAUCHO'));
-        if (mpCaucho) {
-            const baseParaCaucho = tolvaMasa === 'B' ? kilosMasaB : kilosBrutos; 
-            const kilosAditivo = ((baseParaCaucho * form.value.porcentajeCaucho) / 100).toFixed(2);
-            recetaLimpia.push({
-                id: 'caucho-fijo', materiaPrimaId: mpCaucho.id, nombreInsumo: `🚜 ${mpCaucho.nombre}`,
-                densidad: mpCaucho.pesoEspecifico || 1, cantidad: form.value.porcentajeCaucho, kilosFijos: kilosAditivo, extrusoraDestino: tolvaMasa
-            });
-        }
-    }
-
-    return recetaLimpia.map(r => ({ ...r, cantidad: Number(r.cantidad || 0).toFixed(2), kilosFijos: Number(r.kilosFijos || 0).toFixed(2) }));
-});
 
 const { 
     borradorDisponible, revisarBorrador, recuperarBorrador, descartarBorrador, limpiarBorrador
@@ -327,47 +236,64 @@ const recalcularMatrizYProporciones = () => {
     if (mutandoParaGuardar.value || imprimiendoHistorial.value) return;
     if (!recetaDinamica.value || recetaDinamica.value.length === 0) return;
 
+    // 🚀 MISIL RASTREADOR: Función para detectar el "Hueco" de color
+    const isGenericColor = (r: any) => {
+        if (r.agregadoPorCajaColor) return true;
+        if (getCategoriaId(Number(r.materiaPrimaId || r.id)) === 2) return true;
+        
+        const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
+        return n.includes('COLOR') || n.includes('MB ') || n.includes('MASTER') || n.includes('PIGMENTO');
+    };
+
     // 1. Inyectar Color Elegido reemplazando el Genérico
     if (form.value.masterbatchId && (mostrarCajaColor.value || form.value.esProductoColor)) {
         const mpColorElegido = listaTodasMateriasPrimas.value.find(m => m.id === form.value.masterbatchId);
         
         if (mpColorElegido) {
-            // Buscamos en la receta el "hueco" reservado para el color (categoría 2 o nombre genérico)
-            let itemColorBase = recetaDinamica.value.find(r => 
-                r.agregadoPorCajaColor || // Si ya lo habíamos reemplazado antes en esta misma sesión
-                getCategoriaId(Number(r.materiaPrimaId || r.id)) === 2 || // Si la base de datos lo marca como Masterbatch
-                String(r.nombreInsumo).toUpperCase().includes('COLORES VARIOS') ||
-                String(r.nombreInsumo).toUpperCase().includes('COLOR')
-            );
+            let itemColorBase = recetaDinamica.value.find(isGenericColor);
 
             if (itemColorBase) {
-                // 🚀 MAGIA: Reemplaza los datos del material, PERO mantiene intacta la extrusoraDestino y cantidad original!
+                // 🚀 REEMPLAZO EXACTO EN LA MISMA TOLVA
                 itemColorBase.materiaPrimaId = mpColorElegido.id;
                 itemColorBase.nombreInsumo = mpColorElegido.nombre;
                 itemColorBase.densidad = mpColorElegido.pesoEspecifico || 1.1;
                 itemColorBase.agregadoPorCajaColor = true;
+                
+                if (Number(itemColorBase.cantidadOriginal || 0) === 0) {
+                    itemColorBase.cantidadOriginal = 2; 
+                }
             } else {
-                // Si la receta original no traía un hueco de color, lo creamos inteligentemente
-                // Si usan coextrusión, lo mandamos a la Tolva A (capa exterior). Sino a la UNICA.
-                let destinoSugerido = recetaDinamica.value.some(r => r.extrusoraDestino === 'A') ? 'A' : 'UNICA';
+                // 🚀 PLAN B: Buscamos al Virgen y nos pegamos a su misma tolva.
+                const itemVirgen = recetaDinamica.value.find(r => getCategoriaId(Number(r.materiaPrimaId || r.id)) === 1);
+                
+                // 🔥 TS FIX: Solo usamos extrusoraDestino en minúscula
+                const destinoIdeal = itemVirgen ? String(itemVirgen.extrusoraDestino || 'UNICA').toUpperCase() : 'UNICA';
                 
                 recetaDinamica.value.push({
                     id: 'color_caja_' + Date.now(),
                     materiaPrimaId: mpColorElegido.id,
                     nombreInsumo: mpColorElegido.nombre,
-                    cantidadOriginal: 2, // Lo inyecta al 2% por defecto si no existía
+                    cantidadOriginal: 2, 
                     cantidad: 2, 
                     densidad: mpColorElegido.pesoEspecifico || 1.1,
                     agregadoPorCajaColor: true,
-                    extrusoraDestino: destinoSugerido,
-                    esOriginal: true 
+                    extrusoraDestino: destinoIdeal,
+                    esOriginal: false 
                 });
             }
         }
     } else {
-        // Si el usuario "apaga" el interruptor de color, quitamos la capa de Masterbatch
-        // (El motor matemático luego se encarga de inflar el material Virgen al 100% para cubrir el hueco)
-        recetaDinamica.value = recetaDinamica.value.filter(r => !r.agregadoPorCajaColor);
+        recetaDinamica.value = recetaDinamica.value.filter(r => {
+            if (r.agregadoPorCajaColor) {
+                if (r.esOriginal) {
+                    r.cantidadOriginal = 0; 
+                    r.nombreInsumo = "SIN COLOR (APAGADO)";
+                    return true;
+                }
+                return false; 
+            }
+            return true;
+        });
     }
 
     console.groupCollapsed("🐞 DEBUG: COMPRESIÓN DE LA MATRIZ");
@@ -376,7 +302,8 @@ const recalcularMatrizYProporciones = () => {
     const tolvas = ['UNICA', 'A', 'B', 'C'];
     
     tolvas.forEach(tolva => {
-        const itemsTolva = recetaDinamica.value.filter(r => (r.extrusoraDestino || 'UNICA') === tolva);
+        // 🔥 TS FIX: Solo usamos extrusoraDestino en minúscula
+        const itemsTolva = recetaDinamica.value.filter(r => String(r.extrusoraDestino || 'UNICA').toUpperCase() === tolva);
         if (itemsTolva.length === 0) return;
 
         // Separar Invasores (ID 4: Scrap/Molido) de la Matriz (Resto)
@@ -387,14 +314,14 @@ const recalcularMatrizYProporciones = () => {
         invasores.forEach(inv => {
             if (inv.cantidadOriginal === undefined) inv.cantidadOriginal = Number(inv.cantidad || 0);
             sumaInvasores += Number(inv.cantidadOriginal);
-            inv.cantidad = Number(inv.cantidadOriginal).toFixed(2); // El Invasor no se achica
+            inv.cantidad = Number(inv.cantidadOriginal).toFixed(2);
         });
 
         // Calcular espacio libre para la Matriz
-        sumaInvasores = Math.min(sumaInvasores, 99.99); // Evitar cero absoluto
+        sumaInvasores = Math.min(sumaInvasores, 99.99);
         const espacioLibre = 100 - sumaInvasores;
 
-        console.log(`Tolva ${tolva}: Molido ocupa ${sumaInvasores}%. Espacio libre para la Caja Matriz: ${espacioLibre}%`);
+        console.log(`Tolva ${tolva}: Molido ocupa ${sumaInvasores}%. Espacio para Matriz: ${espacioLibre}%`);
 
         // Balanceo interno de la Matriz (Base = 100 - Dependientes)
         let sumaDependientes = 0;
@@ -408,7 +335,6 @@ const recalcularMatrizYProporciones = () => {
 
         if (bases.length > 0) {
             const restoParaBase = Math.max(0, 100 - sumaDependientes);
-            
             let sumaBasesOrig = bases.reduce((acc, b) => acc + Number(b.cantidadOriginal || 0), 0);
             if (sumaBasesOrig > 0) {
                 bases.forEach(b => {
@@ -416,9 +342,7 @@ const recalcularMatrizYProporciones = () => {
                     b.cantidadOriginal = restoParaBase * peso;
                 });
             } else {
-                if (bases[0]) {
-                    bases[0].cantidadOriginal = restoParaBase;
-                }
+                if (bases[0]) bases[0].cantidadOriginal = restoParaBase;
             }
         }
 
@@ -429,13 +353,12 @@ const recalcularMatrizYProporciones = () => {
             const valorComprimido = (porcentajeEnMatriz / 100) * espacioLibre;
             item.cantidad = valorComprimido.toFixed(2);
             
-            console.log(` - [Cat ${cat}] ${item.nombreInsumo}: Era ${porcentajeEnMatriz}% de su caja -> Queda en ${valorComprimido.toFixed(2)}% de la tolva.`);
+            console.log(` - [Cat ${cat}] ${item.nombreInsumo}: Era ${porcentajeEnMatriz}% -> Queda en ${valorComprimido.toFixed(2)}%`);
         });
     });
     
     console.groupEnd();
 };
-
 const todosLosMasterbatches = computed(() => {
     return listaTodasMateriasPrimas.value
         .filter(mp => 
@@ -536,34 +459,72 @@ async function CargarDatosProductos(id: number) {
                 form.value.porcentajeTolvaA = 100; form.value.porcentajeTolvaB = 0; form.value.porcentajeTolvaC = 0;
             }
 
-            recetaDinamica.value = prod.receta.map((r: any) => {
+            // 🚀 RESET DE CAJAS DE ADITIVOS PARA NO ARRASTRAR DATOS VIEJOS
+            form.value.aditivoCarga = 0;
+            form.value.conBrillo = false;
+            form.value.porcBrillo = 0;
+            form.value.aditivoUV = false;
+            form.value.porcentajeUv = 0;
+            form.value.aditivoCaucho = false;
+            form.value.porcentajeCaucho = 0;
+
+            const nuevaReceta: any[] = [];
+
+            prod.receta.forEach((r: any) => {
                 const mpId = r.materiaPrimaId || r.id;
                 const mp = listaTodasMateriasPrimas.value.find(m => m.id === mpId) || listaInventarioCompleto.value.find(m => m.id === mpId);
                 const idDuenioReal = mp ? Number(mp.clienteId || mp.ClienteId || 0) : Number(r.clienteId || 0);
                 const destino = r.extrusoraDestino || r.ExtrusoraDestino || 'UNICA';
+                
+                const n = String(r.nombreInsumo || r.nombreMateriaPrima || mp?.nombre || '').toUpperCase();
+                const cant = Number(r.cantidad || r.porcentaje || 0);
 
-                return {
-                    id: r.id || Math.random(),
-                    materiaPrimaId: mpId,
-                    nombreInsumo: r.nombreInsumo || r.nombreMateriaPrima || mp?.nombre,
-                    cantidad: Number(r.cantidad || r.porcentaje || 0).toFixed(2),
-                    densidad: r.densidad || r.pesoEspecifico || 1.1,
-                    clienteId: idDuenioReal,
-                    extrusoraDestino: destino,
-                    cantidadOriginal: Number(r.cantidad || r.porcentaje || 0), // 🚀 Fija el peso inicial
-                    esOriginal: true 
-                };
+                // 🚀 ENRUTADOR INTELIGENTE: Deriva los aditivos a sus propias cajas en la interfaz
+                if (n.includes('CARGA') || n.includes('CARBONATO') || n.includes('TIZA')) {
+                    form.value.aditivoCarga = cant;
+                } else if (n.includes('UV')) {
+                    form.value.aditivoUV = true;
+                    form.value.porcentajeUv = cant;
+                } else if (n.includes('CAUCHO')) {
+                    form.value.aditivoCaucho = true;
+                    form.value.porcentajeCaucho = cant;
+                } else if (n.includes('BRILLO') || n.includes('CRISTAL')) {
+                    form.value.conBrillo = true;
+                    form.value.porcBrillo = cant;
+                    form.value.tipoBrillo = n.includes('555') ? '555' : '777';
+                } else if (n.includes('ESTEARATO')) {
+                    form.value.conEstearato = true;
+                } else {
+                    nuevaReceta.push({
+                        id: r.id || Math.random(),
+                        materiaPrimaId: mpId,
+                        nombreInsumo: r.nombreInsumo || r.nombreMateriaPrima || mp?.nombre,
+                        cantidad: cant.toFixed(2),
+                        densidad: r.densidad || r.pesoEspecifico || 1.1,
+                        clienteId: idDuenioReal,
+                        extrusoraDestino: destino,
+                        cantidadOriginal: cant, 
+                        esOriginal: true 
+                    });
+                }
             });
-            
+
+            recetaDinamica.value = nuevaReceta;
             recalcularMatrizYProporciones();
         }
 
-        if (!form.value.largo || form.value.largo === 0) {
-            form.value.esBobina = (prod.nombre || '').toUpperCase().includes('BOBINA');
-            form.value.largo = form.value.esBobina ? 0 : Number(prod.largo || prod.Largo || 0);
+        const nombreProd = (prod.nombre || '').toUpperCase();
+        form.value.esBobina = nombreProd.includes('BOBINA') || nombreProd.includes('ROLLO');
+
+        if (form.value.esBobina) {
+            form.value.largo = 0;
+            form.value.kilosPorBobina = Number(prod.kilos || prod.peso || prod.pesoEstimado || form.value.kilosPorBobina || 0);
+        } else {
+            form.value.largo = Number(prod.largo || prod.Largo || 0);
         }
-        if (!form.value.ancho || form.value.ancho === 0) form.value.ancho = Number(prod.ancho || prod.Ancho || 0);
-        if (!form.value.espesor || form.value.espesor === 0) form.value.espesor = Number(prod.espesor || prod.Espesor || 0);
+
+        form.value.ancho = Number(prod.ancho || prod.Ancho || 0);
+        form.value.espesor = Number(prod.espesor || prod.Espesor || 0);
 
         limiteMinimo.value = Number(prod.espesorMinimo || prod.EspesorMinimo || 0);
         limiteMaximo.value = Number(prod.espesorMaximo || prod.EspesorMaximo || 0);
@@ -612,6 +573,12 @@ watch(() => form.value.productoTerminadoId, async (nuevoProdId) => {
     form.value.merma = 8;
     tipoSalidaVisual.value = 'NORMAL';
     
+    // 🚀 LIMPIEZA DE ARRASTRE PARA BOBINAS
+    if (!imprimiendoHistorial.value) {
+        form.value.largo = 0;
+        form.value.kilosPorBobina = 0;
+    }
+    
     if (nuevoProdId && !imprimiendoHistorial.value) {
         await CargarDatosProductos(Number(nuevoProdId)); 
         await nextTick();
@@ -649,11 +616,18 @@ watch(
 watch(() => form.value.espesor, (v) => { if (v < 1) form.value.conBrillo = false; });
 watch(() => form.value.conBrillo, (v) => { if (!v) form.value.llevaFilm = false; });
 
+// 🚀 MOTOR MATEMÁTICO BLINDADO
 watch(
     [ () => form.value.ancho, () => form.value.espesor, () => form.value.kilosPorBobina, () => densidadPT.value, () => form.value.esBobina ], 
     () => {
-        if (form.value.esBobina && form.value.ancho > 0 && form.value.espesor > 0 && densidadPT.value > 0 && form.value.kilosPorBobina > 0) {
-            const largoDespejado = (form.value.kilosPorBobina * 1000000) / (form.value.ancho * form.value.espesor * densidadPT.value);
+        const isBobina = String(form.value.esBobina) === 'true';
+        const kBob = Number(form.value.kilosPorBobina) || 0;
+        const anc = Number(form.value.ancho) || 0;
+        const esp = Number(form.value.espesor) || 0;
+        const den = Number(densidadPT.value) || 1.1;
+
+        if (isBobina && anc > 0 && esp > 0 && den > 0 && kBob > 0) {
+            const largoDespejado = (kBob * 1000000) / (anc * esp * den);
             form.value.largo = Math.round(largoDespejado);
         }
     }, 
@@ -664,13 +638,22 @@ watch(
     [ () => form.value.largo, () => form.value.ancho, () => form.value.espesor, () => form.value.cantidad, () => form.value.esBobina, () => form.value.kilosPorBobina ], 
     () => {
         if (!form.value.esConsolidado && !imprimiendoHistorial.value) {
-            if (form.value.esBobina) {
-                form.value.kilosTotales = Number((form.value.kilosPorBobina * form.value.cantidad).toFixed(2));
+            const isBobina = String(form.value.esBobina) === 'true';
+            const cant = Number(form.value.cantidad) || 1;
+
+            if (isBobina) {
+                const kBob = Number(form.value.kilosPorBobina) || 0;
+                form.value.kilosTotales = Number((kBob * cant).toFixed(2));
             } else {
-                if (form.value.largo > 0 && form.value.ancho > 0 && form.value.espesor > 0) {
-                    const mm3 = form.value.largo * form.value.ancho * form.value.espesor;
-                    const pesoUnaPiezaKg = (mm3 * densidadPT.value) / 1000000;
-                    form.value.kilosTotales = Number((pesoUnaPiezaKg * form.value.cantidad).toFixed(2));
+                const lrg = Number(form.value.largo) || 0;
+                const anc = Number(form.value.ancho) || 0;
+                const esp = Number(form.value.espesor) || 0;
+                const den = Number(densidadPT.value) || 1.1;
+
+                if (lrg > 0 && anc > 0 && esp > 0) {
+                    const mm3 = lrg * anc * esp;
+                    const pesoUnaPiezaKg = (mm3 * den) / 1000000;
+                    form.value.kilosTotales = Number((pesoUnaPiezaKg * cant).toFixed(2));
                 } else {
                     form.value.kilosTotales = 0;
                 }
@@ -733,6 +716,138 @@ onMounted(async () => {
     await cargarNotaPedidoSugerida();
 });
 
+const recetaConExtrasParaVista = computed(() => {
+    const formAny = form.value as any; 
+    const kilosNetos = Number(form.value.kilosTotales || formAny.kilosEstimados || formAny.kilos || 1);
+    const desp = Number(form.value.merma || formAny.desperdicio || 8);
+    const kilosBrutos = kilosNetos * (1 + (desp / 100)); 
+
+    let listaFinal: any[] = [];
+
+    // 1. Recrear Kilos Fijos (Historial o Vivo)
+    if (imprimiendoHistorial.value) {
+        listaFinal = recetaDinamica.value.map(r => {
+            const rAny = r as any; 
+            const porcentaje = Number(r.cantidad || rAny.porcentaje || 0);
+            const kFijo = (kilosBrutos * porcentaje) / 100;
+            return { ...r, cantidad: porcentaje.toFixed(2), kilosFijos: kFijo.toFixed(2) };
+        });
+    } else {
+        listaFinal = recetaDinamica.value
+            .filter(r => {
+                const n = (r.nombreInsumo || '').toUpperCase();
+                return !n.includes('ESTEARATO') && !n.includes('BRILLO') && !n.includes('CRISTAL') && !n.includes('UV') && !n.includes('CAUCHO') && !n.includes('CARGA') && !n.includes('CARBONATO') && !n.includes('TIZA');
+            }).map(r => ({ ...r })); 
+
+        const usaCoextrusion = usaCoextrusionCalculado.value;
+        const porcA = usaCoextrusion ? Number(form.value.porcentajeTolvaA) : 100;
+        const porcB = usaCoextrusion ? Number(form.value.porcentajeTolvaB) : 100;
+        const porcC = usaCoextrusion ? Number(form.value.porcentajeTolvaC) : 100;
+
+        const kilosCapaA = kilosBrutos * (porcA / 100);
+        const kilosMasaB = kilosBrutos * (porcB / 100);
+        const kilosCapaC = kilosBrutos * (porcC / 100);
+
+        const tolvaCapa = usaCoextrusion ? 'A' : 'UNICA';
+        const tolvaMasa = usaCoextrusion ? 'B' : 'UNICA';
+
+        const cargaPorc = Number(form.value.aditivoCarga || 0);
+        if (cargaPorc > 0) {
+            listaFinal.forEach(r => {
+                const destino = r.extrusoraDestino || 'UNICA';
+                if (destino === tolvaMasa) r.cantidad = (Number(r.cantidad || 0) * ((100 - cargaPorc) / 100)).toFixed(2);
+            });
+        }
+
+        listaFinal.forEach(r => {
+            const destino = r.extrusoraDestino || 'UNICA';
+            let kilosDeLaTolva = kilosBrutos;
+            if (destino === 'A') kilosDeLaTolva = kilosCapaA;
+            if (destino === 'B') kilosDeLaTolva = kilosMasaB;
+            if (destino === 'C') kilosDeLaTolva = kilosCapaC;
+            r.kilosFijos = ((kilosDeLaTolva * Number(r.cantidad)) / 100).toFixed(2);
+        });
+
+        const buscarInsumoDb = (keywords: string[]) => {
+            return listaTodasMateriasPrimas.value.find(mp => keywords.some(kw => (mp.nombre || '').toUpperCase().includes(kw))) 
+                || listaInventarioCompleto.value.find(mp => keywords.some(kw => (mp.nombre || '').toUpperCase().includes(kw)));
+        };
+
+        const est = buscarInsumoDb(['ESTEARATO']);
+        if (est && kilosEstearato.value > 0) {
+            listaFinal.push({ id: 'estearato-fijo', materiaPrimaId: est.id, nombreInsumo: `🧪 ${est.nombre}`, densidad: est.pesoEspecifico || 1, esEstearato: true, cantidad: 0.08, kilosFijos: kilosEstearato.value.toFixed(2), extrusoraDestino: tolvaMasa });
+        }
+        
+        if (form.value.conBrillo && form.value.porcBrillo > 0) {
+            const kwBrillo = form.value.tipoBrillo === '555' ? '555' : '777';
+            let mpBrillo = buscarInsumoDb([`CRISTAL ${kwBrillo}`, `BRILLO ${kwBrillo}`, 'CRISTAL', 'BRILLO']);
+            if (mpBrillo) {
+                const kAditivo = ((tolvaCapa === 'A' ? kilosCapaA : kilosBrutos) * form.value.porcBrillo / 100).toFixed(2);
+                listaFinal.push({ id: 'brillo-fijo', materiaPrimaId: mpBrillo.id, nombreInsumo: `✨ ${mpBrillo.nombre}`, densidad: mpBrillo.pesoEspecifico || 1, cantidad: form.value.porcBrillo, kilosFijos: kAditivo, extrusoraDestino: tolvaCapa });
+            }
+        }
+
+        if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
+            const mpUV = buscarInsumoDb(['UV']);
+            if (mpUV) {
+                const kAditivo = ((tolvaCapa === 'A' ? kilosCapaA : kilosBrutos) * form.value.porcentajeUv / 100).toFixed(2);
+                listaFinal.push({ id: 'uv-fijo', materiaPrimaId: mpUV.id, nombreInsumo: `☀️ ${mpUV.nombre}`, densidad: mpUV.pesoEspecifico || 1, cantidad: form.value.porcentajeUv, kilosFijos: kAditivo, extrusoraDestino: tolvaCapa });
+            }
+        }
+        
+        if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
+            const mpCaucho = buscarInsumoDb(['CAUCHO']);
+            if (mpCaucho) {
+                const kAditivo = ((tolvaMasa === 'B' ? kilosMasaB : kilosBrutos) * form.value.porcentajeCaucho / 100).toFixed(2);
+                listaFinal.push({ id: 'caucho-fijo', materiaPrimaId: mpCaucho.id, nombreInsumo: `🚜 ${mpCaucho.nombre}`, densidad: mpCaucho.pesoEspecifico || 1, cantidad: form.value.porcentajeCaucho, kilosFijos: kAditivo, extrusoraDestino: tolvaMasa });
+            }
+        }
+
+        if (cargaPorc > 0) {
+            const mpCarga = buscarInsumoDb(['CARGA', 'CARBONATO', 'TIZA']);
+            if (mpCarga) {
+                const kAditivo = ((tolvaMasa === 'B' ? kilosMasaB : kilosBrutos) * cargaPorc / 100).toFixed(2);
+                listaFinal.push({ id: 'carga-fija', materiaPrimaId: mpCarga.id, nombreInsumo: `🪨 ${mpCarga.nombre}`, densidad: mpCarga.pesoEspecifico || 1, cantidad: cargaPorc, kilosFijos: kAditivo, extrusoraDestino: tolvaMasa });
+            }
+        }
+    }
+
+    // 🚀 2. ESCALADO PROPORCIONAL DE BOLSAS POR TOLVA
+    const esVirgen = (r: any) => {
+        const n = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
+        if (n.includes('TUTI') || n.includes('MOLIDO') || n.includes('SCRAP') || n.includes('RECUPERADO')) return false;
+        if (r.esBase) return true;
+        const mpId = Number(r.materiaPrimaId || r.id);
+        const mpMaestra = listaTodasMateriasPrimas.value.find((m: any) => m.id === mpId) || listaInventarioCompleto.value.find((m: any) => m.id === mpId);
+        if (mpMaestra && Number(mpMaestra.categoriaInsumoId || mpMaestra.CategoriaInsumoId) === 1) return true;
+        return n.includes('PAI') || n.includes('ALTO IMPACTO') || n.includes('PEAD') || n.includes('ABS') || n.includes('POLIPROPILENO') || n.includes('PP ') || n.includes('FREON');
+    };
+
+    const tolvasPresentes = [...new Set(listaFinal.map(r => r.extrusoraDestino || 'UNICA'))];
+    
+    tolvasPresentes.forEach(tolva => {
+        const itemsTolva = listaFinal.filter(r => (r.extrusoraDestino || 'UNICA') === tolva);
+        
+        let kilosVirgenTolva = 0;
+        itemsTolva.forEach(r => { if (esVirgen(r)) kilosVirgenTolva += Number(r.kilosFijos || 0); });
+
+        if (kilosVirgenTolva > 0) {
+            // Redondea ABAJO a la bolsa cerrada
+            let virgenRedondeado = Math.floor(kilosVirgenTolva / 25) * 25;
+            if (virgenRedondeado < 25) virgenRedondeado = 25; // Seguro anti-cero absoluto
+
+            const factorEscala = virgenRedondeado / kilosVirgenTolva;
+
+            // Escala TODO el bloque de esa Tolva de forma perfecta (incluido Masterbatch y Cargas)
+            itemsTolva.forEach(r => {
+                r.kilosFijos = (Number(r.kilosFijos || 0) * factorEscala).toFixed(2);
+            });
+        }
+    });
+
+    return listaFinal.map(r => ({ ...r, cantidad: Number(r.cantidad || 0).toFixed(2), kilosFijos: Number(r.kilosFijos || 0).toFixed(2) }));
+});
+
 const procesarGuardado = async () => {
     if (guardando.value) return; 
     error.value = ''; 
@@ -772,21 +887,35 @@ const procesarGuardado = async () => {
         form.value.colorTexto = '';
     }
 
-    if (usaCoextrusion) {
-        recetaDinamica.value.forEach(item => {
-            const destino = item.extrusoraDestino || 'UNICA';
-            let factor = 1;
-            if (destino === 'A') factor = form.value.porcentajeTolvaA / 100;
-            if (destino === 'B') factor = form.value.porcentajeTolvaB / 100;
-            if (destino === 'C') factor = form.value.porcentajeTolvaC / 100;
-            
-            if (item.cantidad !== undefined) {
-                item.cantidad = (Number(item.cantidad) * factor).toFixed(2);
-            }
-        });
-    }
+    const cargaPorc = Number(form.value.aditivoCarga || 0);
 
-    const est = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('ESTEARATO'));
+    // 🚀 COMPRIMIR POR CARGA MINERAL Y APLICAR FACTOR DE COEXTRUSIÓN
+    recetaDinamica.value.forEach(item => {
+        const destino = item.extrusoraDestino || 'UNICA';
+        
+        let factorCarga = 1;
+        if (destino === tolvaMasa && cargaPorc > 0) {
+            factorCarga = (100 - cargaPorc) / 100;
+        }
+
+        let factorCoex = 1;
+        if (usaCoextrusion) {
+            if (destino === 'A') factorCoex = form.value.porcentajeTolvaA / 100;
+            if (destino === 'B') factorCoex = form.value.porcentajeTolvaB / 100;
+            if (destino === 'C') factorCoex = form.value.porcentajeTolvaC / 100;
+        }
+        
+        if (item.cantidad !== undefined) {
+            item.cantidad = (Number(item.cantidad) * factorCarga * factorCoex).toFixed(2);
+        }
+    });
+
+    const buscarInsumoDb = (keywords: string[]) => {
+        return listaTodasMateriasPrimas.value.find(mp => keywords.some(kw => (mp.nombre || '').toUpperCase().includes(kw))) 
+            || listaInventarioCompleto.value.find(mp => keywords.some(kw => (mp.nombre || '').toUpperCase().includes(kw)));
+    };
+
+    const est = buscarInsumoDb(['ESTEARATO']);
     if (est && !recetaDinamica.value.some(r => r.materiaPrimaId === est.id)) {
         recetaDinamica.value.push({
             id: 0, materiaPrimaId: est.id, nombreInsumo: est.nombre,
@@ -797,12 +926,11 @@ const procesarGuardado = async () => {
 
     if (form.value.conBrillo && form.value.porcBrillo > 0) {
         const keywordBrillo = form.value.tipoBrillo === '555' ? '555' : '777';
-        let mpBrillo = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes(`BRILLO ${keywordBrillo}`)) 
-                    || listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('BRILLO'));
+        let mpBrillo = buscarInsumoDb([`CRISTAL ${keywordBrillo}`, `BRILLO ${keywordBrillo}`, 'CRISTAL', 'BRILLO']);
         
         if (mpBrillo) {
-            const factor = tolvaCapa === 'A' ? (form.value.porcentajeTolvaA / 100) : 1;
-            const cantidadGlobal = (Number(form.value.porcBrillo) * factor).toFixed(2);
+            const factorCoex = tolvaCapa === 'A' ? (form.value.porcentajeTolvaA / 100) : 1;
+            const cantidadGlobal = (Number(form.value.porcBrillo) * factorCoex).toFixed(2);
             recetaDinamica.value.push({
                 id: 0, materiaPrimaId: mpBrillo.id, nombreInsumo: mpBrillo.nombre,
                 cantidad: cantidadGlobal, densidad: mpBrillo.pesoEspecifico || 1, extrusoraDestino: tolvaCapa
@@ -811,10 +939,10 @@ const procesarGuardado = async () => {
     }
 
     if (form.value.aditivoUV && form.value.porcentajeUv > 0) {
-        const mpUV = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('UV'));
+        const mpUV = buscarInsumoDb(['UV']);
         if (mpUV) {
-            const factor = tolvaCapa === 'A' ? (form.value.porcentajeTolvaA / 100) : 1;
-            const cantidadGlobal = (Number(form.value.porcentajeUv) * factor).toFixed(2);
+            const factorCoex = tolvaCapa === 'A' ? (form.value.porcentajeTolvaA / 100) : 1;
+            const cantidadGlobal = (Number(form.value.porcentajeUv) * factorCoex).toFixed(2);
             recetaDinamica.value.push({
                 id: 0, materiaPrimaId: mpUV.id, nombreInsumo: mpUV.nombre,
                 cantidad: cantidadGlobal, densidad: mpUV.pesoEspecifico || 1, extrusoraDestino: tolvaCapa
@@ -823,13 +951,26 @@ const procesarGuardado = async () => {
     }
 
     if (form.value.aditivoCaucho && form.value.porcentajeCaucho > 0) {
-        const mpCaucho = listaTodasMateriasPrimas.value.find(mp => (mp.nombre || '').toUpperCase().includes('CAUCHO'));
+        const mpCaucho = buscarInsumoDb(['CAUCHO']);
         if (mpCaucho) {
-            const factor = tolvaMasa === 'B' ? (form.value.porcentajeTolvaB / 100) : 1;
-            const cantidadGlobal = (Number(form.value.porcentajeCaucho) * factor).toFixed(2);
+            const factorCoex = tolvaMasa === 'B' ? (form.value.porcentajeTolvaB / 100) : 1;
+            const cantidadGlobal = (Number(form.value.porcentajeCaucho) * factorCoex).toFixed(2);
             recetaDinamica.value.push({
                 id: 0, materiaPrimaId: mpCaucho.id, nombreInsumo: mpCaucho.nombre,
                 cantidad: cantidadGlobal, densidad: mpCaucho.pesoEspecifico || 1, extrusoraDestino: tolvaMasa
+            });
+        }
+    }
+
+    // 🚀 LÓGICA AÑADIDA: CARGA MINERAL CUBRIENDO EL HUECO DEJADO POR LA COMPRESIÓN
+    if (cargaPorc > 0) {
+        const mpCarga = buscarInsumoDb(['CARGA', 'CARBONATO', 'TIZA']);
+        if (mpCarga) {
+            const factorCoex = tolvaMasa === 'B' ? (form.value.porcentajeTolvaB / 100) : 1;
+            const cantidadGlobal = (cargaPorc * factorCoex).toFixed(2);
+            recetaDinamica.value.push({
+                id: 0, materiaPrimaId: mpCarga.id, nombreInsumo: mpCarga.nombre,
+                cantidad: cantidadGlobal, densidad: mpCarga.pesoEspecifico || 1, extrusoraDestino: tolvaMasa
             });
         }
     }

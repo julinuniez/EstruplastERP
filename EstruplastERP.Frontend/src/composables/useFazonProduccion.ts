@@ -34,30 +34,37 @@ export function useFazonProduccion(
     };
 
     function aplicarLoteFazonAReceta(lote: any) {
-        let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || String(r.nombreInsumo).includes('CAJA VERDE') || String(r.nombreInsumo).includes('ELIJA'));
+        // 🚀 AHORA SÍ: Busca la alerta verde O el comodín genérico que diga "FAZÓN"
+        let itemFazon = recetaDinamica.value.find(r => 
+            r.esFazonInput || 
+            String(r.nombreInsumo).includes('CAJA VERDE') || 
+            String(r.nombreInsumo).includes('ELIJA') ||
+            String(r.nombreInsumo).toUpperCase().includes('FAZÓN') ||
+            String(r.nombreInsumo).toUpperCase().includes('FAZON')
+        );
         
         const cId = Number(lote.clienteId || lote.ClienteId) || 0;
 
         if (itemFazon && lote) {
+            // Reemplazo Exacto
             itemFazon.materiaPrimaId = lote.id;
             itemFazon.nombreInsumo = `MP: ${lote.nombre}`; 
             itemFazon.densidad = lote.pesoEspecifico || 1;
             itemFazon.clienteId = cId;
             itemFazon.esFazonInput = true;
-            itemFazon.esOriginal = false; // 🚀 INDICAMOS QUE ES EXTRA
+            itemFazon.esOriginal = true; // Para que respete el 100% en la matriz
         } else if (!itemFazon && lote) {
-            // 🚀 ARREGLO CRÍTICO: Antes esto pisaba y borraba al Virgen. 
-            // Ahora lo agrega como un ítem nuevo independiente y arranca en 0%.
             recetaDinamica.value.push({
                 id: 'fazon_' + Date.now(),
                 materiaPrimaId: lote.id,
                 nombreInsumo: `MP: ${lote.nombre}`,
+                cantidadOriginal: 0,
                 cantidad: 0, 
                 densidad: lote.pesoEspecifico || 1,
                 esBase: false, 
                 esFazonInput: true,
                 clienteId: cId,
-                esOriginal: false // 🚀 CLAVE PARA LA PROPORCION
+                esOriginal: false 
             });
         }
         stockFazonDetectado.value = lote?.stockActual || null;
@@ -77,8 +84,13 @@ export function useFazonProduccion(
         const todoElStockCliente = listaInventarioCompleto.value.filter((p: any) => {
             const cId = Number(p.clienteId || p.ClienteId) || 0;
             const esDelCliente = cId === Number(clienteId);
-            const rubro = (p.rubro || '').toUpperCase();
-            const esMolido = p.esScrap === true || rubro.includes('MOLIDO');
+            
+            const nombre = String(p.nombre || '').toUpperCase();
+            const catId = Number(p.categoriaInsumoId || p.CategoriaInsumoId || 0);
+
+            if (nombre.includes('BASE')) return false;
+
+            const esMolido = catId === 4 || p.esScrap === true || nombre.includes('MOLIDO') || nombre.includes('SCRAP');
 
             if (!esDelCliente || !esMolido) return false;
 
@@ -111,7 +123,7 @@ export function useFazonProduccion(
         if (materialYaCargado) {
             loteFazonSeleccionadoId.value = materialYaCargado.materiaPrimaId;
             materialYaCargado.esFazonInput = true; 
-            materialYaCargado.esOriginal = false; // 🚀 Asegurar que no actúe como matriz
+            materialYaCargado.esOriginal = true; 
             
             const existeEnCombo = listaLotesCliente.value.find((l: any) => l.id === materialYaCargado.materiaPrimaId);
             if (!existeEnCombo) {
@@ -129,20 +141,27 @@ export function useFazonProduccion(
             loteFazonSeleccionadoId.value = unicaOpcion.id;
             aplicarLoteFazonAReceta(unicaOpcion);
         } else if (listaLotesCliente.value.length > 1) {
-            let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || String(r.nombreInsumo).includes('CAJA VERDE') || String(r.nombreInsumo).includes('ELIJA'));
+            // 🚀 Busca para reemplazar por la CAJA VERDE
+            let itemFazon = recetaDinamica.value.find(r => 
+                r.esFazonInput || 
+                String(r.nombreInsumo).includes('CAJA VERDE') || 
+                String(r.nombreInsumo).includes('ELIJA') ||
+                String(r.nombreInsumo).toUpperCase().includes('FAZÓN') ||
+                String(r.nombreInsumo).toUpperCase().includes('FAZON')
+            );
             
             if (itemFazon) {
                 itemFazon.nombreInsumo = "⚠️ ELIJA UN LOTE EN LA CAJA VERDE";
                 itemFazon.materiaPrimaId = 0; 
                 itemFazon.clienteId = Number(clienteId);
                 itemFazon.esFazonInput = true;
-                itemFazon.esOriginal = false;
+                itemFazon.esOriginal = true;
             } else {
-                // 🚀 NUNCA PISAR LA BASE VIRGEN
                 recetaDinamica.value.push({
                     id: 'fazon_vacio_' + Date.now(),
                     materiaPrimaId: 0,
                     nombreInsumo: "⚠️ ELIJA UN LOTE EN LA CAJA VERDE",
+                    cantidadOriginal: 0,
                     cantidad: 0,
                     densidad: 1,
                     esBase: false, 
@@ -153,8 +172,13 @@ export function useFazonProduccion(
             }
             balancearBase();
         } else {
-            let itemFazon = recetaDinamica.value.find(r => r.esFazonInput || String(r.nombreInsumo).includes('CAJA VERDE') || String(r.nombreInsumo).includes('ELIJA'));
-            // Removemos el fallback a itemBase para que no lo mate
+            let itemFazon = recetaDinamica.value.find(r => 
+                r.esFazonInput || 
+                String(r.nombreInsumo).includes('CAJA VERDE') || 
+                String(r.nombreInsumo).includes('ELIJA') ||
+                String(r.nombreInsumo).toUpperCase().includes('FAZÓN') ||
+                String(r.nombreInsumo).toUpperCase().includes('FAZON')
+            );
             if (itemFazon) {
                 itemFazon.nombreInsumo = "⚠️ CLIENTE SIN MATERIAL RECUPERADO/MOLIDO";
                 itemFazon.materiaPrimaId = 0; 
