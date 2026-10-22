@@ -444,18 +444,32 @@ const esVerdadero = (valor: any) => {
     return false;
 };
 
-const verificarCaracteristica = (propMinuscula: string, propMayuscula: string) => {
+const verificarCaracteristica = (propMinuscula: string, propMayuscula: string, palabrasClaveReceta: string[] = []) => {
+    // 1. Intenta leer el dato directo si la base de datos lo mandó bien
     if (esVerdadero(props.form?.[propMinuscula]) || esVerdadero(props.form?.[propMayuscula])) return true;
     if (esVerdadero(props.producto?.[propMinuscula]) || esVerdadero(props.producto?.[propMayuscula])) return true;
     
+    // 2. Revisa sub-órdenes en caso de consolidados
     const subOrdenes = props.form?.ordenes || props.form?.pedidos || props.form?.detalles || props.form?.items || [];
-    return subOrdenes.some((o: any) => esVerdadero(o[propMinuscula]) || esVerdadero(o[propMayuscula]));
+    if (subOrdenes.some((o: any) => esVerdadero(o[propMinuscula]) || esVerdadero(o[propMayuscula]))) return true;
+
+    // 3. 🚀 MODO DETECTIVE: Si la base de datos falló, escaneamos los materiales físicos reales de la receta
+    if (palabrasClaveReceta.length > 0) {
+        const recetaFisica = insumosParaImprimir.value || [];
+        return recetaFisica.some((r: any) => {
+            const nombreInsumo = String(r.nombreInsumo || r.nombreMateriaPrima || '').toUpperCase();
+            return palabrasClaveReceta.some(kw => nombreInsumo.includes(kw));
+        });
+    }
+
+    return false;
 };
 
-const tieneBrillo = computed(() => verificarCaracteristica('conBrillo', 'ConBrillo'));
-const llevaFilm = computed(() => verificarCaracteristica('llevaFilm', 'LlevaFilm'));
+// Conectamos el escáner a las variables del PDF
+const tieneBrillo = computed(() => verificarCaracteristica('conBrillo', 'ConBrillo', ['BRILLO', 'CRISTAL']));
+const llevaFilm = computed(() => verificarCaracteristica('llevaFilm', 'LlevaFilm', ['FILM'])); 
 const esGofrado = computed(() => verificarCaracteristica('esGofrado', 'EsGofrado'));
-const tieneUV = computed(() => verificarCaracteristica('aditivoUV', 'AditivoUV'));
+const tieneUV = computed(() => verificarCaracteristica('aditivoUV', 'AditivoUV', ['UV']));
 
 const tipoCorona = computed(() => {
     let val = props.form?.tipoCorona || props.form?.TipoCorona || props.producto?.tipoCorona || props.producto?.TipoCorona;

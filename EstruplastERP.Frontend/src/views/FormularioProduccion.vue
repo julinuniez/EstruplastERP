@@ -613,7 +613,12 @@ watch(
     }
 );
 
-watch(() => form.value.espesor, (v) => { if (v < 1) form.value.conBrillo = false; });
+watch(() => form.value.espesor, (v) => { 
+    // Solo bloqueamos si es una orden nueva, respetando las históricas
+    if (v < 1 && !imprimiendoHistorial.value && !form.value.productoTerminadoId) {
+        form.value.conBrillo = false; 
+    } 
+});
 watch(() => form.value.conBrillo, (v) => { if (!v) form.value.llevaFilm = false; });
 
 // 🚀 MOTOR MATEMÁTICO BLINDADO
